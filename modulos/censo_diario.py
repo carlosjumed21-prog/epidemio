@@ -8,17 +8,14 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Border, Side, Font
 
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="EpidemioManager", layout="wide")
+
 # --- REGLAS DE NEGOCIO ESTRICTAS ---
 ORDEN_TERAPIAS_EXCEL = [
     "UNIDAD CORONARIA", "UCIA", "TERAPIA POSQUIRURGICA", 
     "U.C.I.N.", "U.T.I.P.", "UNIDAD DE QUEMADOS"
 ]
-
-MAPA_TERAPIAS = {
-    "UNIDAD CORONARIA": "COORD_MODULARES", "U.C.I.N.": "COORD_PEDIATRIA",
-    "U.T.I.P.": "COORD_PEDIATRIA", "TERAPIA POSQUIRURGICA": "COORD_MEDICINA",
-    "UNIDAD DE QUEMADOS": "COORD_CIRUGIA", "UCIA": "COORD_MEDICINA"
-}
 
 VINCULO_AUTO_INCLUSION = {
     "COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"],
@@ -28,39 +25,37 @@ VINCULO_AUTO_INCLUSION = {
 }
 
 COLORES_INTERFAZ = {
-    "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B", # Rojo
-    "COORD_PEDIATRIA": "#5DADE2",          # Azul claro
-    "COORD_MEDICINA": "#1B4F72",           # Azul fuerte
-    "COORD_GINECOLOGIA": "#F06292",        # Rosa
-    "COORD_MODULARES": "#E67E22",          # Naranja
-    "OTRAS_ESPECIALIDADES": "#2C3E50",     # Gris fuerte
-    "COORD_CIRUGIA": "#117864"             # Verde
+    "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B",
+    "COORD_PEDIATRIA": "#5DADE2",          
+    "COORD_MEDICINA": "#1B4F72",           
+    "COORD_GINECOLOGIA": "#F06292",        
+    "COORD_MODULARES": "#E67E22",          
+    "OTRAS_ESPECIALIDADES": "#2C3E50",     
+    "COORD_CIRUGIA": "#117864"             
 }
 
-# --- CATALOGO ACTUALIZADO ---
+# --- CATALOGO CORREGIDO ---
 CATALOGO = {
     "COORD_PEDIATRIA": [
-        "PEDIATRI", "PEDIATRICA", "NEONATO", "NEONATOLOGIA", 
-        "CUNERO", "UTIP", "U.T.I.P", "UCIN", "U.C.I.N",
-        "MEDICINA INTERNA PEDIATRICA" # <--- Asignado aquí
+        "MEDICINA INTERNA PEDIATRICA", "PEDIATRI", "PEDIATRICA", 
+        "NEONATO", "NEONATOLOGIA", "CUNERO", "UTIP", "UCIN"
+    ],
+    "COORD_MODULARES": [
+        "NEUROLOGIA", "ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", 
+        "CARDIOVASCULAR", "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", 
+        "ONCOLOGIA", "CORONARIA", "PSIQ", "PSIQUIATRIA"
     ],
     "COORD_MEDICINA": [
         "DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", 
-        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", 
-        "TPQX", "TERAPIA POSQUIRURGICA", "POSQUIRURGICA"
+        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX"
     ],
     "COORD_CIRUGIA": [
         "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
         "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
-        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE QUEMADOS"
-    ],
-    "COORD_MODULARES": [
-        "ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", "CARDIOVASCULAR", 
-        "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", "NEUROLOGIA", # <--- Se mantiene aquí
-        "ONCOLOGIA", "CORONARIA", "UNIDAD CORONARIA", "PSIQ", "PSIQUIATRIA"
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS"
     ],
     "COORD_GINECOLOGIA": [
-        "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION", "BIOLOGIA DE LA REPRO"
+        "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"
     ]
 }
 
@@ -82,6 +77,7 @@ def sync_group(cat_name, servicios):
 
 st.title("📋 Censo Epidemiológico Diario")
 
+# Verificamos si hay archivo en el session_state (de la barra lateral)
 if 'archivo_compartido' not in st.session_state:
     st.info("👈 Por favor, sube el archivo HTML en la barra lateral.")
 else:
@@ -102,31 +98,34 @@ else:
             if len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
                 esp_real = obtener_especialidad_real(fila[0], esp_actual_temp)
                 especialidades_encontradas.add(esp_real)
-                pacs_detectados.append({"CAMA": fila[0], "REG": fila[1], "PAC": fila[2], "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])), "DIAG": fila[6], "ING": fila[9], "esp_real": esp_real})
+                pacs_detectados.append({
+                    "CAMA": fila[0], "REG": fila[1], "PAC": fila[2], "SEXO": fila[3], 
+                    "EDAD": "".join(re.findall(r'\d+', fila[4])), "DIAG": fila[6], 
+                    "ING": fila[9], "esp_real": esp_real
+                })
 
-        st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
-
-        # --- LÓGICA DE CLASIFICACIÓN POR COORDINACIÓN ---
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
         buckets = {}
         asignadas = set()
 
-        # 1. Bucket Terapias
+        # 1. Terapias (Prioridad 1)
         terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
         if terapias_list:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Bucket Pediatría (Prioridad alta para capturar M.I. Pediátrica)
-        kws_ped = CATALOGO.get("COORD_PEDIATRIA", [])
-        ped_list = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
-        if ped_list:
-            buckets["COORD_PEDIATRIA"] = ped_list
-            asignadas.update(ped_list)
+        # 2. Pediatría (Prioridad 2 - Para capturar Medicina Interna Pediátrica antes que la de adultos)
+        kws_ped = CATALOGO["COORD_PEDIATRIA"]
+        ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
+        if ped_found:
+            buckets["COORD_PEDIATRIA"] = ped_found
+            asignadas.update(ped_found)
 
-        # 3. Resto de Coordinaciones en orden específico
-        for cat in ["COORD_MEDICINA", "COORD_CIRUGIA", "COORD_MODULARES", "COORD_GINECOLOGIA"]:
-            if cat in buckets: continue 
-            kws = CATALOGO.get(cat, [])
+        # 3. Resto de Coordinaciones (Neurología caerá en Modulares aquí)
+        orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
+        for cat in orden_resto:
+            if cat in buckets: continue
+            kws = CATALOGO[cat]
             found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
             if found:
                 buckets[cat] = found
@@ -136,7 +135,7 @@ else:
         otras = sorted([e for e in especialidades_encontradas if e not in asignadas])
         if otras: buckets["OTRAS_ESPECIALIDADES"] = otras
 
-        # --- RENDERIZADO ---
+        # --- RENDERIZADO DE INTERFAZ ---
         cols = st.columns(3)
         for idx, (cat_name, servicios) in enumerate(buckets.items()):
             with cols[idx % 3]:
