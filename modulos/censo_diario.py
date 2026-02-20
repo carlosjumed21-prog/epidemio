@@ -27,7 +27,6 @@ VINCULO_AUTO_INCLUSION = {
     "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]
 }
 
-# Colores según tu solicitud de "capricho"
 COLORES_INTERFAZ = {
     "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B", # Rojo
     "COORD_PEDIATRIA": "#5DADE2",          # Azul claro
@@ -38,14 +37,31 @@ COLORES_INTERFAZ = {
     "COORD_CIRUGIA": "#117864"             # Verde
 }
 
+# --- CATALOGO ACTUALIZADO ---
 CATALOGO = {
-    "COORD_MEDICINA": ["DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX", "TERAPIA POSQUIRURGICA", "POSQUIRURGICA"],
-    "COORD_CIRUGIA": ["CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE QUEMADOS"],
-    # Psiquiatría en Modulares
-    "COORD_MODULARES": ["ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", "CARDIOVASCULAR", "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", "NEUROLOGIA", "ONCOLOGIA", "CORONARIA", "UNIDAD CORONARIA", "PSIQ", "PSIQUIATRIA"],
-    # Neonatología en Pediatría
-    "COORD_PEDIATRIA": ["PEDIATRI", "PEDIATRICA", "NEONATO", "NEONATOLOGIA", "CUNERO", "UTIP", "U.T.I.P", "UCIN", "U.C.I.N"],
-    "COORD_GINECOLOGIA": ["GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION", "BIOLOGIA DE LA REPRO"]
+    "COORD_PEDIATRIA": [
+        "PEDIATRI", "PEDIATRICA", "NEONATO", "NEONATOLOGIA", 
+        "CUNERO", "UTIP", "U.T.I.P", "UCIN", "U.C.I.N",
+        "MEDICINA INTERNA PEDIATRICA" # <--- Asignado aquí
+    ],
+    "COORD_MEDICINA": [
+        "DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", 
+        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", 
+        "TPQX", "TERAPIA POSQUIRURGICA", "POSQUIRURGICA"
+    ],
+    "COORD_CIRUGIA": [
+        "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
+        "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE QUEMADOS"
+    ],
+    "COORD_MODULARES": [
+        "ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", "CARDIOVASCULAR", 
+        "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", "NEUROLOGIA", # <--- Se mantiene aquí
+        "ONCOLOGIA", "CORONARIA", "UNIDAD CORONARIA", "PSIQ", "PSIQUIATRIA"
+    ],
+    "COORD_GINECOLOGIA": [
+        "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION", "BIOLOGIA DE LA REPRO"
+    ]
 }
 
 def obtener_especialidad_real(cama, esp_html):
@@ -90,7 +106,7 @@ else:
 
         st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
 
-        # --- LÓGICA DE CLASIFICACIÓN POR COORDINACIÓN (RESTAURADA) ---
+        # --- LÓGICA DE CLASIFICACIÓN POR COORDINACIÓN ---
         buckets = {}
         asignadas = set()
 
@@ -100,7 +116,7 @@ else:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Bucket Pediatría (Prioridad absoluta sobre el resto)
+        # 2. Bucket Pediatría (Prioridad alta para capturar M.I. Pediátrica)
         kws_ped = CATALOGO.get("COORD_PEDIATRIA", [])
         ped_list = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
         if ped_list:
