@@ -77,7 +77,6 @@ def sync_group(cat_name, servicios):
 
 st.title("📋 Censo Epidemiológico Diario")
 
-# Verificamos si hay archivo en el session_state (de la barra lateral)
 if 'archivo_compartido' not in st.session_state:
     st.info("👈 Por favor, sube el archivo HTML en la barra lateral.")
 else:
@@ -104,24 +103,26 @@ else:
                     "ING": fila[9], "esp_real": esp_real
                 })
 
-        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
+        # --- ETIQUETA DE PACIENTES RECUPERADA ---
+        st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
+
         buckets = {}
         asignadas = set()
 
-        # 1. Terapias (Prioridad 1)
+        # 1. Terapias
         terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
         if terapias_list:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Pediatría (Prioridad 2 - Para capturar Medicina Interna Pediátrica antes que la de adultos)
+        # 2. Pediatría (Prioridad para M.I. Pediátrica)
         kws_ped = CATALOGO["COORD_PEDIATRIA"]
         ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
         if ped_found:
             buckets["COORD_PEDIATRIA"] = ped_found
             asignadas.update(ped_found)
 
-        # 3. Resto de Coordinaciones (Neurología caerá en Modulares aquí)
+        # 3. Resto de Coordinaciones (Neurología en Modulares)
         orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
         for cat in orden_resto:
             if cat in buckets: continue
@@ -131,11 +132,9 @@ else:
                 buckets[cat] = found
                 asignadas.update(found)
 
-        # 4. Otras
         otras = sorted([e for e in especialidades_encontradas if e not in asignadas])
         if otras: buckets["OTRAS_ESPECIALIDADES"] = otras
 
-        # --- RENDERIZADO DE INTERFAZ ---
         cols = st.columns(3)
         for idx, (cat_name, servicios) in enumerate(buckets.items()):
             with cols[idx % 3]:
