@@ -17,7 +17,6 @@ SERVICIOS_INSUMOS_FILTRO = [
 ]
 
 # --- FUNCIONES DE APOYO ---
-
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
@@ -31,17 +30,17 @@ def obtener_especialidad_real(cama, esp_html):
 
 def cargar_aislamientos_base():
     try:
+        # Cargamos saltando la primera fila de título
         df_ais = pd.read_csv(SHEET_URL_AISLAMIENTOS, skiprows=1, engine='python')
         df_ais.columns = [str(c).strip().upper() for c in df_ais.columns]
-        # B=CAMA, C=REGISTRO, D=NOMBRE, E=TIPO DE AISLAMIENTO, H=FECHA DE TÉRMINO
         cols_necesarias = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
         df_ais = df_ais[[c for c in cols_necesarias if c in df_ais.columns]]
         
-        # Limpiar vacíos y filtrar solo activos
+        # Filtro de activos (Fecha de término vacía)
         df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
         df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
         
-        # Consolidar filas dobles
+        # Consolidación de filas dobles
         df_ais["CAMA"] = df_ais["CAMA"].ffill()
         df_ais["NOMBRE"] = df_ais["NOMBRE"].ffill()
         df_ais["TIPO DE AISLAMIENTO"] = df_ais.groupby(["CAMA", "NOMBRE"])["TIPO DE AISLAMIENTO"].transform(
@@ -112,38 +111,45 @@ else:
             df_ais_f["TIPO DE PRECAUCIONES"] = df_ais_f["TIPO DE AISLAMIENTO"]
             df_ais_f["INSUMO"] = "JABÓN/SANITAS"
             
+            # Aseguramos que los "Pendientes" sean visibles
             for c in ["SEXO", "EDAD", "FECHA DE INGRESO"]:
                 df_ais_f[c] = df_ais_f[c].fillna("Pendiente")
 
             cols_final = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
             df_edit = df_ais_f[cols_final].copy()
 
-            # LÓGICA DE RESALTADO AMARILLO (Corregida para data_editor)
-            def highlight_pending(row):
-                return ['background-color: #FFF9C4' if "Pendiente" in str(val) else '' for val in row]
+            # LÓGICA DE RESALTADO FORZADA
+            def highlight_row(row):
+                # Si 'Pendiente' existe en la fila, se pinta de amarillo
+                is_pending = row.astype(str).str.contains('Pendiente').any()
+                return ['background-color: #FFF9C4' if is_pending else '' for _ in row]
 
-            st.warning("⚠️ Completa los datos en las filas amarillas. El color se quitará al escribir el dato real.")
+            st.warning("⚠️ Completa los datos en las filas amarillas. El color se quitará al ingresar el dato real.")
             
+            # Uso de data_editor con Stylus
             df_ais_editado = st.data_editor(
-                df_edit.style.apply(highlight_pending, axis=1),
+                df_edit.style.apply(highlight_row, axis=1),
                 use_container_width=True,
                 hide_index=True,
-                key="editor_aislamientos"
+                key="editor_insumos_aislamientos"
             )
 
-            # --- BOTÓN GENERAR EXCEL TOTAL ---
+            # --- BOTÓN GENERAR EXCEL ---
             if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
                 hoy = datetime.now()
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    # Hoja Aislamientos
+                    # Hoja Aislamientos (Usa el DF editado)
                     df_ais_editado.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    
                     # Hojas Especialidades
                     if pacs_11_esp:
                         for serv in sorted(df_11["ESP_REAL"].unique()):
                             df_s = df_11[df_11["ESP_REAL"] == serv].copy()
                             df_s["INSUMO"] = "JABÓN/SANITAS"
-                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "ESP_REAL", "INSUMO"]].to_excel(writer, index=False, sheet_name=serv[:30], startrow=1)
+                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "ESP_REAL", "INSUMO"]].to_excel(
+                                writer, index=False, sheet_name=serv[:30].replace("/", "-"), startrow=1
+                            )
                 
                 st.success("✅ Reporte Consolidado generado correctamente.")
                 st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
