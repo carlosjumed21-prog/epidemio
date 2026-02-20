@@ -7,7 +7,7 @@ st.title("🦠 Control de Aislamientos Activos")
 # --- CONFIGURACIÓN ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-def cargar_aislamientos_consolidados():
+def cargar_aislamientos_activos():
     # 1. Saltamos la fila 1 (Título) para que la fila 2 sea el encabezado
     df = pd.read_csv(SHEET_URL, skiprows=1, engine='python', encoding='utf-8')
     
@@ -17,68 +17,67 @@ def cargar_aislamientos_consolidados():
     # Limpiar nombres de columnas
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
-    # Identificamos las columnas clave por su nombre limpio
-    # Basado en tu estructura: B=CAMA, D=NOMBRE, E=TIPO DE AISLAMIENTO, J=INGRESO/EGRESO
     col_cama = "CAMA"
     col_nombre = "NOMBRE"
     col_tipo = "TIPO DE AISLAMIENTO"
     col_egreso = "INGRESO/EGRESO"
 
-    # Reemplazar celdas que parecen vacías por NaN para poder procesarlas
+    # Reemplazar celdas vacías por NaN para procesar
     df = df.replace(r'^\s*$', np.nan, regex=True)
 
-    # 3. LÓGICA DE FILAS DOBLES (Agrupación por paciente)
-    # Rellenamos hacia abajo el nombre y la cama para que la fila 2 sepa a quién pertenece
+    # 3. LÓGICA DE FILAS DOBLES
+    # Rellenamos hacia abajo para que la segunda fila del paciente herede la CAMA y NOMBRE
     if col_cama in df.columns and col_nombre in df.columns:
+        # IMPORTANTE: Antes de filtrar, unimos los datos de las filas dobles
+        df[col_tipo] = df.groupby(df[col_cama].ffill())[col_tipo].transform(
+            lambda x: ' / '.join(x.dropna().astype(str).unique())
+        )
+        # Rellenamos los datos de identificación
         df[col_cama] = df[col_cama].ffill()
         df[col_nombre] = df[col_nombre].ffill()
 
-    # Consolidamos la columna "TIPO DE AISLAMIENTO"
-    # Si hay dos filas para el mismo paciente, une los tipos con " / "
-    if col_tipo in df.columns:
-        df[col_tipo] = df.groupby([col_cama, col_nombre])[col_tipo].transform(
-            lambda x: ' / '.join(x.dropna().astype(str).unique())
-        )
-
-    # 4. Eliminamos la fila duplicada después de haber unido los datos
-    df = df.drop_duplicates(subset=[col_cama, col_nombre])
-
-    # 5. FILTRO DE ACTIVOS (Solo donde INGRESO/EGRESO esté vacío)
+    # 4. FILTRO CRÍTICO: MOSTRAR SOLO NO RESALTADOS
+    # Asumimos que los "Resaltados en Verde" son aquellos que ya tienen datos en INGRESO/EGRESO
+    # O que la fila de la CAMA se deja de contabilizar si el paciente ya no está.
     if col_egreso in df.columns:
-        # Dejamos solo los que son NaN (no tienen fecha de egreso/sombreado verde)
+        # Solo mantenemos filas donde INGRESO/EGRESO está realmente vacío (Aislamiento activo)
         df = df[df[col_egreso].isna() | (df[col_egreso].astype(str).str.strip() == "")]
+
+    # 5. ELIMINAR DUPLICADOS DE FILAS DOBLES
+    df = df.drop_duplicates(subset=[col_cama, col_nombre])
     
-    # Limpieza de filas de basura al final del documento
-    df = df.dropna(subset=[col_nombre])
-    
+    # 6. FILTRO DE SEGURIDAD POR COLUMNA CAMA
+    # Si la cama está vacía o es 'nan', no se muestra (esto filtra las filas de cierre o basura)
+    df = df[df[col_cama].notna() & (df[col_cama].astype(str).str.strip() != "nan")]
+
     return df
 
 try:
     with st.container(border=True):
-        if st.button("🔄 Sincronizar con Google Sheets"):
+        if st.button("🔄 Sincronizar Censo Directo"):
             st.cache_data.clear()
             st.rerun()
 
-        df_final = cargar_aislamientos_consolidados()
+        df_final = cargar_aislamientos_activos()
         
         if not df_final.empty:
-            # Buscador funcional
-            busqueda = st.text_input("🔍 Buscar en el censo:", placeholder="Escribe cama, nombre o tipo de aislamiento...")
+            # Buscador por cama o nombre
+            busqueda = st.text_input("🔍 Filtrar por Cama o Paciente:", placeholder="Ej. 4210...")
             
             if busqueda:
                 mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
                 df_final = df_final[mask]
 
-            # Visualización de la tabla
+            # Tabla de visualización
             st.dataframe(
                 df_final,
                 use_container_width=True,
                 hide_index=True
             )
             
-            st.success(f"✅ Mostrando {len(df_final)} pacientes aislados.")
+            st.success(f"📋 {len(df_final)} Aislamientos Activos detectados.")
         else:
-            st.info("No se encontraron aislamientos activos en este momento.")
+            st.warning("⚠️ No hay pacientes activos detectados que cumplan el criterio.")
 
 except Exception as e:
-    st.error(f"Error al procesar la información: {e}")
+    st.error(f"Error en la sincronización: {e}")
