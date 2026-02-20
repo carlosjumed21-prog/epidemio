@@ -16,7 +16,7 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
-# --- FUNCIONES ---
+# --- FUNCIONES DE APOYO ---
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
@@ -49,9 +49,10 @@ def cargar_aislamientos_limpios():
 st.title("📦 Censo de Insumos")
 
 if 'archivo_compartido' not in st.session_state:
-    st.info("👈 Sube el archivo HTML para iniciar.")
+    st.info("👈 Por favor, sube el archivo HTML en el apartado de 'Configuración' de la izquierda.")
 else:
     try:
+        # 1. ESCANEO DE HTML
         tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_html_raw = max(tablas, key=len)
         col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
@@ -59,6 +60,7 @@ else:
         datos_html = []
         pacs_11_esp = []
         esp_actual = ""
+
         for i, val in enumerate(col0_str):
             if "ESPECIALIDAD:" in val:
                 esp_actual = val; continue
@@ -73,7 +75,7 @@ else:
                 datos_html.append(pac_data)
                 if esp_real in SERVICIOS_INSUMOS_FILTRO:
                     pacs_11_esp.append(pac_data)
-        
+
         df_mapeo_html = pd.DataFrame(datos_html)
 
         # --- SECCIÓN A: 11 ESPECIALIDADES ---
@@ -89,59 +91,74 @@ else:
         
         st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-        # --- SECCIÓN B: AISLAMIENTOS ---
+        # --- SECCIÓN B: AISLAMIENTOS (EDICIÓN ARRIBA, OFICIAL ABAJO) ---
         st.header("🦠 INSUMOS: AISLAMIENTOS")
-        df_ais_base = cargar_aislamientos_limpios()
         
-        if not df_ais_base.empty:
-            df_ais_final = pd.merge(df_ais_base, df_mapeo_html, on="REGISTRO", how="left")
-            df_ais_final["CAMA"] = df_ais_final["CAMA_HTML"].fillna(df_ais_final["CAMA"])
-            df_ais_final["PACIENTE"] = df_ais_final["PACIENTE"].fillna(df_ais_final["NOMBRE"])
-            df_ais_final["TIPO DE PRECAUCIONES"] = df_ais_final["TIPO DE AISLAMIENTO"]
-            df_ais_final["INSUMO"] = "JABÓN/SANITAS"
-            
-            for c in ["SEXO", "EDAD", "FECHA DE INGRESO"]:
-                df_ais_final[c] = df_ais_final[c].fillna("Pendiente")
-
-            cols_ais = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
-            df_editor = df_ais_final[cols_ais].copy()
-
-            # --- NUEVA LÓGICA DE VISUALIZACIÓN DE PENDIENTES ---
-            pendientes = df_editor[df_editor.astype(str).apply(lambda x: x.str.contains('Pendiente')).any(axis=1)]
-            
-            if not pendientes.empty:
-                st.error(f"🚨 ATENCIÓN: Hay {len(pendientes)} pacientes con datos incompletos.")
-                st.subheader("⚠️ Pacientes por completar (Referencia)")
-                # Esta tabla SÍ se verá amarilla porque es estática (st.table)
-                st.table(pendientes.style.apply(lambda x: ['background-color: #FFF9C4' for _ in x], axis=1))
+        # Inicialización de datos de aislamientos en el estado de la sesión
+        if 'df_ais_mapeado' not in st.session_state:
+            df_base = cargar_aislamientos_limpios()
+            if not df_base.empty:
+                df_f = pd.merge(df_base, df_mapeo_html, on="REGISTRO", how="left")
+                df_f["CAMA"] = df_f["CAMA_HTML"].fillna(df_f["CAMA"])
+                df_f["PACIENTE"] = df_f["PACIENTE"].fillna(df_f["NOMBRE"])
+                df_f["TIPO DE PRECAUCIONES"] = df_f["TIPO DE AISLAMIENTO"]
+                df_f["INSUMO"] = "JABÓN/SANITAS"
+                for c in ["SEXO", "EDAD", "FECHA DE INGRESO"]:
+                    df_f[c] = df_f[c].fillna("Pendiente")
+                st.session_state.df_ais_mapeado = df_f[["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
             else:
-                st.success("✅ ¡Todos los datos están completos!")
+                st.session_state.df_ais_mapeado = pd.DataFrame()
 
-            st.write("### 📝 Editor Maestro")
-            st.info("Modifica los datos abajo. Al borrar 'Pendiente', el paciente saldrá de la lista roja de arriba.")
-            
-            # El editor se mantiene simple para que no falle el guardado
-            df_editado_final = st.data_editor(
-                df_editor,
-                use_container_width=True,
-                hide_index=True,
-                key="editor_insumos_v3"
-            )
+        if not st.session_state.df_ais_mapeado.empty:
+            # 1. FILTRAR SOLO PENDIENTES PARA EL EDITOR
+            df_actual = st.session_state.df_ais_mapeado
+            mask_pendientes = df_actual.astype(str).apply(lambda x: x.str.contains('Pendiente')).any(axis=1)
+            df_pendientes = df_actual[mask_pendientes].copy()
 
+            if not df_pendientes.empty:
+                st.subheader("⚠️ Pacientes por completar (Edición)")
+                st.warning("Completa los datos aquí arriba. La tabla oficial de abajo se actualizará sola.")
+                
+                # EDITOR SOLO PARA FILAS PENDIENTES
+                # Usamos style para resaltar solo esta tabla amarilla
+                edited_pendientes = st.data_editor(
+                    df_pendientes.style.apply(lambda x: ['background-color: #FFF9C4' for _ in x], axis=1),
+                    use_container_width=True,
+                    hide_index=True,
+                    key="editor_pendientes"
+                )
+                
+                # Actualizar el DataFrame maestro con los cambios del editor
+                if not edited_pendientes.equals(df_pendientes):
+                    st.session_state.df_ais_mapeado.update(edited_pendientes)
+                    st.rerun()
+            else:
+                st.success("✅ ¡Todos los datos de aislamientos están completos!")
+
+            # 2. TABLA OFICIAL (SOLO LECTURA)
+            st.subheader("📋 Tabla Oficial de Insumos")
+            st.info("Esta tabla no se puede editar; refleja los cambios realizados arriba.")
+            st.table(st.session_state.df_ais_mapeado)
+
+            # --- BOTÓN DE GENERACIÓN ---
             if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
                 hoy = datetime.now()
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_editado_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    # Hoja Aislamientos (Usa el DataFrame maestro actualizado)
+                    st.session_state.df_ais_mapeado.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    
                     if pacs_11_esp:
                         for serv in sorted(df_11["ESP_REAL"].unique()):
                             df_s = df_11[df_11["ESP_REAL"] == serv].copy()
                             df_s["INSUMO"] = "JABÓN/SANITAS"
-                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "ESP_REAL", "INSUMO"]].to_excel(writer, index=False, sheet_name=serv[:30], startrow=1)
-                st.success("✅ Reporte generado.")
-                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]].to_excel(
+                                writer, index=False, sheet_name=serv[:30].replace("/", "-"), startrow=1
+                            )
+                st.success("✅ Reporte Consolidado con éxito.")
+                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
         else:
-            st.info("No hay aislamientos activos.")
+            st.info("No hay aislamientos activos registrados.")
 
     except Exception as e:
         st.error(f"Error: {e}")
