@@ -17,66 +17,67 @@ def cargar_aislamientos_activos():
     # Limpiar nombres de columnas
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
-    # Identificación de columnas clave
     col_cama = "CAMA"
     col_nombre = "NOMBRE"
     col_tipo = "TIPO DE AISLAMIENTO"
-    col_termino = "FECHA DE TÉRMINO" # Columna H (Referencia para el filtro)
+    col_egreso = "INGRESO/EGRESO"
 
-    # Reemplazar variantes de "vacío" por NaN real para procesar
+    # Reemplazar celdas vacías por NaN para procesar
     df = df.replace(r'^\s*$', np.nan, regex=True)
-    df = df.replace(['nan', 'None', 'none', 'NULL'], np.nan)
 
-    # 3. LÓGICA DE FILAS DOBLES (Agrupación antes de filtrar)
-    # Rellenamos hacia abajo para que la fila de abajo herede la identificación
+    # 3. LÓGICA DE FILAS DOBLES
+    # Rellenamos hacia abajo para que la segunda fila del paciente herede la CAMA y NOMBRE
     if col_cama in df.columns and col_nombre in df.columns:
-        # Unimos los tipos de aislamiento de las dos filas con "/"
+        # IMPORTANTE: Antes de filtrar, unimos los datos de las filas dobles
         df[col_tipo] = df.groupby(df[col_cama].ffill())[col_tipo].transform(
             lambda x: ' / '.join(x.dropna().astype(str).unique())
         )
+        # Rellenamos los datos de identificación
         df[col_cama] = df[col_cama].ffill()
         df[col_nombre] = df[col_nombre].ffill()
-        # La fecha de término también debe heredarse para que el filtro afecte a ambas filas
-        df[col_termino] = df[col_termino].ffill()
 
-    # 4. FILTRO ESTRICTO: Solo los que NO tienen fecha de término
-    # Si la celda está vacía (NaN), el aislamiento continúa.
-    if col_termino in df.columns:
-        df = df[df[col_termino].isna()]
+    # 4. FILTRO CRÍTICO: MOSTRAR SOLO NO RESALTADOS
+    # Asumimos que los "Resaltados en Verde" son aquellos que ya tienen datos en INGRESO/EGRESO
+    # O que la fila de la CAMA se deja de contabilizar si el paciente ya no está.
+    if col_egreso in df.columns:
+        # Solo mantenemos filas donde INGRESO/EGRESO está realmente vacío (Aislamiento activo)
+        df = df[df[col_egreso].isna() | (df[col_egreso].astype(str).str.strip() == "")]
 
-    # 5. ELIMINAR DUPLICADOS TRAS LA CONSOLIDACIÓN
+    # 5. ELIMINAR DUPLICADOS DE FILAS DOBLES
     df = df.drop_duplicates(subset=[col_cama, col_nombre])
     
-    # Limpieza de filas de basura (donde no hay ni cama ni nombre)
-    df = df.dropna(subset=[col_cama, col_nombre], how='all')
+    # 6. FILTRO DE SEGURIDAD POR COLUMNA CAMA
+    # Si la cama está vacía o es 'nan', no se muestra (esto filtra las filas de cierre o basura)
+    df = df[df[col_cama].notna() & (df[col_cama].astype(str).str.strip() != "nan")]
 
     return df
 
 try:
     with st.container(border=True):
-        if st.button("🔄 Actualizar desde Google Sheets"):
+        if st.button("🔄 Sincronizar Censo Directo"):
             st.cache_data.clear()
             st.rerun()
 
         df_final = cargar_aislamientos_activos()
         
         if not df_final.empty:
-            busqueda = st.text_input("🔍 Buscar en activos:", placeholder="Cama, nombre...")
+            # Buscador por cama o nombre
+            busqueda = st.text_input("🔍 Filtrar por Cama o Paciente:", placeholder="Ej. 4210...")
             
             if busqueda:
                 mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
                 df_final = df_final[mask]
 
-            # Mostrar tabla final
+            # Tabla de visualización
             st.dataframe(
                 df_final,
                 use_container_width=True,
                 hide_index=True
             )
             
-            st.success(f"✅ Se detectaron {len(df_final)} pacientes con aislamiento en curso.")
+            st.success(f"📋 {len(df_final)} Aislamientos Activos detectados.")
         else:
-            st.warning("⚠️ No hay aislamientos activos (Todos tienen FECHA DE TÉRMINO).")
+            st.warning("⚠️ No hay pacientes activos detectados que cumplan el criterio.")
 
 except Exception as e:
-    st.error(f"Error al procesar la información: {e}")
+    st.error(f"Error en la sincronización: {e}")
