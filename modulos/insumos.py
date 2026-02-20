@@ -2,12 +2,15 @@ import streamlit as st
 import pandas as pd
 import re
 from io import BytesIO
-from datetime import datetime
-from openpyxl.styles import Alignment, Font
+from datetime import datetime, timedelta
+from openpyxl.styles import Alignment, Font, Border, Side
+from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACIÓN ---
+# URL de la hoja de Google Sheets publicada como CSV
 SHEET_URL_AISLAMIENTOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
+# Filtro oficial de las 11 especialidades del CMN 20 de Noviembre
 SERVICIOS_INSUMOS_FILTRO = [
     "HEMATOLOGIA", "HEMATOLOGIA PEDIATRICA", "ONCOLOGIA PEDIATRICA",
     "NEONATOLOGIA", "INFECTOLOGIA PEDIATRICA", "U.C.I.N.",
@@ -15,7 +18,10 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
+# --- FUNCIONES DE LÓGICA ---
+
 def obtener_especialidad_real(cama, esp_html):
+    """Determina la especialidad basada en el número de cama."""
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
     if c.startswith("55"): return "U.C.I.N."
@@ -27,30 +33,42 @@ def obtener_especialidad_real(cama, esp_html):
     return esp_html_clean
 
 def cargar_aislamientos_limpios():
+    """Carga y consolida la tabla de aislamientos eliminando filas dobles."""
     try:
         df_ais = pd.read_csv(SHEET_URL_AISLAMIENTOS, skiprows=1, engine='python')
         df_ais.columns = [str(c).strip().upper() for c in df_ais.columns]
+        
+        # Columnas: CAMA(B), REGISTRO(C), NOMBRE(D), TIPO DE AISLAMIENTO(E), FECHA DE TÉRMINO(H)
         cols = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
         df_ais = df_ais[[c for c in cols if c in df_ais.columns]]
+        
+        # Filtro de activos: Solo aquellos sin fecha de término
         df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
         df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
+        
+        # Consolidación: Unir tipos de aislamiento si el paciente ocupa dos filas
         df_ais["CAMA"] = df_ais["CAMA"].ffill()
         df_ais["NOMBRE"] = df_ais["NOMBRE"].ffill()
         df_ais["TIPO DE AISLAMIENTO"] = df_ais.groupby(["CAMA", "NOMBRE"])["TIPO DE AISLAMIENTO"].transform(
             lambda x: " / ".join(x.dropna().astype(str).unique())
         )
-        return df_ais.drop_duplicates(["CAMA", "NOMBRE"]).dropna(subset=["REGISTRO"])
+        
+        # Mantener la fila más completa
+        df_ais['data_count'] = df_ais.notna().sum(axis=1)
+        df_ais = df_ais.sort_values('data_count', ascending=False).drop_duplicates(["CAMA", "NOMBRE"]).drop(columns=['data_count'])
+        
+        return df_ais.dropna(subset=["REGISTRO"])
     except:
         return pd.DataFrame()
 
-# --- INTERFAZ ---
+# --- INTERFAZ STREAMLIT ---
 st.title("📦 Censo de Insumos")
 
 if 'archivo_compartido' not in st.session_state:
-    st.info("👈 Sube el archivo HTML en 'Configuración' para iniciar.")
+    st.info("👈 Por favor, sube el archivo HTML en el apartado de 'Configuración' de la izquierda.")
 else:
     try:
-        # 1. ESCANEO DE HTML
+        # 1. ESCANEO DEL HTML
         tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_html_raw = max(tablas, key=len)
         col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
@@ -58,6 +76,7 @@ else:
         datos_html = []
         pacs_11_esp = []
         esp_actual = ""
+        IGNORAR = ["PACIENTES", "TOTAL", "SUBTOTAL", "PÁGINA", "IMPRESIÓN", "1111"]
 
         for i, val in enumerate(col0_str):
             if "ESPECIALIDAD:" in val:
@@ -83,18 +102,23 @@ else:
             for serv in sorted(df_11["ESP_REAL"].unique()):
                 with st.expander(f"🔍 Vista Previa: {serv}"):
                     df_v = df_11[df_11["ESP_REAL"] == serv].copy()
-                    df_v["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
+                    df_v["TIPO DE PRECAUCIONES"] = df_v["ESP_REAL"].apply(
+                        lambda x: "ESTÁNDAR / PROTECTOR" if "ONCOLOGIA" in x or "QUEMADOS" in x else "ESTÁNDAR"
+                    )
                     df_v["INSUMO"] = "JABÓN/SANITAS"
                     st.table(df_v[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]])
         
-        st.markdown("<br><hr><br>", unsafe_allow_stdio=True)
+        st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-        # --- SECCIÓN B: AISLAMIENTOS (CON RESALTADO DE FILA) ---
+        # --- SECCIÓN B: AISLAMIENTOS (MAPEADO Y EDICIÓN) ---
         st.header("🦠 INSUMOS: AISLAMIENTOS")
         df_ais_base = cargar_aislamientos_limpios()
         
         if not df_ais_base.empty:
+            # Empalme con HTML usando REGISTRO
             df_ais_final = pd.merge(df_ais_base, df_mapeo_html, on="REGISTRO", how="left")
+            
+            # Actualizar camas y completar con "Pendiente" si falta información
             df_ais_final["CAMA"] = df_ais_final["CAMA_HTML"].fillna(df_ais_final["CAMA"])
             df_ais_final["PACIENTE"] = df_ais_final["PACIENTE"].fillna(df_ais_final["NOMBRE"])
             df_ais_final["TIPO DE PRECAUCIONES"] = df_ais_final["TIPO DE AISLAMIENTO"]
@@ -106,26 +130,31 @@ else:
             cols_ais = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
             df_editor_ais = df_ais_final[cols_ais]
 
-            # FUNCIÓN PARA RESALTAR TODA LA FILA
+            # Lógica de resaltado: Fila completa amarilla si hay algún "Pendiente"
             def resaltar_fila_pendiente(row):
-                # Si la palabra "Pendiente" está en cualquier celda de la fila
                 return ['background-color: #fff9c4' if "Pendiente" in str(val) else '' for val in row]
 
-            st.warning("⚠️ Las filas en amarillo contienen datos faltantes. Escribe sobre 'Pendiente' para limpiar el resaltado.")
+            st.warning("⚠️ Las filas amarillas contienen datos faltantes. Escribe sobre 'Pendiente' para completar.")
             
             df_editado_final = st.data_editor(
                 df_editor_ais.style.apply(resaltar_fila_pendiente, axis=1),
                 use_container_width=True,
                 hide_index=True,
-                key="editor_ais_v2"
+                key="editor_aislamientos"
             )
 
-            # --- BOTÓN DE GENERACIÓN ---
+            # --- GENERAR EXCEL TOTAL ---
             if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
                 hoy = datetime.now()
+                venc = hoy + timedelta(days=7)
                 output = BytesIO()
+                thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    # Hoja Aislamientos (Editada)
                     df_editado_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    
+                    # Hojas por Especialidad
                     if pacs_11_esp:
                         for serv in sorted(df_11["ESP_REAL"].unique()):
                             df_s = df_11[df_11["ESP_REAL"] == serv].copy()
@@ -134,8 +163,11 @@ else:
                             df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]].to_excel(
                                 writer, index=False, sheet_name=serv[:30].replace("/", "-"), startrow=1
                             )
-                st.success("✅ Reporte Consolidado con éxito.")
-                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                
+                st.success("✅ Reporte de insumos generado correctamente.")
+                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Total_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+        else:
+            st.info("No se detectaron aislamientos activos en Google Sheets.")
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error en el procesamiento: {e}")
