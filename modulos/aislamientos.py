@@ -4,74 +4,71 @@ import pandas as pd
 st.title("🦠 Control de Aislamientos Activos")
 
 # --- CONFIGURACIÓN ---
+# Asegúrate de usar el link de "Publicar en la web" como CSV
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-def cargar_aislamientos_inteligente():
-    # 1. Cargar el CSV crudo sin procesar nada
-    raw_df = pd.read_csv(SHEET_URL, header=None, engine='python', encoding='utf-8')
+def cargar_aislamientos_estricto():
+    # 1. Cargamos el CSV saltando solo la primera fila (Título)
+    # header=0 en este nuevo contexto será la fila 2 del Excel original
+    df = pd.read_csv(SHEET_URL, skiprows=1, engine='python', encoding='utf-8')
     
-    # 2. ENCONTRAR LA FILA DE ENCABEZADOS
-    # Buscamos en qué fila está la palabra "CAMA"
-    fila_encabezado = 0
-    for idx, row in raw_df.iterrows():
-        if row.astype(str).str.contains('CAMA', case=False, na=False).any():
-            fila_encabezado = idx
-            break
-    
-    # 3. REESTRUCTURAR EL DATAFRAME
-    # Tomamos esa fila como nombres de columna y los datos hacia abajo
-    df = raw_df.iloc[fila_encabezado:].copy()
-    df.columns = df.iloc[0] # Asignar nombres
-    df = df.iloc[1:]        # Quitar la fila que acabamos de usar como nombre
-    
-    # 4. RECORTE DE COLUMNAS B a J (Índices posicionales 1 a 9)
-    # Independientemente de cómo se llamen, agarramos ese bloque
+    # 2. Seleccionamos de la columna B a la J (Índices 1 al 9)
     df = df.iloc[:, 1:10]
     
-    # Limpiar nombres de columnas para el filtro
-    df.columns = [str(c).strip().upper() for c in df.columns]
+    # 3. Los pacientes empiezan en la fila 4 del Excel original.
+    # Como ya saltamos 1 fila al cargar y la siguiente se usó de encabezado,
+    # debemos saltar una fila más de datos para llegar a la 4.
+    df = df.iloc[1:].reset_index(drop=True)
     
-    # 5. FILTRO DE EGRESOS (Columna J / última del recorte)
-    # Dejamos solo donde sea Nulo, Vacío o tenga espacios
+    # 4. Limpieza de nombres de columnas
+    df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
+    
+    # 5. Filtro de Aislamientos Activos (Columna J / INGRESO/EGRESO vacía)
+    # Es la última columna de nuestro recorte (índice 8)
     col_egreso = df.columns[-1]
     
-    # Limpiamos la columna de egreso para detectar espacios vacíos
-    df[col_egreso] = df[col_egreso].astype(str).replace(['nan', 'None', 'NULL', ''], pd.NA).str.strip()
+    # Normalizamos vacíos para que el filtro sea efectivo
+    df[col_egreso] = df[col_egreso].astype(str).replace(['nan', 'None', 'NULL', '', ' '], pd.NA)
     
-    # Filtramos: Solo filas donde la última columna sea NA
-    df_activos = df[df[col_egreso].isna()]
+    # Filtramos: Solo se quedan los que tienen la celda de egreso VACÍA
+    df_activos = df[df[col_egreso].isna()].copy()
     
-    # Limpieza final: Eliminar filas donde la columna de "NOMBRE" esté vacía 
-    # (usualmente la 3ra del recorte B-J)
-    col_nombre = df_activos.columns[2]
-    df_activos = df_activos[df_activos[col_nombre].notna() & (df_activos[col_nombre] != 'nan')]
+    # Limpieza: Quitar filas donde el NOMBRE esté vacío para evitar basura del final
+    # (El nombre es la 3ra columna del recorte: B, C, D -> índice 2)
+    if len(df_activos.columns) > 2:
+        col_nombre = df_activos.columns[2]
+        df_activos = df_activos[df_activos[col_nombre].notna() & (df_activos[col_nombre].astype(str).str.strip() != "")]
     
     return df_activos
 
 try:
     with st.container(border=True):
-        if st.button("🔄 Forzar Sincronización"):
+        if st.button("🔄 Sincronizar con Google Sheets"):
             st.cache_data.clear()
             st.rerun()
 
-        df_final = cargar_aislamientos_inteligente()
+        df_final = cargar_aislamientos_estricto()
         
         if not df_final.empty:
-            busqueda = st.text_input("🔍 Buscar paciente:", placeholder="Cama o nombre...")
+            # Buscador por cama o nombre
+            busqueda = st.text_input("🔍 Buscar paciente:", placeholder="Ej. 4210 o apellido...")
+            
             if busqueda:
                 mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
                 df_final = df_final[mask]
 
+            # Visualización de la tabla
             st.dataframe(
                 df_final,
                 use_container_width=True,
                 hide_index=True
             )
             
-            st.success(f"✅ {len(df_final)} pacientes aislados actualmente.")
+            st.success(f"✅ {len(df_final)} pacientes en aislamiento activo detectados.")
         else:
-            st.warning("⚠️ No se detectaron pacientes aislados.")
-            st.info("Verifica que los pacientes activos NO tengan nada escrito en la columna J (INGRESO/EGRESO).")
+            st.warning("⚠️ No se detectaron pacientes activos.")
+            st.info("Nota: Los pacientes que ya tienen registro en la columna 'INGRESO/EGRESO' no se muestran aquí.")
 
 except Exception as e:
-    st.error(f"Error técnico: {e}")
+    st.error(f"Error al procesar la lista: {e}")
+    st.info("Verifica que el archivo en Sheets mantenga el formato: Fila 2 (Encabezados) y Fila 4 (Pacientes).")
