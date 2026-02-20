@@ -16,7 +16,7 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
-# --- FUNCIONES DE APOYO ---
+# --- FUNCIONES ---
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
@@ -28,12 +28,12 @@ def obtener_especialidad_real(cama, esp_html):
     if c.isdigit() and 7401 <= int(c) <= 7409: return "TERAPIA POSQUIRURGICA"
     return esp_html_clean
 
-def cargar_aislamientos_base():
+def cargar_aislamientos_limpios():
     try:
         df_ais = pd.read_csv(SHEET_URL_AISLAMIENTOS, skiprows=1, engine='python')
         df_ais.columns = [str(c).strip().upper() for c in df_ais.columns]
-        cols_necesarias = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
-        df_ais = df_ais[[c for c in cols_necesarias if c in df_ais.columns]]
+        cols = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
+        df_ais = df_ais[[c for c in cols if c in df_ais.columns]]
         df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
         df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
         df_ais["CAMA"] = df_ais["CAMA"].ffill()
@@ -49,35 +49,32 @@ def cargar_aislamientos_base():
 st.title("📦 Censo de Insumos")
 
 if 'archivo_compartido' not in st.session_state:
-    st.info("👈 Por favor, sube el archivo HTML en el apartado de 'Configuración' de la izquierda.")
+    st.info("👈 Sube el archivo HTML para iniciar.")
 else:
     try:
-        # 1. PROCESAR HTML
         tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_html_raw = max(tablas, key=len)
         col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
         
-        pacs_html = []
+        datos_html = []
         pacs_11_esp = []
-        esp_actual = "SIN_ESPECIALIDAD"
-        IGNORAR = ["PACIENTES", "TOTAL", "SUBTOTAL", "PÁGINA", "IMPRESIÓN", "1111"]
-
+        esp_actual = ""
         for i, val in enumerate(col0_str):
             if "ESPECIALIDAD:" in val:
                 esp_actual = val; continue
             fila = [str(x).strip() for x in df_html_raw.iloc[i].values]
             if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
                 esp_real = obtener_especialidad_real(fila[0], esp_actual)
-                datos_pac = {
+                pac_data = {
                     "CAMA_HTML": fila[0], "REGISTRO": fila[1], "PACIENTE": fila[2],
                     "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])),
                     "FECHA DE INGRESO": fila[9], "ESP_REAL": esp_real
                 }
-                pacs_html.append(datos_pac)
+                datos_html.append(pac_data)
                 if esp_real in SERVICIOS_INSUMOS_FILTRO:
-                    pacs_11_esp.append(datos_pac)
+                    pacs_11_esp.append(pac_data)
         
-        df_ref_html = pd.DataFrame(pacs_html)
+        df_mapeo_html = pd.DataFrame(datos_html)
 
         # --- SECCIÓN A: 11 ESPECIALIDADES ---
         st.header("📋 INSUMOS: ESPECIALIDADES")
@@ -94,50 +91,57 @@ else:
 
         # --- SECCIÓN B: AISLAMIENTOS ---
         st.header("🦠 INSUMOS: AISLAMIENTOS")
-        df_ais_base = cargar_aislamientos_base()
+        df_ais_base = cargar_aislamientos_limpios()
         
         if not df_ais_base.empty:
-            df_ais_f = pd.merge(df_ais_base, df_ref_html, on="REGISTRO", how="left")
-            df_ais_f["CAMA"] = df_ais_f["CAMA_HTML"].fillna(df_ais_f["CAMA"])
-            df_ais_f["PACIENTE"] = df_ais_f["PACIENTE"].fillna(df_ais_f["NOMBRE"])
-            df_ais_f["TIPO DE PRECAUCIONES"] = df_ais_f["TIPO DE AISLAMIENTO"]
-            df_ais_f["INSUMO"] = "JABÓN/SANITAS"
+            df_ais_final = pd.merge(df_ais_base, df_mapeo_html, on="REGISTRO", how="left")
+            df_ais_final["CAMA"] = df_ais_final["CAMA_HTML"].fillna(df_ais_final["CAMA"])
+            df_ais_final["PACIENTE"] = df_ais_final["PACIENTE"].fillna(df_ais_final["NOMBRE"])
+            df_ais_final["TIPO DE PRECAUCIONES"] = df_ais_final["TIPO DE AISLAMIENTO"]
+            df_ais_final["INSUMO"] = "JABÓN/SANITAS"
             
             for c in ["SEXO", "EDAD", "FECHA DE INGRESO"]:
-                df_ais_f[c] = df_ais_f[c].fillna("Pendiente")
+                df_ais_final[c] = df_ais_final[c].fillna("Pendiente")
 
-            cols_final = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
-            df_edit = df_ais_f[cols_final].copy()
+            cols_ais = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
+            df_editor = df_ais_final[cols_ais].copy()
 
-            # LÓGICA DE RESALTADO FORZADA (AMARILLO TENUE)
-            def highlight_pending_rows(s):
-                return ['background-color: #FFF9C4' if 'Pendiente' in str(val) else '' for val in s]
-
-            st.warning("⚠️ Las filas amarillas tienen datos faltantes. Escribe sobre 'Pendiente' para completar.")
+            # --- NUEVA LÓGICA DE VISUALIZACIÓN DE PENDIENTES ---
+            pendientes = df_editor[df_editor.astype(str).apply(lambda x: x.str.contains('Pendiente')).any(axis=1)]
             
-            # Editor con Styler aplicado
-            df_ais_editado = st.data_editor(
-                df_edit.style.apply(highlight_pending_rows, axis=1),
+            if not pendientes.empty:
+                st.error(f"🚨 ATENCIÓN: Hay {len(pendientes)} pacientes con datos incompletos.")
+                st.subheader("⚠️ Pacientes por completar (Referencia)")
+                # Esta tabla SÍ se verá amarilla porque es estática (st.table)
+                st.table(pendientes.style.apply(lambda x: ['background-color: #FFF9C4' for _ in x], axis=1))
+            else:
+                st.success("✅ ¡Todos los datos están completos!")
+
+            st.write("### 📝 Editor Maestro")
+            st.info("Modifica los datos abajo. Al borrar 'Pendiente', el paciente saldrá de la lista roja de arriba.")
+            
+            # El editor se mantiene simple para que no falle el guardado
+            df_editado_final = st.data_editor(
+                df_editor,
                 use_container_width=True,
                 hide_index=True,
-                key="editor_aislamientos_final"
+                key="editor_insumos_v3"
             )
 
-            # --- BOTÓN GENERAR EXCEL ---
             if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
                 hoy = datetime.now()
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_ais_editado.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    df_editado_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
                     if pacs_11_esp:
                         for serv in sorted(df_11["ESP_REAL"].unique()):
                             df_s = df_11[df_11["ESP_REAL"] == serv].copy()
                             df_s["INSUMO"] = "JABÓN/SANITAS"
-                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "ESP_REAL", "INSUMO"]].to_excel(writer, index=False, sheet_name=serv[:30].replace("/", "-"), startrow=1)
-                st.success("✅ Reporte Consolidado generado correctamente.")
-                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "ESP_REAL", "INSUMO"]].to_excel(writer, index=False, sheet_name=serv[:30], startrow=1)
+                st.success("✅ Reporte generado.")
+                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
         else:
-            st.info("No se detectaron aislamientos activos en Google Sheets.")
+            st.info("No hay aislamientos activos.")
 
     except Exception as e:
-        st.error(f"Error en el procesamiento: {e}")
+        st.error(f"Error: {e}")
