@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from io import BytesIO
 from datetime import datetime, timedelta
-from openpyxl.styles import Alignment, Font, Border, Side
+from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACIÓN ---
@@ -16,7 +16,61 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
-# --- FUNCIONES DE APOYO ---
+# --- FUNCIONES DE FORMATO Y LÓGICA ---
+
+def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
+    """Aplica encabezados azules, vigencia de 7 días, bordes, NOM-045 y Firma."""
+    ws = writer.sheets[sheet_name]
+    hoy = datetime.now()
+    vencimiento = hoy + timedelta(days=7)
+    f_hoy = hoy.strftime("%d/%m/%Y")
+    f_venc = vencimiento.strftime("%d/%m/%Y")
+    
+    # Estilos de celda
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # 1. Título de Vigencia (Fila 1)
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
+    titulo = f"{servicio_nombre} DEL {f_hoy} AL {f_venc} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
+    cell_h = ws.cell(row=1, column=1, value=titulo)
+    cell_h.alignment = center_align
+    cell_h.font = Font(bold=True, size=11)
+
+    # 2. Encabezados de Columna (Fila 2)
+    for col_num, value in enumerate(df.columns, 1):
+        cell = ws.cell(row=2, column=col_num, value=value)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border
+
+    # 3. Cuerpo de datos y Bordes
+    for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=8):
+        for cell in row:
+            cell.border = border
+            cell.alignment = center_align
+    
+    # Autoajuste de columnas
+    for i in range(1, 9):
+        ws.column_dimensions[get_column_letter(i)].width = 20
+
+    # 4. Pie de Página (NOM y Autorizó)
+    lr = ws.max_row
+    ws.merge_cells(start_row=lr + 1, start_column=1, end_row=lr + 1, end_column=8)
+    leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
+    cell_nom = ws.cell(row=lr + 1, column=1, value=leyenda)
+    cell_nom.alignment = center_align
+    cell_nom.font = Font(size=9, italic=True)
+    ws.row_dimensions[lr + 1].height = 50
+
+    ws.merge_cells(start_row=lr + 2, start_column=1, end_row=lr + 2, end_column=8)
+    cell_auth = ws.cell(row=lr + 2, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
+    cell_auth.alignment = center_align
+    cell_auth.font = Font(bold=True)
+
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
@@ -49,10 +103,9 @@ def cargar_aislamientos_limpios():
 st.title("📦 Censo de Insumos")
 
 if 'archivo_compartido' not in st.session_state:
-    st.info("👈 Por favor, sube el archivo HTML en el apartado de 'Configuración' de la izquierda.")
+    st.info("👈 Sube el archivo HTML en 'Configuración' para iniciar.")
 else:
     try:
-        # 1. ESCANEO DE HTML
         tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_html_raw = max(tablas, key=len)
         col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
@@ -78,7 +131,7 @@ else:
 
         df_mapeo_html = pd.DataFrame(datos_html)
 
-        # --- SECCIÓN A: 11 ESPECIALIDADES ---
+        # SECCIÓN A: 11 ESPECIALIDADES
         st.header("📋 INSUMOS: ESPECIALIDADES")
         if pacs_11_esp:
             df_11 = pd.DataFrame(pacs_11_esp)
@@ -91,10 +144,9 @@ else:
         
         st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-        # --- SECCIÓN B: AISLAMIENTOS (EDICIÓN ARRIBA, OFICIAL ABAJO) ---
+        # SECCIÓN B: AISLAMIENTOS
         st.header("🦠 INSUMOS: AISLAMIENTOS")
         
-        # Inicialización de datos de aislamientos en el estado de la sesión
         if 'df_ais_mapeado' not in st.session_state:
             df_base = cargar_aislamientos_limpios()
             if not df_base.empty:
@@ -110,53 +162,47 @@ else:
                 st.session_state.df_ais_mapeado = pd.DataFrame()
 
         if not st.session_state.df_ais_mapeado.empty:
-            # 1. FILTRAR SOLO PENDIENTES PARA EL EDITOR
             df_actual = st.session_state.df_ais_mapeado
             mask_pendientes = df_actual.astype(str).apply(lambda x: x.str.contains('Pendiente')).any(axis=1)
             df_pendientes = df_actual[mask_pendientes].copy()
 
             if not df_pendientes.empty:
                 st.subheader("⚠️ Pacientes por completar (Edición)")
-                st.warning("Completa los datos aquí arriba. La tabla oficial de abajo se actualizará sola.")
-                
-                # EDITOR SOLO PARA FILAS PENDIENTES
-                # Usamos style para resaltar solo esta tabla amarilla
                 edited_pendientes = st.data_editor(
                     df_pendientes.style.apply(lambda x: ['background-color: #FFF9C4' for _ in x], axis=1),
-                    use_container_width=True,
-                    hide_index=True,
-                    key="editor_pendientes"
+                    use_container_width=True, hide_index=True, key="editor_pendientes"
                 )
-                
-                # Actualizar el DataFrame maestro con los cambios del editor
                 if not edited_pendientes.equals(df_pendientes):
                     st.session_state.df_ais_mapeado.update(edited_pendientes)
                     st.rerun()
-            else:
-                st.success("✅ ¡Todos los datos de aislamientos están completos!")
 
-            # 2. TABLA OFICIAL (SOLO LECTURA)
-            st.subheader("📋 Tabla Oficial de Insumos")
-            st.info("Esta tabla no se puede editar; refleja los cambios realizados arriba.")
+            st.subheader("📋 Tabla Oficial de Insumos (Aislamientos)")
             st.table(st.session_state.df_ais_mapeado)
 
-            # --- BOTÓN DE GENERACIÓN ---
+            # --- GENERACIÓN DE EXCEL TOTAL CON FORMATO ---
             if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
-                hoy = datetime.now()
+                hoy_f = datetime.now().strftime('%d%m%Y')
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    # Hoja Aislamientos (Usa el DataFrame maestro actualizado)
-                    st.session_state.df_ais_mapeado.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    # 1. Hoja Aislamientos
+                    df_ais_final = st.session_state.df_ais_mapeado
+                    df_ais_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    aplicar_formato_oficial(writer, "AISLAMIENTOS", df_ais_final, "INSUMOS AISLAMIENTOS")
                     
+                    # 2. Hojas Especialidades
                     if pacs_11_esp:
                         for serv in sorted(df_11["ESP_REAL"].unique()):
                             df_s = df_11[df_11["ESP_REAL"] == serv].copy()
                             df_s["INSUMO"] = "JABÓN/SANITAS"
-                            df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]].to_excel(
-                                writer, index=False, sheet_name=serv[:30].replace("/", "-"), startrow=1
-                            )
-                st.success("✅ Reporte Consolidado con éxito.")
-                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                            df_s["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
+                            df_s = df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
+                            df_s.columns = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
+                            nombre_hoja = serv[:30].replace("/", "-")
+                            df_s.to_excel(writer, index=False, sheet_name=nombre_hoja, startrow=1)
+                            aplicar_formato_oficial(writer, nombre_hoja, df_s, f"INSUMOS {serv}")
+                
+                st.success("✅ Reporte con metadatos y firmas generado.")
+                st.download_button("💾 DESCARGAR REPORTE", output.getvalue(), f"Insumos_Epidemio_{hoy_f}.xlsx", use_container_width=True)
         else:
             st.info("No hay aislamientos activos registrados.")
 
