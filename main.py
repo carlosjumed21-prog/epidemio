@@ -1,11 +1,37 @@
-import os
 import streamlit as st
 
-# Esto te mostrará qué carpetas ve el sistema en la raíz
-st.write("Archivos detectados en la raíz:", os.listdir("."))
+# --- CONFIGURACIÓN GLOBAL ---
+st.set_page_config(
+    page_title="EpidemioManager - CMN 20 de Noviembre", 
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Esto te mostrará qué hay dentro de la carpeta modulos
-if os.path.exists("modulos"):
-    st.write("Contenido de 'modulos':", os.listdir("modulos"))
+# --- BARRA LATERAL (ORDEN SUPERIOR) ---
+st.sidebar.header("⚙️ Configuración")
+
+# 1. El cargador de archivos ahora es lo primero que aparece
+archivo_subido = st.sidebar.file_uploader(
+    "Subir Censo HTML", 
+    type=["html", "htm"],
+    help="Arrastra aquí el archivo generado por el sistema del hospital."
+)
+
+# Guardar en memoria compartida
+if archivo_subido:
+    st.session_state['archivo_compartido'] = archivo_subido
+    st.sidebar.success("✅ Censo cargado")
 else:
-    st.error("La carpeta 'modulos' no existe en la raíz.")
+    st.sidebar.info("👋 Por favor, sube un censo.")
+
+# 2. Línea divisoria para separar la carga de la navegación
+st.sidebar.divider()
+
+# 3. Definición de las Pestañas (Aparecerán debajo del cargador)
+pg = st.navigation([
+    st.Page("modulos/censo_diario.py", title="Censo Epidemiológico", icon="📋"),
+    st.Page("modulos/insumos.py", title="Censo de Insumos", icon="📦"),
+])
+
+pg.run()
