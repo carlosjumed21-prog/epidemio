@@ -5,7 +5,7 @@ st.title("🦠 Control de Aislamientos Activos")
 
 # --- CONFIGURACIÓN ---
 # Reemplaza con tu link de publicación en CSV
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/tu_id_aqui/pub?output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
 # Definimos los encabezados exactos que solicitaste
 COLUMNAS_DESEADAS = [
