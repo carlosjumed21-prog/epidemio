@@ -16,7 +16,6 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
     hoy = datetime.now()
     vencimiento = hoy + timedelta(days=7)
     f_hoy, f_venc = hoy.strftime("%d/%m/%Y"), vencimiento.strftime("%d/%m/%Y")
-    
     header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
@@ -24,7 +23,7 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
 
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
     cell_h = ws.cell(row=1, column=1, value=f"{servicio_nombre} DEL {f_hoy} AL {f_venc} (PARA LOS 3 TURNOS Y FINES DE SEMANA)")
-    cell_h.alignment = center_align; cell_h.font = Font(bold=True, size=11)
+    cell_h.alignment, cell_h.font = center_align, Font(bold=True, size=11)
 
     for col_num, value in enumerate(df.columns, 1):
         cell = ws.cell(row=2, column=col_num, value=value)
@@ -58,18 +57,14 @@ def obtener_especialidad_real(cama, esp_html):
 
 def cargar_aislamientos_limpios():
     try:
-        # Cambio a latin-1 para el error de byte 0xd3
         df_ais = pd.read_csv(SHEET_URL_AISLAMIENTOS, skiprows=1, engine='python', encoding='latin-1')
         df_ais.columns = [str(c).strip().upper() for c in df_ais.columns]
         cols = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
         df_ais = df_ais[[c for c in cols if c in df_ais.columns]]
         df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
         df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
-        
-        # Filtro de ruido 1111 corregido
         ruido = ["1111", "PACIENTES", "TOTAL", "SUBTOTAL"]
         df_ais = df_ais[~df_ais["REGISTRO"].astype(str).str.contains('|'.join(ruido), na=False)]
-        
         df_ais["CAMA"], df_ais["NOMBRE"] = df_ais["CAMA"].ffill(), df_ais["NOMBRE"].ffill()
         df_ais["TIPO DE AISLAMIENTO"] = df_ais.groupby(["CAMA", "NOMBRE"])["TIPO DE AISLAMIENTO"].transform(lambda x: " / ".join(x.dropna().astype(str).unique()))
         return df_ais.drop_duplicates(["CAMA", "NOMBRE"]).dropna(subset=["REGISTRO"])
@@ -82,11 +77,9 @@ if 'archivo_compartido' not in st.session_state:
     st.info("👈 Sube el archivo HTML en 'Configuración' para iniciar.")
 else:
     try:
-        # Cambio de motor a lxml
         tablas = pd.read_html(st.session_state['archivo_compartido'], flavor='lxml')
         df_html_raw = max(tablas, key=len)
         col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
-        
         datos_html, pacs_11_esp = [], []
         esp_actual = ""
         IGNORAR = ["PACIENTES", "TOTAL", "SUBTOTAL", "PÁGINA", "IMPRESIÓN", "1111"]
@@ -156,5 +149,5 @@ else:
                             df_s.to_excel(writer, index=False, sheet_name=nombre_hoja, startrow=1)
                             aplicar_formato_oficial(writer, nombre_hoja, df_s, f"INSUMOS {serv}")
                 st.success("✅ Reporte con metadatos y firmas generado.")
-                st.download_button("💾 DESCARGAR REPORTE", output.getvalue(), f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                st.download_button("💾 DESCARGAR EXCEL", output.getvalue(), f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
     except Exception as e: st.error(f"Error: {e}")
