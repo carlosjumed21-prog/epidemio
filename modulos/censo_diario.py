@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from io import BytesIO
 from datetime import datetime
-from openpyxl(o) import load_workbook
+from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Border, Side, Font
@@ -43,7 +43,6 @@ if 'archivo_compartido' not in st.session_state:
     st.info("👈 Por favor, sube el archivo HTML en la barra lateral.")
 else:
     try:
-        # Corrección de motor de lectura
         tablas = pd.read_html(st.session_state['archivo_compartido'], flavor='lxml')
         df_completo = max(tablas, key=len)
         col0_str = df_completo.iloc[:, 0].fillna("").astype(str).str.upper()
@@ -57,13 +56,66 @@ else:
             if "ESPECIALIDAD:" in val: esp_actual_temp = val; continue
             fila = [str(x).strip() for x in df_completo.iloc[i].values]
             if any(x in fila[0] for x in IGNORAR): continue
-            if len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+            if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
                 esp_real = obtener_especialidad_real(fila[0], esp_actual_temp)
                 especialidades_encontradas.add(esp_real)
                 pacs_detectados.append({"CAMA": fila[0], "REG": fila[1], "PAC": fila[2], "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])), "DIAG": fila[6], "ING": fila[9], "esp_real": esp_real})
 
         st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
-        # ... Lógica de buckets y generación de Excel intacta ...
-        # (Se mantiene el resto del código original de censo_diario.py)
+        
+        buckets = {}
+        asignadas = set()
+
+        terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
+        if terapias_list:
+            buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
+            asignadas.update(terapias_list)
+
+        for cat in ["COORD_PEDIATRIA", "COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]:
+            kws = CATALOGO[cat]
+            found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
+            if found:
+                buckets[cat] = found
+                asignadas.update(found)
+
+        otras = sorted([e for e in especialidades_encontradas if e not in asignadas])
+        if otras: buckets["OTRAS_ESPECIALIDADES"] = otras
+
+        cols = st.columns(3)
+        for idx, (cat_name, servicios) in enumerate(buckets.items()):
+            with cols[idx % 3]:
+                color = COLORES_INTERFAZ.get(cat_name, "#5D6D7E")
+                st.markdown(f'<div style="background-color:{color}; padding:8px; border-radius:5px 5px 0px 0px; color:white; text-align:center;"><b>{cat_name.replace("COORD_", "")}</b></div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.checkbox(f"Seleccionar todo", key=f"master_{cat_name}", on_change=sync_group, args=(cat_name, servicios))
+                    for s in servicios: st.checkbox(s, key=f"serv_{cat_name}_{s}")
+
+        if st.button("🚀 GENERAR EXCEL", use_container_width=True, type="primary"):
+            especialidades_finales = set()
+            for c_name, servs in buckets.items():
+                if st.session_state.get(f"master_{c_name}"):
+                    if c_name in VINCULO_AUTO_INCLUSION:
+                        for t in VINCULO_AUTO_INCLUSION[c_name]:
+                            if t in especialidades_encontradas: especialidades_finales.add(t)
+                for s in servs:
+                    if st.session_state.get(f"serv_{c_name}_{s}"): especialidades_finales.add(s)
+
+            if especialidades_finales:
+                fecha_hoy = datetime.now()
+                datos_excel = []
+                for p in pacs_detectados:
+                    if p["esp_real"] in especialidades_finales:
+                        try:
+                            f_ing = datetime.strptime(p["ING"], "%d/%m/%Y")
+                            dias = (datetime(fecha_hoy.year, fecha_hoy.month, fecha_hoy.day) - datetime(f_ing.year, f_ing.month, f_ing.day)).days + 1
+                        except: dias = "Rev."
+                        datos_excel.append({"FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), "ESPECIALIDAD": p["esp_real"], "CAMA": p["CAMA"], "REGISTRO": p["REG"], "PACIENTE": p["PAC"], "SEXO": p["SEXO"], "EDAD": p["EDAD"], "DIAGNOSTICO": p["DIAG"], "FECHA_INGRESO": p["ING"], "DIAS_ESTANCIA": dias})
+
+                df_out = pd.DataFrame(datos_excel)
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_out.to_excel(writer, index=False, sheet_name='Epidemiologia')
+                
+                st.download_button(label="💾 DESCARGAR EXCEL", data=output.getvalue(), file_name=f"Censo_Epidemio_{fecha_hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
     except Exception as e:
         st.error(f"Error detectado: {e}")
