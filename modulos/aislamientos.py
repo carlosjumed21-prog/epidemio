@@ -8,8 +8,8 @@ st.title("🦠 Control de Aislamientos Activos")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
 def cargar_aislamientos_definitivo():
-    # 1. Carga inicial saltando el título con codificación Latin-1 para acentos
-    df = pd.read_csv(SHEET_URL, skiprows=1, engine='python', encoding='latin-1')
+    # 1. Carga inicial saltando el título
+    df = pd.read_csv(SHEET_URL, skiprows=1, engine='python', encoding='utf-8')
     
     # 2. Recorte estricto de Columna B a J (Índices 1 al 9)
     df = df.iloc[:, 1:10]
@@ -23,29 +23,40 @@ def cargar_aislamientos_definitivo():
     col_termino = "FECHA DE TÉRMINO"
 
     # --- LIMPIEZA CRÍTICA DE "NONE" Y ESPACIOS ---
+    # Convertimos todo a string, quitamos espacios y reemplazamos variantes de vacío por NaN real
     df = df.apply(lambda x: x.astype(str).str.strip())
     df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
 
     # 3. LÓGICA DE UNIÓN DE FILAS DOBLES (SIN PERDER DATOS)
+    # Rellenamos Cama y Nombre hacia abajo para identificar que la fila de abajo es del mismo paciente
     df[col_cama] = df[col_cama].ffill()
     df[col_nombre] = df[col_nombre].ffill()
 
+    # Agrupamos por paciente y aplicamos reglas específicas por columna
+    # - TIPO DE AISLAMIENTO: Se combinan con "/"
+    # - DEMÁS COLUMNAS: Se toma el primer valor que NO sea nulo (el dato lleno)
     def consolidar_paciente(group):
+        # Tomamos la primera fila como base
         res = group.iloc[0].copy()
+        # Combinamos los Tipos de Aislamiento únicos
         tipos = group[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
+        # Para el resto de columnas, buscamos el valor que sí tenga datos en el grupo
         for col in group.columns:
             if col not in [col_tipo, col_cama, col_nombre]:
                 val_real = group[col].dropna()
                 res[col] = val_real.iloc[0] if not val_real.empty else np.nan
         return res
 
+    # Aplicamos la consolidación y reseteamos el índice
     df = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
 
-    # 4. FILTRO DE FECHA DE TÉRMINO
+    # 4. FILTRO DE FECHA DE TÉRMINO (Sombreado verde)
+    # Si la celda tiene cualquier dato, el paciente se oculta
     if col_termino in df.columns:
         df = df[df[col_termino].isna()]
 
+    # Limpieza de basura y ordenamiento por cama
     df = df[df[col_cama].notna()]
     df = df.sort_values(by=col_cama)
 
@@ -65,6 +76,7 @@ try:
                 mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
                 df_final = df_final[mask]
 
+            # Mostramos la tabla limpia
             st.dataframe(df_final, use_container_width=True, hide_index=True)
             st.success(f"📋 {len(df_final)} Aislamientos Activos detectados.")
         else:
