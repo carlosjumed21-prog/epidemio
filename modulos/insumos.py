@@ -3,8 +3,16 @@ import pandas as pd
 import re
 from io import BytesIO
 from datetime import datetime, timedelta
+
+# Librerías para el Excel
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+
+# Librerías para el PDF (ReportLab)
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Table as RLTable, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURACIÓN ---
 SHEET_URL_AISLAMIENTOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
@@ -16,10 +24,10 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
-# --- FUNCIONES DE FORMATO Y LÓGICA ---
+# --- FUNCIONES DE FORMATO Y LÓGICA (EXCEL) ---
 
 def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
-    """Aplica encabezados azules, vigencia de 7 días, bordes, NOM-045 y Firma."""
+    """Aplica encabezados azules, vigencia de 7 días, bordes, NOM-045 y Firma en Excel."""
     ws = writer.sheets[sheet_name]
     hoy = datetime.now()
     vencimiento = hoy + timedelta(days=7)
@@ -31,14 +39,12 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # 1. Título de Vigencia
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
     titulo = f"{servicio_nombre} DEL {f_hoy} AL {f_venc} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
     cell_h = ws.cell(row=1, column=1, value=titulo)
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
-    # 2. Encabezados de Columna
     for col_num, value in enumerate(df.columns, 1):
         cell = ws.cell(row=2, column=col_num, value=value)
         cell.fill = header_fill
@@ -46,7 +52,6 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
         cell.alignment = center_align
         cell.border = border
 
-    # 3. Cuerpo y Bordes
     for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=8):
         for cell in row:
             cell.border = border
@@ -55,7 +60,6 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
     for i in range(1, 9):
         ws.column_dimensions[get_column_letter(i)].width = 20
 
-    # 4. Pie de Página (NOM y Firma)
     lr = ws.max_row
     ws.merge_cells(start_row=lr + 1, start_column=1, end_row=lr + 1, end_column=8)
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
@@ -68,6 +72,65 @@ def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
     cell_auth = ws.cell(row=lr + 2, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
     cell_auth.alignment = center_align
     cell_auth.font = Font(bold=True)
+
+# --- FUNCIÓN GENERAR PDF (REPORTLAB) ---
+
+def generar_pdf_insumos(df_ais, dict_especialidades):
+    """Genera un PDF con formato oficial, una página por servicio."""
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    hoy = datetime.now()
+    vencimiento = hoy + timedelta(days=7)
+    f_rango = f"DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')}"
+
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading2'], alignment=1, fontSize=12, spaceAfter=10)
+    footer_style = ParagraphStyle('FooterStyle', parent=styles['Normal'], fontSize=8, leading=10, italic=True, alignment=1)
+    auth_style = ParagraphStyle('AuthStyle', parent=styles['Normal'], fontSize=10, bold=True, alignment=1, spaceBefore=10)
+
+    def crear_hoja_pdf(df, nombre_tit):
+        # Título de la página
+        elements.append(Paragraph(f"INSUMOS {nombre_tit} {f_rango}<br/>(PARA LOS 3 TURNOS Y FINES DE SEMANA)", title_style))
+        elements.append(Spacer(1, 10))
+        
+        # Tabla
+        data = [df.columns.tolist()] + df.values.tolist()
+        # Ajuste de anchos de columna para landscape (aprox 700 pts totales)
+        col_widths = [45, 60, 180, 45, 40, 70, 110, 110]
+        
+        t = RLTable(data, repeatRows=1, colWidths=col_widths)
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 15))
+        
+        # Pie de página
+        leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
+        elements.append(Paragraph(leyenda, footer_style))
+        elements.append(Paragraph("<b>AUTORIZÓ: DRA. BRENDA CASTILLO MATUS</b>", auth_style))
+        elements.append(PageBreak())
+
+    if not df_ais.empty:
+        crear_hoja_pdf(df_ais, "AISLAMIENTOS")
+    
+    for serv, df_s in dict_especialidades.items():
+        crear_hoja_pdf(df_s, serv)
+
+    doc.build(elements)
+    return output.getvalue()
+
+# --- LÓGICA DE PROCESAMIENTO ---
 
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
@@ -89,7 +152,6 @@ def cargar_aislamientos_limpios():
         df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
         df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
         
-        # Eliminar filas de ruido (1111 o pacientes genéricos)
         ruido = ["1111", "PACIENTES", "TOTAL", "SUBTOTAL"]
         df_ais = df_ais[~df_ais["REGISTRO"].astype(str).str.contains('|'.join(ruido), na=False)]
         
@@ -116,15 +178,12 @@ else:
         datos_html = []
         pacs_11_esp = []
         esp_actual = ""
-        # Lista de exclusión actualizada
         IGNORAR = ["PACIENTES", "TOTAL", "SUBTOTAL", "PÁGINA", "IMPRESIÓN", "1111"]
 
         for i, val in enumerate(col0_str):
             if "ESPECIALIDAD:" in val:
                 esp_actual = val; continue
             fila = [str(x).strip() for x in df_html_raw.iloc[i].values]
-            
-            # Filtro estricto para evitar filas de ruido en el HTML
             if any(x in fila[0] or x in fila[1] for x in IGNORAR): continue
 
             if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
@@ -178,25 +237,41 @@ else:
             st.subheader("📋 Tabla Oficial (Aislamientos)")
             st.table(st.session_state.df_ais_mapeado)
 
-            if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_ais_final = st.session_state.df_ais_mapeado
-                    df_ais_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
-                    aplicar_formato_oficial(writer, "AISLAMIENTOS", df_ais_final, "INSUMOS AISLAMIENTOS")
-                    
-                    if pacs_11_esp:
-                        for serv in sorted(df_11["ESP_REAL"].unique()):
-                            df_s = df_11[df_11["ESP_REAL"] == serv].copy()
-                            df_s["INSUMO"] = "JABÓN/SANITAS"
-                            df_s["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
-                            df_s = df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
-                            df_s.columns = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
+            # --- GENERACIÓN DE REPORTES ---
+            st.divider()
+            col_ex, col_pdf = st.columns(2)
+
+            # Diccionario de servicios para reportes
+            dict_especialidades_final = {}
+            if pacs_11_esp:
+                for serv in sorted(df_11["ESP_REAL"].unique()):
+                    df_s = df_11[df_11["ESP_REAL"] == serv].copy()
+                    df_s["INSUMO"] = "JABÓN/SANITAS"
+                    df_s["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
+                    df_s = df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
+                    df_s.columns = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
+                    dict_especialidades_final[serv] = df_s
+
+            with col_ex:
+                if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
+                    output_ex = BytesIO()
+                    with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
+                        df_ais_final = st.session_state.df_ais_mapeado
+                        df_ais_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                        aplicar_formato_oficial(writer, "AISLAMIENTOS", df_ais_final, "INSUMOS AISLAMIENTOS")
+                        
+                        for serv, df_s in dict_especialidades_final.items():
                             nombre_hoja = serv[:30].replace("/", "-")
                             df_s.to_excel(writer, index=False, sheet_name=nombre_hoja, startrow=1)
                             aplicar_formato_oficial(writer, nombre_hoja, df_s, f"INSUMOS {serv}")
-                st.success("✅ Reporte con metadatos y firmas generado.")
-                st.download_button("💾 DESCARGAR REPORTE", output.getvalue(), f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                    
+                    st.download_button("💾 DESCARGAR EXCEL", output_ex.getvalue(), f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
+
+            with col_pdf:
+                if st.button("📄 GENERAR PDF IMPRESIÓN", use_container_width=True):
+                    pdf_bytes = generar_pdf_insumos(st.session_state.df_ais_mapeado, dict_especialidades_final)
+                    st.download_button("📥 DESCARGAR PDF", pdf_bytes, f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
+
         else:
             st.info("No hay aislamientos activos registrados.")
 
