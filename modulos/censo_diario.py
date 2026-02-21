@@ -8,17 +8,55 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Border, Side, Font
 
-# --- REGLAS DE NEGOCIO ---
-ORDEN_TERAPIAS_EXCEL = ["UNIDAD CORONARIA", "UCIA", "TERAPIA POSQUIRURGICA", "U.C.I.N.", "U.T.I.P.", "UNIDAD DE QUEMADOS"]
-VINCULO_AUTO_INCLUSION = {"COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"], "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS"], "COORD_MODULARES": ["UNIDAD CORONARIA"], "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]}
-COLORES_INTERFAZ = {"⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B", "COORD_PEDIATRIA": "#5DADE2", "COORD_MEDICINA": "#1B4F72", "COORD_GINECOLOGIA": "#F06292", "COORD_MODULARES": "#E67E22", "OTRAS_ESPECIALIDADES": "#2C3E50", "COORD_CIRUGIA": "#117864"}
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="EpidemioManager", layout="wide")
 
+# --- REGLAS DE NEGOCIO ESTRICTAS ---
+ORDEN_TERAPIAS_EXCEL = [
+    "UNIDAD CORONARIA", "UCIA", "TERAPIA POSQUIRURGICA", 
+    "U.C.I.N.", "U.T.I.P.", "UNIDAD DE QUEMADOS"
+]
+
+VINCULO_AUTO_INCLUSION = {
+    "COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"],
+    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS"],
+    "COORD_MODULARES": ["UNIDAD CORONARIA"],
+    "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]
+}
+
+COLORES_INTERFAZ = {
+    "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B",
+    "COORD_PEDIATRIA": "#5DADE2",          
+    "COORD_MEDICINA": "#1B4F72",           
+    "COORD_GINECOLOGIA": "#F06292",        
+    "COORD_MODULARES": "#E67E22",          
+    "OTRAS_ESPECIALIDADES": "#2C3E50",     
+    "COORD_CIRUGIA": "#117864"             
+}
+
+# --- CATALOGO CORREGIDO ---
 CATALOGO = {
-    "COORD_PEDIATRIA": ["MEDICINA INTERNA PEDIATRICA", "PEDIATRI", "PEDIATRICA", "NEONATO", "NEONATOLOGIA", "CUNERO", "UTIP", "UCIN"],
-    "COORD_MODULARES": ["NEUROLOGIA", "ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", "CARDIOVASCULAR", "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", "ONCOLOGIA", "CORONARIA", "PSIQ", "PSIQUIATRIA"],
-    "COORD_MEDICINA": ["DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX"],
-    "COORD_CIRUGIA": ["CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS"],
-    "COORD_GINECOLOGIA": ["GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"]
+    "COORD_PEDIATRIA": [
+        "MEDICINA INTERNA PEDIATRICA", "PEDIATRI", "PEDIATRICA", 
+        "NEONATO", "NEONATOLOGIA", "CUNERO", "UTIP", "UCIN"
+    ],
+    "COORD_MODULARES": [
+        "NEUROLOGIA", "ANGIOLOGIA", "VASCULAR", "CARDIOLOGIA", 
+        "CARDIOVASCULAR", "TORAX", "NEUMO", "HEMATO", "NEUROCIRUGIA", 
+        "ONCOLOGIA", "CORONARIA", "PSIQ", "PSIQUIATRIA"
+    ],
+    "COORD_MEDICINA": [
+        "DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", 
+        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX"
+    ],
+    "COORD_CIRUGIA": [
+        "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
+        "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS"
+    ],
+    "COORD_GINECOLOGIA": [
+        "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"
+    ]
 }
 
 def obtener_especialidad_real(cama, esp_html):
@@ -43,7 +81,7 @@ if 'archivo_compartido' not in st.session_state:
     st.info("👈 Por favor, sube el archivo HTML en la barra lateral.")
 else:
     try:
-        tablas = pd.read_html(st.session_state['archivo_compartido'], flavor='lxml')
+        tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_completo = max(tablas, key=len)
         col0_str = df_completo.iloc[:, 0].fillna("").astype(str).str.upper()
         
@@ -56,22 +94,38 @@ else:
             if "ESPECIALIDAD:" in val: esp_actual_temp = val; continue
             fila = [str(x).strip() for x in df_completo.iloc[i].values]
             if any(x in fila[0] for x in IGNORAR): continue
-            if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+            if len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
                 esp_real = obtener_especialidad_real(fila[0], esp_actual_temp)
                 especialidades_encontradas.add(esp_real)
-                pacs_detectados.append({"CAMA": fila[0], "REG": fila[1], "PAC": fila[2], "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])), "DIAG": fila[6], "ING": fila[9], "esp_real": esp_real})
+                pacs_detectados.append({
+                    "CAMA": fila[0], "REG": fila[1], "PAC": fila[2], "SEXO": fila[3], 
+                    "EDAD": "".join(re.findall(r'\d+', fila[4])), "DIAG": fila[6], 
+                    "ING": fila[9], "esp_real": esp_real
+                })
 
+        # --- ETIQUETA DE PACIENTES RECUPERADA ---
         st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
-        
+
         buckets = {}
         asignadas = set()
 
+        # 1. Terapias
         terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
         if terapias_list:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        for cat in ["COORD_PEDIATRIA", "COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]:
+        # 2. Pediatría (Prioridad para M.I. Pediátrica)
+        kws_ped = CATALOGO["COORD_PEDIATRIA"]
+        ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
+        if ped_found:
+            buckets["COORD_PEDIATRIA"] = ped_found
+            asignadas.update(ped_found)
+
+        # 3. Resto de Coordinaciones (Neurología en Modulares)
+        orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
+        for cat in orden_resto:
+            if cat in buckets: continue
             kws = CATALOGO[cat]
             found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
             if found:
@@ -90,6 +144,8 @@ else:
                     st.checkbox(f"Seleccionar todo", key=f"master_{cat_name}", on_change=sync_group, args=(cat_name, servicios))
                     for s in servicios: st.checkbox(s, key=f"serv_{cat_name}_{s}")
 
+        st.write("---")
+
         if st.button("🚀 GENERAR EXCEL", use_container_width=True, type="primary"):
             especialidades_finales = set()
             for c_name, servs in buckets.items():
@@ -100,7 +156,9 @@ else:
                 for s in servs:
                     if st.session_state.get(f"serv_{c_name}_{s}"): especialidades_finales.add(s)
 
-            if especialidades_finales:
+            if not especialidades_finales:
+                st.warning("Selecciona al menos un servicio.")
+            else:
                 fecha_hoy = datetime.now()
                 datos_excel = []
                 for p in pacs_detectados:
@@ -111,11 +169,40 @@ else:
                         except: dias = "Rev."
                         datos_excel.append({"FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), "ESPECIALIDAD": p["esp_real"], "CAMA": p["CAMA"], "REGISTRO": p["REG"], "PACIENTE": p["PAC"], "SEXO": p["SEXO"], "EDAD": p["EDAD"], "DIAGNOSTICO": p["DIAG"], "FECHA_INGRESO": p["ING"], "DIAS_ESTANCIA": dias})
 
-                df_out = pd.DataFrame(datos_excel)
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_out.to_excel(writer, index=False, sheet_name='Epidemiologia')
-                
-                st.download_button(label="💾 DESCARGAR EXCEL", data=output.getvalue(), file_name=f"Censo_Epidemio_{fecha_hoy.strftime('%d%m%Y')}.xlsx", use_container_width=True)
+                if datos_excel:
+                    df_out = pd.DataFrame(datos_excel)
+                    otros_servs = sorted([s for s in list(especialidades_finales) if s not in ORDEN_TERAPIAS_EXCEL])
+                    mapeo_orden = ORDEN_TERAPIAS_EXCEL + otros_servs
+                    df_out['ESPECIALIDAD'] = pd.Categorical(df_out['ESPECIALIDAD'], categories=mapeo_orden, ordered=True)
+                    df_out = df_out.sort_values(['ESPECIALIDAD', 'CAMA'])
+
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        df_out.to_excel(writer, index=False, sheet_name='Epidemiologia')
+                    
+                    output.seek(0)
+                    wb = load_workbook(output); ws = wb.active
+                    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+                    for col in ws.columns:
+                        max_length = 0
+                        column_letter = get_column_letter(col[0].column)
+                        for cell in col:
+                            cell.border = thin_border
+                            cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+                            try:
+                                if cell.value:
+                                    val_len = len(str(cell.value))
+                                    if val_len > max_length: max_length = val_len
+                            except: pass
+                        ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
+                    
+                    tab = Table(displayName="CensoTable", ref=ws.dimensions)
+                    tab.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
+                    ws.add_table(tab)
+                    
+                    final_io = BytesIO(); wb.save(final_io)
+                    st.success("✅ Reporte de censo generado.") 
+                    st.download_button(label="💾 DESCARGAR EXCEL", data=final_io.getvalue(), file_name=f"Censo_Epidemio_{fecha_hoy.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     except Exception as e:
         st.error(f"Error detectado: {e}")
