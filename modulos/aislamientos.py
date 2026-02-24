@@ -9,17 +9,15 @@ st.title("🦠 Control de Aislamientos Activos")
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=10) # Bajamos a 10 segundos para máxima frescura
+@st.cache_data(ttl=10)
 def cargar_aislamientos_definitivo():
     url_dinamica = f"{SHEET_URL}&nocache={time.time()}"
     
-    # 1. Carga inicial
+    # 1. Carga inicial (B a J)
     df = pd.read_csv(url_dinamica, skiprows=1, engine='python', encoding='utf-8')
-    
-    # 2. Recorte de columnas B a J (Índices 1 al 9)
     df = df.iloc[:, 1:10]
     
-    # Normalizar encabezados
+    # Limpiar encabezados
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
     col_cama = "CAMA"
@@ -27,72 +25,64 @@ def cargar_aislamientos_definitivo():
     col_tipo = "TIPO DE AISLAMIENTO"
     col_termino = "FECHA DE TÉRMINO"
 
-    # --- LIMPIEZA INICIAL ---
-    # Convertimos a string y quitamos espacios. 
-    # IMPORTANTE: No convertimos a NaN todavía para no romper el ffill
+    # --- LIMPIEZA DE VACÍOS ---
     df = df.apply(lambda x: x.astype(str).str.strip())
-    
-    # Reemplazamos variantes de "vacío" por un valor nulo real de Python
     df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
 
-    # 3. LÓGICA DE UNIÓN DE FILAS (Solo si el nombre está vacío en la segunda fila)
-    # Solo rellenamos la cama si realmente pertenece al mismo proceso
-    df[col_cama] = df[col_cama].ffill()
-    df[col_nombre] = df[col_nombre].ffill()
+    # 2. IDENTIFICADOR ÚNICO POR EVENTO (No por nombre)
+    # Creamos un ID que cambia cada vez que aparece una nueva CAMA o un nuevo NOMBRE
+    # Esto evita que si un paciente aparece dos veces en la lista (aislamientos diferentes), se junten.
+    df['EVENTO_ID'] = (df[col_cama].notna() | df[col_nombre].notna()).cumsum()
 
-    def consolidar_paciente(group):
-        if len(group) == 1:
-            return group.iloc[0]
-        
+    def consolidar_evento(group):
         res = group.iloc[0].copy()
-        
-        # Unimos tipos de aislamiento (ej. Contacto + Gotitas)
+        # Si el tipo de aislamiento está repartido en dos filas, los une
         tipos = group[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
         
-        # Para el resto, buscamos cualquier dato existente en las filas del grupo
+        # Para el resto, toma el dato que exista
         for col in group.columns:
-            if col not in [col_tipo, col_cama, col_nombre]:
+            if col not in [col_tipo, 'EVENTO_ID']:
                 val_real = group[col].dropna()
                 res[col] = val_real.iloc[0] if not val_real.empty else np.nan
         return res
 
-    # Agrupamos. Si esto sigue dando 7, es que dos pacientes comparten Cama y Nombre en el Excel.
-    df = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
+    # Agrupamos por el ID de evento único
+    df = df.groupby('EVENTO_ID', as_index=False).apply(consolidar_evento)
 
-    # 4. FILTRO DE AISLAMIENTOS ACTIVOS (EL CORAZÓN DEL PROBLEMA)
-    # Filtramos: Solo nos quedamos con los que tienen la FECHA DE TÉRMINO vacía
+    # 3. FILTRO ESTRICTO DE FECHA DE TÉRMINO
+    # Si tiene cualquier dato en "FECHA DE TÉRMINO", el aislamiento terminó.
+    # Solo mostramos los que son NaN (Vacíos).
     if col_termino in df.columns:
-        # Nos aseguramos de que sea NaN real
         df = df[df[col_termino].isna()]
 
-    # Limpieza final
+    # Limpieza de filas basura (sin cama) y ordenamiento
     df = df[df[col_cama].notna()]
     df = df.sort_values(by=col_cama)
+    
+    # Quitamos la columna auxiliar antes de mostrar
+    if 'EVENTO_ID' in df.columns:
+        df = df.drop(columns=['EVENTO_ID'])
 
     return df
 
 # --- INTERFAZ ---
 try:
     with st.container(border=True):
-        if st.button("🔄 Forzar Actualización (Limpiar Caché)", use_container_width=True):
+        if st.button("🔄 Sincronizar Censo", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
         df_final = cargar_aislamientos_definitivo()
         
         if not df_final.empty:
-            # Buscador funcional
-            busqueda = st.text_input("🔍 Buscar por Cama o Nombre:", placeholder="Ej. 7305...")
+            busqueda = st.text_input("🔍 Buscar:", placeholder="Cama, Nombre, Microorganismo...")
             if busqueda:
                 mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
                 df_final = df_final[mask]
 
             st.dataframe(df_final, use_container_width=True, hide_index=True)
-            
-            # El conteo que te preocupa
             st.success(f"📋 **{len(df_final)}** Aislamientos Activos detectados.")
-            st.caption(f"Última lectura del Excel: {time.strftime('%H:%M:%S')}")
         else:
             st.warning("⚠️ No se detectaron aislamientos activos.")
 
