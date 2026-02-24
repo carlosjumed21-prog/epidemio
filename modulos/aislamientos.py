@@ -9,18 +9,34 @@ st.title("🦠 Control de Aislamientos Activos")
 # URL de publicación
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=2) # TTL mínimo para detectar cambios rápidos
-def cargar_censo_definitivo():
-    # El truco del tiempo para que Google no nos engañe con datos viejos
-    url_final = f"{SHEET_URL}&nocache={time.time()}"
+@st.cache_data(ttl=2)
+def cargar_censo_total():
+    # 1. Forzar lectura fresca
+    url_final = f"{SHEET_URL}&cachebust={time.time()}"
     
-    # 1. Cargar datos
-    df = pd.read_csv(url_final, skiprows=1, engine='python', encoding='utf-8')
+    # 2. Leemos TODO el archivo sin saltar filas inicialmente
+    # Esto asegura que no nos "comamos" la última fila por un error de conteo
+    df_raw = pd.read_csv(url_final, engine='python', encoding='utf-8')
     
-    # 2. Seleccionar columnas B a J
+    # 3. Localizar la fila de encabezados real
+    # Buscamos la fila donde aparezca la palabra "CAMA" (usualmente la fila 1 o 2)
+    # y recortamos desde ahí hacia abajo
+    header_row = 0
+    for i, row in df_raw.iterrows():
+        if "CAMA" in [str(val).upper() for val in row.values]:
+            header_row = i
+            break
+            
+    # Re-leemos o recortamos desde esa fila
+    df = df_raw.iloc[header_row:].copy()
+    df.columns = df.iloc[0] # La primera fila encontrada son los nombres
+    df = df[1:] # El resto son los datos
+    
+    # 4. Recorte de columnas (B a J)
+    # Seleccionamos por posición para evitar errores si los nombres cambian un poco
     df = df.iloc[:, 1:10]
     
-    # 3. Limpiar nombres de columnas
+    # Limpiar nombres de columnas
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
     col_cama = "CAMA"
@@ -28,65 +44,56 @@ def cargar_censo_definitivo():
     col_tipo = "TIPO DE AISLAMIENTO"
     col_termino = "FECHA DE TÉRMINO"
 
-    # --- LIMPIEZA CRÍTICA ---
-    # Convertimos todo a texto y limpiamos espacios. 
-    # Esto es vital para que la última fila no se ignore si tiene espacios.
+    # --- LIMPIEZA TOTAL ---
+    # Convertimos a string y quitamos espacios
     df = df.astype(str).apply(lambda x: x.str.strip())
     df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
 
-    # --- LÓGICA DE FILAS DOBLES (SIN PERDER LA ÚLTIMA) ---
-    # Rellenamos solo los datos del paciente hacia abajo para que la fila de abajo
-    # tenga el contexto de quién es, pero SIN agrupar todavía.
+    # 5. LÓGICA DE FILAS DOBLES (Consolidación)
+    # Rellenamos para no perder contexto en la última fila
     df[col_cama] = df[col_cama].ffill()
     df[col_nombre] = df[col_nombre].ffill()
 
-    # Ahora agrupamos, pero usamos un ID de fila para no mezclar pacientes distintos
-    # que por error tengan el mismo nombre o cama.
-    df['AUX_ID'] = (df[col_cama].astype(str) + df[col_nombre].astype(str))
-    
-    # Esta función une los aislamientos si el paciente tiene 2 filas
-    def consolidar(group):
+    def consolidar_evento(group):
         res = group.iloc[0].copy()
+        # Unir tipos de aislamiento
         tipos = group[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
-        # Para el resto de columnas, si la primera fila es nula, busca en la segunda
+        # Rescatar cualquier otro dato perdido en la fila de abajo
         for c in group.columns:
-            if c not in [col_tipo, 'AUX_ID']:
-                val_real = group[c].dropna()
-                res[c] = val_real.iloc[0] if not val_real.empty else np.nan
+            if c not in [col_tipo, col_cama, col_nombre]:
+                val = group[c].dropna()
+                res[c] = val.iloc[0] if not val.empty else np.nan
         return res
 
-    # Agrupamos respetando el orden original para no perder la última fila
-    df = df.groupby(['AUX_ID'], as_index=False, sort=False).apply(consolidar)
+    # Agrupamos por cama y nombre para consolidar
+    df = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_evento)
 
-    # --- EL FILTRO DE "TERMINADO" ---
-    # Si la FECHA DE TÉRMINO es nula (NaN), el paciente está activo.
+    # 6. FILTRO DE ACTIVOS (Celdas vacías en Término)
     if col_termino in df.columns:
         df = df[df[col_termino].isna()]
 
-    # Eliminar cualquier fila que no tenga cama (final del archivo)
+    # Filtro final: que la cama no sea nula
     df = df[df[col_cama].notna()]
     
-    # Limpieza de columnas auxiliares
-    if 'AUX_ID' in df.columns:
-        df = df.drop(columns=['AUX_ID'])
-        
     return df
 
 # --- INTERFAZ ---
 try:
-    if st.button("🔄 Sincronizar Censo (Forzar lectura de última fila)"):
+    if st.button("🔄 Actualización Forzada (Escanear hasta fila final)"):
         st.cache_data.clear()
         st.rerun()
 
-    df_final = cargar_censo_definitivo()
+    df_final = cargar_censo_total()
 
     if not df_final.empty:
         st.dataframe(df_final, use_container_width=True, hide_index=True)
         st.success(f"📋 **{len(df_final)}** Aislamientos Activos detectados.")
-        st.info(f"Último paciente en lista: {df_final.iloc[-1][0]} - {df_final.iloc[-1][1]}")
+        
+        # Verificación visual para ti
+        st.info(f"Última cama detectada en el sistema: {df_final.iloc[-1][col_cama]}")
     else:
-        st.warning("⚠️ No se detectan aislamientos activos.")
+        st.warning("⚠️ No se encontraron pacientes activos.")
 
 except Exception as e:
-    st.error(f"Error en la lectura: {e}")
+    st.error(f"Hubo un error al leer el archivo: {e}")
