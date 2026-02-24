@@ -7,7 +7,7 @@ st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠")
 st.title("🦠 Control de Aislamientos Activos")
 
 # URL de publicación
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
 
 @st.cache_data(ttl=2)
 def cargar_censo_total():
