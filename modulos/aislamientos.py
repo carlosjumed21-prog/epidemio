@@ -2,24 +2,25 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+import random
 
-# Configuración de la página
 st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠")
 st.title("🦠 Control de Aislamientos Activos")
 
-# URL de publicación del CSV
+# URL de publicación
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=5) # Caché de solo 5 segundos para máxima precisión
-def cargar_datos_reales():
-    # Forzar actualización de Google Sheets con timestamp
-    url_final = f"{SHEET_URL}&cachebust={time.time()}"
+@st.cache_data(ttl=2) # Reducimos el tiempo de espera al mínimo (2 segundos)
+def cargar_censo_actualizado():
+    # Generamos un número aleatorio para obligar a Google a refrescar el archivo
+    seed = random.randint(1, 100000)
+    url_forzada = f"{SHEET_URL}&recheck={seed}&t={time.time()}"
     
     # 1. Carga de datos (Columnas B a J)
-    df = pd.read_csv(url_final, skiprows=1, engine='python', encoding='utf-8')
+    df = pd.read_csv(url_forzada, skiprows=1, engine='python', encoding='utf-8')
     df = df.iloc[:, 1:10]
     
-    # 2. Normalización de encabezados
+    # 2. Limpiar encabezados
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
     col_cama = "CAMA"
@@ -27,57 +28,55 @@ def cargar_datos_reales():
     col_tipo = "TIPO DE AISLAMIENTO"
     col_termino = "FECHA DE TÉRMINO"
 
-    # 3. Limpieza de valores vacíos
+    # 3. Limpieza profunda de vacíos
+    # Convertimos todo a string para uniformar y luego detectamos nulos
     df = df.apply(lambda x: x.astype(str).str.strip())
     df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
 
-    # 4. Lógica de consolidación por FILA INDEPENDIENTE
-    # En lugar de ffill general, solo unimos filas si el nombre está vacío 
-    # y pertenecen al mismo bloque de ingreso
-    df['REGISTRO_ID'] = (df[col_cama].notna()).cumsum()
+    # 4. Agrupación por CAMA para manejar filas dobles
+    # Usamos la Cama como ancla para no perder pacientes nuevos
+    df['GRUPO'] = (df[col_cama].notna()).cumsum()
 
-    def fusionar_filas_dobles(group):
+    def consolidar(group):
         res = group.iloc[0].copy()
-        # Combinar aislamientos (ej: Contacto + Gotitas)
-        tipos = group[col_tipo].dropna().unique()
-        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
+        # Unir aislamientos si hay más de uno
+        aislamientos = group[col_tipo].dropna().unique()
+        res[col_tipo] = " / ".join(aislamientos) if len(aislamientos) > 0 else "SIN ESPECIFICAR"
         
-        # Para el resto, tomar el primer valor no nulo
-        for col in group.columns:
-            if col not in [col_tipo, 'REGISTRO_ID']:
-                val = group[col].dropna()
-                res[col] = val.iloc[0] if not val.empty else np.nan
+        # Recuperar datos de otras columnas si están en la segunda fila
+        for c in group.columns:
+            if c not in [col_tipo, 'GRUPO']:
+                val = group[c].dropna()
+                res[c] = val.iloc[0] if not val.empty else np.nan
         return res
 
-    df = df.groupby('REGISTRO_ID', as_index=False).apply(fusionar_filas_dobles)
+    df = df.groupby('GRUPO', as_index=False).apply(consolidar)
 
-    # 5. Filtro estricto: Pacientes sin Fecha de Término
-    # Solo mostramos los registros donde la celda de término sea nula
+    # 5. FILTRO DE ACTIVOS: Si la Fecha de Término NO tiene dato, está ACTIVO
     if col_termino in df.columns:
+        # Mantenemos solo los que tienen NaN en la columna de término
         df = df[df[col_termino].isna()]
 
-    # Limpieza final
+    # Quitar filas que no tienen número de cama (basura del Excel)
     df = df[df[col_cama].notna()]
+    
     return df.sort_values(by=col_cama)
 
+# --- INTERFAZ ---
 try:
-    if st.button("🔄 Sincronizar Censo Ahora"):
+    # Botón con limpieza manual de caché
+    if st.button("🔄 Forzar Sincronización Inmediata"):
         st.cache_data.clear()
         st.rerun()
 
-    df_activos = cargar_datos_reales()
+    df_final = cargar_censo_actualizado()
 
-    if not df_activos.empty:
-        # Buscador por cualquier campo
-        query = st.text_input("🔍 Buscar paciente o microorganismo:")
-        if query:
-            mask = df_activos.apply(lambda r: r.astype(str).str.contains(query, case=False).any(), axis=1)
-            df_activos = df_activos[mask]
-
-        st.dataframe(df_activos, use_container_width=True, hide_index=True)
-        st.success(f"📋 **{len(df_activos)}** Aislamientos Activos detectados.")
+    if not df_final.empty:
+        st.dataframe(df_final.drop(columns=['GRUPO'], errors='ignore'), use_container_width=True, hide_index=True)
+        st.success(f"✅ **{len(df_final)}** Aislamientos Activos detectados.")
+        st.caption(f"Última actualización intentada: {time.strftime('%H:%M:%S')}")
     else:
-        st.warning("No hay aislamientos activos registrados.")
+        st.warning("No se detectan pacientes activos sin fecha de término.")
 
 except Exception as e:
-    st.error(f"Error de conexión: {e}")
+    st.error(f"Error al conectar con la base de datos: {e}")
