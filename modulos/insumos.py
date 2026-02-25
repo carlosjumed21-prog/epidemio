@@ -1,16 +1,14 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import re
-import time
 from io import BytesIO
 from datetime import datetime, timedelta
+from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACIÓN ---
-# Link actualizado según tu última indicación
-SHEET_URL_AISLAMIENTOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
+SHEET_URL_AISLAMIENTOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-# Tus 11 especialidades intocables
 SERVICIOS_INSUMOS_FILTRO = [
     "HEMATOLOGIA", "HEMATOLOGIA PEDIATRICA", "ONCOLOGIA PEDIATRICA",
     "NEONATOLOGIA", "INFECTOLOGIA PEDIATRICA", "U.C.I.N.",
@@ -18,143 +16,189 @@ SERVICIOS_INSUMOS_FILTRO = [
     "ONCOLOGIA MEDICA", "UCIA"
 ]
 
-# --- FUNCIONES DE CARGA (REFORZADAS) ---
+# --- FUNCIONES DE FORMATO Y LÓGICA ---
 
-@st.cache_data(ttl=5)
+def aplicar_formato_oficial(writer, sheet_name, df, servicio_nombre):
+    """Aplica encabezados azules, vigencia de 7 días, bordes, NOM-045 y Firma."""
+    ws = writer.sheets[sheet_name]
+    hoy = datetime.now()
+    vencimiento = hoy + timedelta(days=7)
+    f_hoy = hoy.strftime("%d/%m/%Y")
+    f_venc = vencimiento.strftime("%d/%m/%Y")
+    
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # 1. Título de Vigencia
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
+    titulo = f"{servicio_nombre} DEL {f_hoy} AL {f_venc} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
+    cell_h = ws.cell(row=1, column=1, value=titulo)
+    cell_h.alignment = center_align
+    cell_h.font = Font(bold=True, size=11)
+
+    # 2. Encabezados de Columna
+    for col_num, value in enumerate(df.columns, 1):
+        cell = ws.cell(row=2, column=col_num, value=value)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border
+
+    # 3. Cuerpo y Bordes
+    for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=8):
+        for cell in row:
+            cell.border = border
+            cell.alignment = center_align
+    
+    for i in range(1, 9):
+        ws.column_dimensions[get_column_letter(i)].width = 20
+
+    # 4. Pie de Página (NOM y Firma)
+    lr = ws.max_row
+    ws.merge_cells(start_row=lr + 1, start_column=1, end_row=lr + 1, end_column=8)
+    leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
+    cell_nom = ws.cell(row=lr + 1, column=1, value=leyenda)
+    cell_nom.alignment = center_align
+    cell_nom.font = Font(size=9, italic=True)
+    ws.row_dimensions[lr + 1].height = 50
+
+    ws.merge_cells(start_row=lr + 2, start_column=1, end_row=lr + 2, end_column=8)
+    cell_auth = ws.cell(row=lr + 2, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
+    cell_auth.alignment = center_align
+    cell_auth.font = Font(bold=True)
+
+def obtener_especialidad_real(cama, esp_html):
+    c = str(cama).strip().upper()
+    esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
+    if c.startswith("55"): return "U.C.I.N."
+    if c.startswith("45"): return "NEONATOLOGIA" 
+    if c.startswith("56"): return "U.T.I.P."
+    if c.startswith("85"): return "UNIDAD DE QUEMADOS"
+    if c.startswith("73"): return "UCIA"
+    if c.isdigit() and 7401 <= int(c) <= 7409: return "TERAPIA POSQUIRURGICA"
+    return esp_html_clean
+
 def cargar_aislamientos_limpios():
     try:
-        # Forzamos descarga fresca
-        url_fresca = f"{SHEET_URL_AISLAMIENTOS}&cachebust={time.time()}"
-        df = pd.read_csv(url_fresca, skiprows=1, engine='python')
-        df.columns = [str(c).strip().upper() for c in df.columns]
+        df_ais = pd.read_csv(SHEET_URL_AISLAMIENTOS, skiprows=1, engine='python')
+        df_ais.columns = [str(c).strip().upper() for c in df_ais.columns]
+        cols = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE TÉRMINO"]
+        df_ais = df_ais[[c for c in cols if c in df_ais.columns]]
+        df_ais = df_ais.replace(['nan', 'None', 'none', 'NAN', ' '], pd.NA)
+        df_ais = df_ais[df_ais["FECHA DE TÉRMINO"].isna()]
         
-        # 1. Limpieza inicial de nulos
-        df = df.replace(['nan', 'None', 'none', 'NAN', 'NULL', ''], np.nan)
-
-        # 2. RELLENO CRÍTICO: Rellenamos Cama, Registro y Nombre ANTES de filtrar
-        # Esto evita que los pacientes "sin nombre" en la fila del aislamiento se pierdan
-        cols_paciente = ["CAMA", "REGISTRO", "NOMBRE"]
-        for col in cols_paciente:
-            if col in df.columns:
-                df[col] = df[col].ffill()
-
-        # 3. FILTRO DE ACTIVOS: Solo filas donde FECHA DE TÉRMINO sea NaN
-        if "FECHA DE TÉRMINO" in df.columns:
-            df = df[df["FECHA DE TÉRMINO"].isna()]
-
-        # 4. CONSOLIDAR AISLAMIENTOS: Si un paciente tiene varias filas (varios bichos)
-        if "TIPO DE AISLAMIENTO" in df.columns:
-            df["TIPO DE AISLAMIENTO"] = df.groupby("REGISTRO")["TIPO DE AISLAMIENTO"].transform(
-                lambda x: " / ".join(x.dropna().astype(str).unique())
-            )
+        # Eliminar filas de ruido (1111 o pacientes genéricos)
+        ruido = ["1111", "PACIENTES", "TOTAL", "SUBTOTAL"]
+        df_ais = df_ais[~df_ais["REGISTRO"].astype(str).str.contains('|'.join(ruido), na=False)]
         
-        # 5. Quitamos duplicados para tener un renglón por paciente
-        df = df.drop_duplicates(subset=["REGISTRO"])
-        
-        # Aseguramos que las columnas necesarias existan
-        for c in ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO"]:
-            if c not in df.columns: df[c] = "N/A"
-            
-        return df[["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO"]]
-    except Exception as e:
-        st.error(f"Error cargando Sheets: {e}")
+        df_ais["CAMA"] = df_ais["CAMA"].ffill()
+        df_ais["NOMBRE"] = df_ais["NOMBRE"].ffill()
+        df_ais["TIPO DE AISLAMIENTO"] = df_ais.groupby(["CAMA", "NOMBRE"])["TIPO DE AISLAMIENTO"].transform(
+            lambda x: " / ".join(x.dropna().astype(str).unique())
+        )
+        return df_ais.drop_duplicates(["CAMA", "NOMBRE"]).dropna(subset=["REGISTRO"])
+    except:
         return pd.DataFrame()
 
 # --- INTERFAZ ---
 st.title("📦 Censo de Insumos")
 
 if 'archivo_compartido' not in st.session_state:
-    st.info("👈 Sube el archivo HTML en la barra lateral para iniciar.")
+    st.info("👈 Sube el archivo HTML en 'Configuración' para iniciar.")
 else:
     try:
-        # Procesamiento del HTML
         tablas = pd.read_html(st.session_state['archivo_compartido'])
         df_html_raw = max(tablas, key=len)
+        col0_str = df_html_raw.iloc[:, 0].fillna("").astype(str).str.upper()
         
         datos_html = []
-        pacs_especialidades = [] # Aquí irán tus 11 servicios
-        
+        pacs_11_esp = []
         esp_actual = ""
-        for i in range(len(df_html_raw)):
-            val_col0 = str(df_html_raw.iloc[i, 0]).upper()
-            
-            if "ESPECIALIDAD:" in val_col0:
-                esp_actual = val_col0.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip()
-                continue
-            
+        # Lista de exclusión actualizada
+        IGNORAR = ["PACIENTES", "TOTAL", "SUBTOTAL", "PÁGINA", "IMPRESIÓN", "1111"]
+
+        for i, val in enumerate(col0_str):
+            if "ESPECIALIDAD:" in val:
+                esp_actual = val; continue
             fila = [str(x).strip() for x in df_html_raw.iloc[i].values]
             
-            # Validar que sea una fila de paciente (Registro con números y longitud >= 5)
-            if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
-                # Ajuste de especialidad por número de cama
-                cama = fila[0]
-                esp_real = esp_actual
-                if cama.startswith("55"): esp_real = "U.C.I.N."
-                elif cama.startswith("45"): esp_real = "NEONATOLOGIA"
-                elif cama.startswith("56"): esp_real = "U.T.I.P."
-                elif cama.startswith("85"): esp_real = "UNIDAD DE QUEMADOS"
-                elif cama.startswith("73"): esp_real = "UCIA"
-                elif cama.isdigit() and 7401 <= int(cama) <= 7409: esp_real = "TERAPIA POSQUIRURGICA"
+            # Filtro estricto para evitar filas de ruido en el HTML
+            if any(x in fila[0] or x in fila[1] for x in IGNORAR): continue
 
-                pac_data = {
-                    "CAMA": cama, "REGISTRO": fila[1], "PACIENTE": fila[2],
-                    "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])),
-                    "FECHA DE INGRESO": fila[9], "ESP_REAL": esp_real
-                }
+            if len(fila) > 1 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+                esp_real = obtener_especialidad_real(fila[0], esp_actual)
+                pac_data = {"CAMA_HTML": fila[0], "REGISTRO": fila[1], "PACIENTE": fila[2], "SEXO": fila[3], "EDAD": "".join(re.findall(r'\d+', fila[4])), "FECHA DE INGRESO": fila[9], "ESP_REAL": esp_real}
                 datos_html.append(pac_data)
-                
-                if esp_real in SERVICIOS_INSUMOS_FILTRO:
-                    pacs_especialidades.append(pac_data)
+                if esp_real in SERVICIOS_INSUMOS_FILTRO: pacs_11_esp.append(pac_data)
 
         df_ref_html = pd.DataFrame(datos_html)
 
-        # --- SECCIÓN A: LAS 11 ESPECIALIDADES ---
+        # SECCIÓN A: ESPECIALIDADES
         st.header("📋 INSUMOS: ESPECIALIDADES")
-        if pacs_especialidades:
-            df_servicios = pd.DataFrame(pacs_especialidades)
-            for serv in sorted(df_servicios["ESP_REAL"].unique()):
+        if pacs_11_esp:
+            df_11 = pd.DataFrame(pacs_11_esp)
+            for serv in sorted(df_11["ESP_REAL"].unique()):
                 with st.expander(f"🔍 Vista Previa: {serv}"):
-                    df_v = df_servicios[df_servicios["ESP_REAL"] == serv].copy()
+                    df_v = df_11[df_11["ESP_REAL"] == serv].copy()
                     df_v["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
                     df_v["INSUMO"] = "JABÓN/SANITAS"
-                    st.table(df_v[["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]])
+                    st.table(df_v[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]])
 
-        # --- SECCIÓN B: AISLAMIENTOS (CRUCE MEJORADO) ---
+        st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+        # SECCIÓN B: AISLAMIENTOS
         st.header("🦠 INSUMOS: AISLAMIENTOS")
-        df_ais_base = cargar_aislamientos_limpios()
-        
-        if not df_ais_base.empty:
-            # Aseguramos que 'REGISTRO' sea string para el cruce
-            df_ais_base["REGISTRO"] = df_ais_base["REGISTRO"].astype(str)
-            df_ref_html["REGISTRO"] = df_ref_html["REGISTRO"].astype(str)
-
-            # CRUCE: Traemos los datos del HTML a la base de Aislamientos
-            df_final_ais = pd.merge(df_ais_base, df_ref_html, on="REGISTRO", how="left", suffixes=('', '_H'))
-            
-            # REPARACIÓN DE DATOS: Si no cruzó con el HTML, usamos lo que tenemos en el Sheets
-            df_final_ais["PACIENTE"] = df_final_ais["PACIENTE"].fillna(df_final_ais["NOMBRE"])
-            df_final_ais["CAMA"] = df_final_ais["CAMA"].fillna(df_final_ais["CAMA_H"])
-            df_final_ais["TIPO DE PRECAUCIONES"] = df_final_ais["TIPO DE AISLAMIENTO"]
-            df_final_ais["INSUMO"] = "JABÓN/SANITAS"
-            
-            # Rellenar faltantes con "Pendiente" para edición manual
-            for col in ["SEXO", "EDAD", "FECHA DE INGRESO"]:
-                df_final_ais[col] = df_final_ais[col].fillna("Pendiente")
-
-            cols_mostrar = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
-            df_ready = df_final_ais[cols_mostrar]
-
-            # Si hay pendientes, mostramos el editor
-            if (df_ready == "Pendiente").any().any():
-                st.warning("⚠️ Algunos pacientes no están en el HTML. Completa los datos amarillos:")
-                df_ready = st.data_editor(df_ready.style.applymap(lambda x: 'background-color: #FFF9C4' if x == "Pendiente" else ''), use_container_width=True, hide_index=True)
+        if 'df_ais_mapeado' not in st.session_state:
+            df_base = cargar_aislamientos_limpios()
+            if not df_base.empty:
+                df_f = pd.merge(df_base, df_ref_html, on="REGISTRO", how="left")
+                df_f["CAMA"] = df_f["CAMA_HTML"].fillna(df_f["CAMA"])
+                df_f["PACIENTE"] = df_f["PACIENTE"].fillna(df_f["NOMBRE"])
+                df_f["TIPO DE PRECAUCIONES"] = df_f["TIPO DE AISLAMIENTO"]
+                df_f["INSUMO"] = "JABÓN/SANITAS"
+                for c in ["SEXO", "EDAD", "FECHA DE INGRESO"]: df_f[c] = df_f[c].fillna("Pendiente")
+                st.session_state.df_ais_mapeado = df_f[["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
             else:
-                st.table(df_ready)
+                st.session_state.df_ais_mapeado = pd.DataFrame()
 
-            st.session_state.df_ais_mapeado = df_ready
+        if not st.session_state.df_ais_mapeado.empty:
+            df_actual = st.session_state.df_ais_mapeado
+            mask_pend = df_actual.astype(str).apply(lambda x: x.str.contains('Pendiente')).any(axis=1)
+            df_pend = df_actual[mask_pend].copy()
 
-            # Botones de descarga (se omiten funciones de Excel/PDF por brevedad, usa las de tu código original)
-            st.success("✅ Cruce de datos completado.")
+            if not df_pend.empty:
+                st.subheader("⚠️ Pacientes por completar (Edición)")
+                edit_pend = st.data_editor(df_pend.style.apply(lambda x: ['background-color: #FFF9C4' for _ in x], axis=1), use_container_width=True, hide_index=True, key="ed_pend")
+                if not edit_pend.equals(df_pend):
+                    st.session_state.df_ais_mapeado.update(edit_pend)
+                    st.rerun()
+
+            st.subheader("📋 Tabla Oficial (Aislamientos)")
+            st.table(st.session_state.df_ais_mapeado)
+
+            if st.button("🚀 GENERAR EXCEL TOTAL", use_container_width=True, type="primary"):
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_ais_final = st.session_state.df_ais_mapeado
+                    df_ais_final.to_excel(writer, index=False, sheet_name="AISLAMIENTOS", startrow=1)
+                    aplicar_formato_oficial(writer, "AISLAMIENTOS", df_ais_final, "INSUMOS AISLAMIENTOS")
+                    
+                    if pacs_11_esp:
+                        for serv in sorted(df_11["ESP_REAL"].unique()):
+                            df_s = df_11[df_11["ESP_REAL"] == serv].copy()
+                            df_s["INSUMO"] = "JABÓN/SANITAS"
+                            df_s["TIPO DE PRECAUCIONES"] = "ESTÁNDAR"
+                            df_s = df_s[["CAMA_HTML", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]]
+                            df_s.columns = ["CAMA", "REGISTRO", "PACIENTE", "SEXO", "EDAD", "FECHA DE INGRESO", "TIPO DE PRECAUCIONES", "INSUMO"]
+                            nombre_hoja = serv[:30].replace("/", "-")
+                            df_s.to_excel(writer, index=False, sheet_name=nombre_hoja, startrow=1)
+                            aplicar_formato_oficial(writer, nombre_hoja, df_s, f"INSUMOS {serv}")
+                st.success("✅ Reporte con metadatos y firmas generado.")
+                st.download_button("💾 DESCARGAR REPORTE", output.getvalue(), f"Insumos_Epidemio_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
+        else:
+            st.info("No hay aislamientos activos registrados.")
 
     except Exception as e:
-        st.error(f"Error general: {e}")
+        st.error(f"Error: {e}")
