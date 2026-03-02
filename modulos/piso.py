@@ -3,53 +3,71 @@ import pandas as pd
 
 st.title("🏥 Seguimiento de Piso")
 
-# 1. CARGA DEL EXCEL DE SEGUIMIENTO (DENTRO DE LA PESTAÑA)
+# 1. CARGA DEL EXCEL (Única fuente de datos para esta pestaña)
 st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
     "Subir archivo de Excel para seguimiento", 
     type=["xlsx", "xls"],
-    key="excel_seguimiento_piso" # ID diferente al del main.py
+    key="excel_unico_piso"
 )
 
 if archivo_excel:
     try:
-        df_seguimiento = pd.read_excel(archivo_excel)
-        st.success("✅ Excel de seguimiento listo.")
+        # Leer el Excel (usamos keep_default_na=False para evitar problemas con celdas vacías)
+        df = pd.read_excel(archivo_excel)
         
-        # 2. VINCULACIÓN CON EL CENSO DEL SIDEBAR
-        if 'archivo_compartido' in st.session_state:
-            tablas_censo = pd.read_html(st.session_state['archivo_compartido'])
-            df_censo = tablas_censo[0]
+        if df.empty:
+            st.warning("El archivo Excel está vacío.")
+            st.stop()
 
-            st.divider()
-            st.subheader("🔍 Selección de Paciente")
+        st.divider()
+        st.subheader("🔍 Selección de Paciente")
 
-            # Filtros en Cascada usando iloc (B=1, C=2)
-            lista_especialidades = sorted(df_censo.iloc[:, 1].dropna().unique())
-            col_esp, col_cam = st.columns(2)
+        # --- FILTROS EN CASCADA (Basados en el Excel subido) ---
+        
+        # Especialidad: Columna B (Índice 1)
+        lista_especialidades = sorted(df.iloc[:, 1].dropna().unique())
+        
+        col_esp, col_cam = st.columns(2)
+        
+        with col_esp:
+            esp_sel = st.selectbox("Especialidad (Columna B):", lista_especialidades)
+
+        # Filtrar el DataFrame por la especialidad seleccionada
+        df_filtrado_esp = df[df.iloc[:, 1] == esp_sel]
+        
+        # Cama: Columna C (Índice 2)
+        lista_camas = sorted(df_filtrado_esp.iloc[:, 2].dropna().unique())
+
+        with col_cam:
+            cama_sel = st.selectbox("Cama (Columna C):", lista_camas)
+
+        # --- MOSTRAR DATOS DEL PACIENTE (Basados en el Excel subido) ---
+        # Buscamos la fila que corresponde a la cama seleccionada
+        paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
+
+        with st.container(border=True):
+            st.markdown(f"### 👤 {paciente.iloc[4]}") # Nombre (Columna E)
             
-            with col_esp:
-                esp_sel = st.selectbox("Especialidad:", lista_especialidades)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.write(f"**Registro:** {paciente.iloc[3]}") # Columna D
+                st.write(f"**Sexo:** {paciente.iloc[5]}")      # Columna F
+            with c2:
+                st.write(f"**Edad:** {paciente.iloc[6]}")      # Columna G
+                st.write(f"**Ingreso:** {paciente.iloc[8]}")   # Columna I
+            with c3:
+                st.info(f"**Estancia:** {paciente.iloc[9]} días") # Columna J
 
-            df_filtrado_esp = df_censo[df_censo.iloc[:, 1] == esp_sel]
-            lista_camas = sorted(df_filtrado_esp.iloc[:, 2].dropna().unique())
+        st.divider()
+        
+        # --- SECCIÓN DE CAPTURA ---
+        st.subheader("📝 Captura de Seguimiento")
+        # Aquí es donde agregaremos las variables que me proporciones
+        st.warning("Listo para configurar las variables de captura.")
 
-            with col_cam:
-                cama_sel = st.selectbox("Cama:", lista_camas)
-
-            # 3. PREVIO (D, E, F, G, I, J)
-            paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
-
-            with st.container(border=True):
-                st.write(f"**Paciente:** {paciente.iloc[4]} | **Registro:** {paciente.iloc[3]}")
-                st.write(f"**Sexo:** {paciente.iloc[5]} | **Edad:** {paciente.iloc[6]} | **Ingreso:** {paciente.iloc[8]} | **Días:** {paciente.iloc[9]}")
-
-            st.divider()
-            st.subheader("📝 Captura")
-            st.warning("Variables pendientes de configuración...")
-
-        else:
-            st.warning("⚠️ Sube el censo HTML en el menú de la izquierda.")
-            
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al procesar el Excel: {e}")
+        st.info("Asegúrate de que el archivo tenga datos en las columnas B, C, D, E, F, G, I y J.")
+else:
+    st.warning("⚠️ Por favor, sube el archivo de Excel para comenzar el seguimiento.")
