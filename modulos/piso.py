@@ -74,7 +74,7 @@ if archivo_excel:
 
         st.markdown("---")
         
-        # --- Evacuaciones y Bristol (Imagen arriba del Slider) ---
+        # --- Evacuaciones y Bristol ---
         col_evac, col_bristol = st.columns([1, 2])
         
         with col_evac:
@@ -84,10 +84,9 @@ if archivo_excel:
             es_fiebre = temperatura >= 38.0
             
             st.write("**Estatus Clínico:**")
-            
-            # Estilo para botones positivos (Simulación de color verde vía labels)
-            label_fiebre = "FIEBRE (POSITIVO) 🟢" if es_fiebre else "fiebre"
-            st.toggle(label_fiebre, value=es_fiebre, disabled=True)
+            # Texto dinámico según el estado, pero el botón es el estándar
+            label_f = "FIEBRE DETECTADA" if es_fiebre else "fiebre"
+            st.toggle(label_f, value=es_fiebre, disabled=True)
             
             placeholder_diarrea = st.empty()
 
@@ -99,10 +98,10 @@ if archivo_excel:
                                        options=list(range(1, 8)), 
                                        value=4)
         
-        # Validación de Diarrea (Evac >= 3 y Bristol >= 6)
+        # Lógica Diarrea: >=3 evac Y >=6 Bristol
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
-        label_diarrea = "DIARREA (POSITIVO) 🟢" if es_diarrea else "diarrea"
-        placeholder_diarrea.toggle(label_diarrea, value=es_diarrea, disabled=True)
+        label_d = "DIARREA DETECTADA" if es_diarrea else "diarrea"
+        placeholder_diarrea.toggle(label_d, value=es_diarrea, disabled=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
