@@ -3,6 +3,16 @@ import pandas as pd
 
 st.title("🏥 Seguimiento de Piso")
 
+# --- ESTILO CSS PARA INTERRUPTORES POSITIVOS EN VERDE ---
+st.markdown("""
+    <style>
+    /* Cambia el color del toggle cuando está activado (clase nativa de Streamlit) */
+    .st-at {
+        background-color: #28a745 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 1. CARGA DEL EXCEL
 st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
@@ -15,7 +25,6 @@ if archivo_excel:
     try:
         df = pd.read_excel(archivo_excel)
         
-        # Filtros de búsqueda (B=1, C=2)
         lista_especialidades = sorted(df.iloc[:, 1].dropna().unique())
         col_esp, col_cam = st.columns(2)
         with col_esp:
@@ -26,10 +35,8 @@ if archivo_excel:
         with col_cam:
             cama_sel = st.selectbox("Cama:", lista_camas)
 
-        # Mapeo de Paciente (D, E, F, G, I, J)
         paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
 
-        # --- PANEL DE VISTA PREVIA ---
         with st.container(border=True):
             st.markdown(f"### 👤 {paciente.iloc[4]}")
             c1, c2, c3 = st.columns(3)
@@ -38,11 +45,8 @@ if archivo_excel:
             with c3: st.info(f"**Días Estancia:** {paciente.iloc[9]}")
 
         st.divider()
-
-        # --- FORMULARIO DE CAPTURA ---
         st.subheader("📝 Captura de Seguimiento")
 
-        # 1. Estatus del Paciente
         status = st.segmented_control(
             "Seleccione el estatus de atención:",
             options=["Ingreso", "Seguimiento", "Egreso"],
@@ -50,14 +54,26 @@ if archivo_excel:
             key="status_paciente"
         )
 
-        # 2. Datos Clínicos
         st.markdown("#### 🌡️ Datos Clínicos")
-        
-        # --- Signos Vitales ---
         col_v1, col_v2, col_v3 = st.columns(3)
+        
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
-            tension_arterial = st.text_input("tensión arterial (mmHg):", placeholder="120/80")
+            
+            # --- LÓGICA DE TENSIÓN ARTERIAL AUTOMÁTICA ---
+            ta_raw = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
+            ta_final = ta_raw
+            
+            # Si el usuario escribe solo números (ej. 12080), insertamos la diagonal
+            if ta_raw.isdigit():
+                if len(ta_raw) == 5: # Caso 120/80
+                    ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+                elif len(ta_raw) == 6: # Caso 120/100
+                    ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+            
+            if ta_final != ta_raw:
+                st.caption(f"Registrado como: **{ta_final}**")
+
         with col_v2:
             frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
             glucosa = st.number_input("glucosa (mg/dL):", min_value=0, step=1)
@@ -67,37 +83,25 @@ if archivo_excel:
 
         st.markdown("---")
         
-        # --- Sección de Evacuaciones y Bristol (Imagen arriba del Slider) ---
         col_evac, col_bristol = st.columns([1, 2])
-        
         with col_evac:
             num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
             
-            # LÓGICA AUTOMÁTICA
-            es_fiebre = temperatura > 38.0
-            
+            # LÓGICA AUTOMÁTICA: FIEBRE >= 38
+            es_fiebre = temperatura >= 38.0
             st.write("**Estatus Clínico:**")
-            st.toggle("fiebre", value=es_fiebre, disabled=True)
-            
-            # El botón de diarrea se calculará después de obtener el valor de Bristol
-            # pero lo declaramos aquí para mantener el orden visual
+            st.toggle("FIEBRE DETECTADA" if es_fiebre else "fiebre", value=es_fiebre, disabled=True)
             placeholder_diarrea = st.empty()
 
         with col_bristol:
             st.write("**Referencia y Selección: Escala de Bristol**")
-            # Imagen Arriba
-            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
-                     use_container_width=True)
-            # Slider Abajo
-            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", 
-                                       options=list(range(1, 8)), 
-                                       value=4)
+            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", use_container_width=True)
+            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", options=list(range(1, 8)), value=4)
         
-        # Actualizamos la lógica de diarrea con el valor del slider
+        # LÓGICA AUTOMÁTICA: DIARREA
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
-        placeholder_diarrea.toggle("diarrea", value=es_diarrea, disabled=True)
+        placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
-        # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
         col_disp1, col_disp2 = st.columns(2)
         with col_disp1:
@@ -107,7 +111,6 @@ if archivo_excel:
             sonda_urinaria = st.checkbox("Sonda Urinaria")
             ventilacion = st.checkbox("Ventilación Mecánica")
 
-        # 4. Datos de Laboratorio
         st.markdown("#### 🧪 Datos de Laboratorio")
         col_lab1, col_lab2, col_lab3 = st.columns(3)
         with col_lab1:
@@ -117,10 +120,9 @@ if archivo_excel:
         with col_lab3:
             cultivos = st.radio("¿Cultivos?", ["No", "Sí"], horizontal=True)
 
-        # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Captura completa para la cama {cama_sel}. Datos listos para procesar.")
+            st.success(f"Captura completa para la cama {cama_sel}. TA: {ta_final}")
 
     except Exception as e:
         st.error(f"Error: {e}")
