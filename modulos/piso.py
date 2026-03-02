@@ -79,7 +79,7 @@ if archivo_excel:
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
         placeholder_diarrea.toggle("diarrea detectada" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
-        # 3. dispositivos invasivos
+      # 3. dispositivos invasivos
         st.markdown("#### 💉 dispositivos invasivos")
         tiene_dispositivos = st.checkbox("¿el paciente cuenta con dispositivos invasivos?")
         
@@ -91,13 +91,24 @@ if archivo_excel:
 
             st.write("---")
             cp = st.checkbox("catéter periférico")
-            if cp: campos_fecha("cp")
+            if cp:
+                # submenú específico para catéter periférico
+                lado_cp = st.selectbox(
+                    "lado de inserción:", 
+                    ["miembro superior derecho", "miembro superior izquierdo"],
+                    key="lado_cp"
+                )
+                campos_fecha("cp")
+            
             cvc = st.checkbox("catéter venoso central")
             if cvc: campos_fecha("cvc")
+            
             su = st.checkbox("sonda urinaria")
             if su: campos_fecha("su")
+            
             sng = st.checkbox("sonda nasogástrica")
             if sng: campos_fecha("sng")
+            
             vm = st.checkbox("ventilación mecánica")
             if vm: campos_fecha("vm")
 
