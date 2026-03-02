@@ -3,25 +3,6 @@ import pandas as pd
 
 st.title("🏥 Seguimiento de Piso")
 
-# --- ESTILO CSS PERSONALIZADO ---
-# Esto asegura que los toggles activados se vean verdes y sin sombreado de "deshabilitado"
-st.markdown("""
-    <style>
-    /* Color verde para el toggle activo */
-    .st-at {
-        background-color: #28a745 !important;
-    }
-    /* Quitar opacidad de deshabilitado para que resalte el color */
-    .st-ae {
-        opacity: 1 !important;
-    }
-    /* Color del texto de la etiqueta si es necesario */
-    .st-af {
-        color: inherit;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # 1. CARGA DEL EXCEL
 st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
@@ -77,12 +58,12 @@ if archivo_excel:
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
             
-            # --- Tensión Arterial con auto-diagonal ---
-            ta_raw = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
-            ta_final = ta_raw
-            if ta_raw.isdigit() and len(ta_raw) >= 5:
-                ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
-                st.caption(f"Registrado: **{ta_final}**")
+            # Tensión Arterial con auto-formato
+            ta_input = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
+            if ta_input and "/" not in ta_input and len(ta_input) >= 5:
+                ta_final = f"{ta_input[:3]}/{ta_input[3:]}"
+            else:
+                ta_final = ta_input
 
         with col_v2:
             frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
@@ -93,7 +74,7 @@ if archivo_excel:
 
         st.markdown("---")
         
-        # --- Sección de Evacuaciones y Bristol ---
+        # --- Evacuaciones y Bristol (Imagen arriba del Slider) ---
         col_evac, col_bristol = st.columns([1, 2])
         
         with col_evac:
@@ -103,22 +84,25 @@ if archivo_excel:
             es_fiebre = temperatura >= 38.0
             
             st.write("**Estatus Clínico:**")
-            st.toggle("FIEBRE DETECTADA" if es_fiebre else "fiebre", value=es_fiebre, disabled=True)
             
-            # Placeholder para diarrea
+            # Estilo para botones positivos (Simulación de color verde vía labels)
+            label_fiebre = "FIEBRE (POSITIVO) 🟢" if es_fiebre else "fiebre"
+            st.toggle(label_fiebre, value=es_fiebre, disabled=True)
+            
             placeholder_diarrea = st.empty()
 
         with col_bristol:
             st.write("**Referencia: Escala de Bristol**")
             st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
                      use_container_width=True)
-            bristol = st.select_slider("Seleccione el tipo acorde a la imagen superior:", 
+            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", 
                                        options=list(range(1, 8)), 
                                        value=4)
         
-        # Lógica Diarrea
+        # Validación de Diarrea (Evac >= 3 y Bristol >= 6)
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
-        placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
+        label_diarrea = "DIARREA (POSITIVO) 🟢" if es_diarrea else "diarrea"
+        placeholder_diarrea.toggle(label_diarrea, value=es_diarrea, disabled=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -143,7 +127,7 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Captura completa para la cama {cama_sel}. TA: {ta_final}")
+            st.success(f"Información validada para la cama {cama_sel}. TA: {ta_final}")
 
     except Exception as e:
         st.error(f"Error: {e}")
