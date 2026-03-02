@@ -8,7 +8,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- BARRA LATERAL (ORDEN SUPERIOR) ---
+# --- BARRA LATERAL ---
 st.sidebar.header("⚙️ Configuración")
 
 archivo_subido = st.sidebar.file_uploader(
@@ -25,11 +25,12 @@ else:
 
 st.sidebar.divider()
 
-# 3. Navegación (Agregamos la página de Aislamientos)
+# --- NAVEGACIÓN ---
 pg = st.navigation([
     st.Page("modulos/censo_diario.py", title="Censo Epidemiológico", icon="📋"),
     st.Page("modulos/insumos.py", title="Censo de Insumos", icon="📦"),
-    st.Page("modulos/aislamientos.py", title="Aislamientos", icon="🦠"), # <--- Nueva pestaña
+    st.Page("modulos/aislamientos.py", title="Aislamientos", icon="🦠"),
+    st.Page("modulos/piso.py", title="Seguimiento de Piso", icon="🏥"), # <--- Nueva pestaña agregada
 ])
 
 pg.run()
