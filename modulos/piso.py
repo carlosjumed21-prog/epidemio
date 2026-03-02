@@ -79,9 +79,31 @@ if archivo_excel:
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
         placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
-        # 3. Procedimientos Quirúrgicos (NUEVO)
+        # 3. Dispositivos Invasivos
+        st.markdown("#### 💉 DISPOSITIVOS INVASIVOS")
+        tiene_dispositivos = st.checkbox("¿el paciente cuenta con dispositivos invasivos?")
+        
+        if tiene_dispositivos:
+            def campos_fecha(key_prefix):
+                f1, f2 = st.columns(2)
+                with f1: st.date_input("fecha de instalación", value=datetime.now(), key=f"inst_{key_prefix}")
+                with f2: st.date_input("fecha de retiro", value=None, key=f"ret_{key_prefix}")
+
+            st.write("---")
+            cp = st.checkbox("catéter periférico")
+            if cp: campos_fecha("cp")
+            cvc = st.checkbox("catéter venoso central")
+            if cvc: campos_fecha("cvc")
+            su = st.checkbox("sonda urinaria")
+            if su: campos_fecha("su")
+            sng = st.checkbox("sonda nasogástrica")
+            if sng: campos_fecha("sng")
+            vm = st.checkbox("ventilación mecánica")
+            if vm: campos_fecha("vm")
+
+        # 4. Procedimientos Quirúrgicos (Movido y en minúsculas)
         st.markdown("#### 🔪 PROCEDIMIENTOS QUIRÚRGICOS")
-        cirugia = st.checkbox("¿Se realizó cirugía?")
+        cirugia = st.checkbox("¿se realizó cirugía?")
         if cirugia:
             c_col1, c_col2 = st.columns(2)
             with c_col1:
@@ -90,34 +112,16 @@ if archivo_excel:
             with c_col2:
                 st.text_area("tipo de procedimiento", placeholder="Describa la cirugía...", key="tipo_cirugia")
 
-        # 4. Antibióticos (NUEVO)
+        # 5. Antibióticos (Movido y en minúsculas)
         st.markdown("#### 💊 ANTIBIÓTICOS")
-        atb_activo = st.checkbox("¿Paciente con antibióticos?")
+        atb_activo = st.checkbox("¿paciente con antibióticos?")
         if atb_activo:
             a_col1, a_col2 = st.columns(2)
             with a_col1:
-                st.text_input("Nombre del antibiótico:", key="nombre_atb")
-                st.date_input("Fecha de inicio:", value=datetime.now(), key="inicio_atb")
+                st.text_input("nombre del antibiótico:", key="nombre_atb")
+                st.date_input("fecha de inicio:", value=datetime.now(), key="inicio_atb")
             with a_col2:
-                st.date_input("Fecha de término:", value=None, key="fin_atb")
-
-        # 5. Dispositivos Invasivos
-        st.markdown("#### 💉 Dispositivos Invasivos")
-        def campos_fecha(key_prefix):
-            f1, f2 = st.columns(2)
-            with f1: st.date_input("Fecha de instalación", value=datetime.now(), key=f"inst_{key_prefix}")
-            with f2: st.date_input("Fecha de retiro", value=None, key=f"ret_{key_prefix}")
-
-        cp = st.checkbox("Catéter Periférico")
-        if cp: campos_fecha("cp")
-        cvc = st.checkbox("Catéter Venoso Central")
-        if cvc: campos_fecha("cvc")
-        su = st.checkbox("Sonda Urinaria")
-        if su: campos_fecha("su")
-        sng = st.checkbox("Sonda Nasogástrica")
-        if sng: campos_fecha("sng")
-        vm = st.checkbox("Ventilación Mecánica")
-        if vm: campos_fecha("vm")
+                st.date_input("fecha de término:", value=None, key="fin_atb")
 
         # 6. Datos de Laboratorio
         st.markdown("#### 🧪 Datos de Laboratorio")
