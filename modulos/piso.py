@@ -3,6 +3,15 @@ import pandas as pd
 
 st.title("🏥 Seguimiento de Piso")
 
+# --- ESTILO CSS PARA PONER LOS BOTONES ACTIVADOS EN VERDE ---
+st.markdown("""
+    <style>
+    /* Color del toggle cuando está activado */
+    st-emotion-cache-1dj0h35 [data-testid="stWidgetLabel"] { color: white; }
+    .st-at { background-color: #28a745 !important; } /* Verde médico */
+    </style>
+    """, unsafe_allow_html=True)
+
 # 1. CARGA DEL EXCEL
 st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
@@ -26,10 +35,9 @@ if archivo_excel:
         with col_cam:
             cama_sel = st.selectbox("Cama:", lista_camas)
 
-        # Mapeo de Paciente (D, E, F, G, I, J)
+        # Mapeo de Paciente
         paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
 
-        # --- PANEL DE VISTA PREVIA ---
         with st.container(border=True):
             st.markdown(f"### 👤 {paciente.iloc[4]}")
             c1, c2, c3 = st.columns(3)
@@ -42,7 +50,7 @@ if archivo_excel:
         # --- FORMULARIO DE CAPTURA ---
         st.subheader("📝 Captura de Seguimiento")
 
-        # 1. Estatus del Paciente
+        # 1. Estatus
         status = st.segmented_control(
             "Seleccione el estatus de atención:",
             options=["Ingreso", "Seguimiento", "Egreso"],
@@ -52,18 +60,19 @@ if archivo_excel:
 
         # 2. Datos Clínicos
         st.markdown("#### 🌡️ Datos Clínicos")
-        
-        # --- Signos Vitales ---
         col_v1, col_v2, col_v3 = st.columns(3)
+        
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
             
-            # Tensión Arterial con auto-formato
-            ta_input = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
-            if ta_input and "/" not in ta_input and len(ta_input) >= 5:
-                ta_final = f"{ta_input[:3]}/{ta_input[3:]}"
+            # --- Lógica Tensión Arterial ---
+            ta_raw = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
+            # Si son puros números y tienen longitud de TA común, ponemos la diagonal
+            if ta_raw.isdigit() and len(ta_raw) >= 5:
+                ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+                st.caption(f"Registrado como: **{ta_final}**")
             else:
-                ta_final = ta_input
+                ta_final = ta_raw
 
         with col_v2:
             frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
@@ -84,24 +93,20 @@ if archivo_excel:
             es_fiebre = temperatura >= 38.0
             
             st.write("**Estatus Clínico:**")
-            # Texto dinámico según el estado, pero el botón es el estándar
             label_f = "FIEBRE DETECTADA" if es_fiebre else "fiebre"
-            st.toggle(label_f, value=es_fiebre, disabled=True)
+            st.toggle(label_f, value=es_fiebre, disabled=True, key="t_fiebre")
             
             placeholder_diarrea = st.empty()
 
         with col_bristol:
             st.write("**Referencia: Escala de Bristol**")
-            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
-                     use_container_width=True)
-            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", 
-                                       options=list(range(1, 8)), 
-                                       value=4)
+            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", use_container_width=True)
+            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", options=list(range(1, 8)), value=4)
         
-        # Lógica Diarrea: >=3 evac Y >=6 Bristol
+        # Lógica Diarrea
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
         label_d = "DIARREA DETECTADA" if es_diarrea else "diarrea"
-        placeholder_diarrea.toggle(label_d, value=es_diarrea, disabled=True)
+        placeholder_diarrea.toggle(label_d, value=es_diarrea, disabled=True, key="t_diarrea")
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -126,7 +131,7 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Información validada para la cama {cama_sel}. TA: {ta_final}")
+            st.success(f"Captura guardada. TA: {ta_final}")
 
     except Exception as e:
         st.error(f"Error: {e}")
