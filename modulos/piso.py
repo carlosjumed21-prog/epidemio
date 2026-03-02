@@ -3,17 +3,21 @@ import pandas as pd
 
 st.title("🏥 Seguimiento de Piso")
 
-# --- ESTILO CSS PARA PONER LOS BOTONES ACTIVADOS EN VERDE ---
+# --- CSS ESPECÍFICO: SOLO PARA LOS INTERRUPTORES ACTIVADOS ---
 st.markdown("""
     <style>
-    /* Color del toggle cuando está activado */
-    st-emotion-cache-1dj0h35 [data-testid="stWidgetLabel"] { color: white; }
-    .st-at { background-color: #28a745 !important; } /* Verde médico */
+    /* Buscamos el contenedor del toggle cuando está en 'true' */
+    div[data-testid="stCheckbox"] > label > div[prevents-interaction="true"] > div[data-baseweb="checkbox"] > div {
+        background-color: #28a745 !important;
+    }
+    /* Estilo para el track del toggle específico */
+    .st-at {
+        background-color: #28a745 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # 1. CARGA DEL EXCEL
-st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
     "Subir archivo de Excel para seguimiento", 
     type=["xlsx", "xls"],
@@ -65,14 +69,17 @@ if archivo_excel:
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
             
-            # --- Lógica Tensión Arterial ---
+            # Tensión Arterial: Formato automático 120/80
             ta_raw = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
-            # Si son puros números y tienen longitud de TA común, ponemos la diagonal
-            if ta_raw.isdigit() and len(ta_raw) >= 5:
-                ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
-                st.caption(f"Registrado como: **{ta_final}**")
-            else:
-                ta_final = ta_raw
+            ta_final = ta_raw
+            if ta_raw.isdigit():
+                if len(ta_raw) == 5: # Ejemplo: 12080 -> 120/80
+                    ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+                elif len(ta_raw) == 6: # Ejemplo: 120100 -> 120/100
+                    ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+            
+            if ta_final != ta_raw:
+                st.caption(f"Formato detectado: **{ta_final}**")
 
         with col_v2:
             frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
@@ -89,24 +96,23 @@ if archivo_excel:
         with col_evac:
             num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
             
-            # LÓGICA AUTOMÁTICA
+            # Lógica Automática
             es_fiebre = temperatura >= 38.0
             
             st.write("**Estatus Clínico:**")
-            label_f = "FIEBRE DETECTADA" if es_fiebre else "fiebre"
-            st.toggle(label_f, value=es_fiebre, disabled=True, key="t_fiebre")
+            # El interruptor solo se pone verde si es positivo
+            st.toggle("FIEBRE DETECTADA" if es_fiebre else "fiebre", value=es_fiebre, disabled=True)
             
             placeholder_diarrea = st.empty()
 
         with col_bristol:
             st.write("**Referencia: Escala de Bristol**")
             st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", use_container_width=True)
-            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", options=list(range(1, 8)), value=4)
+            bristol = st.select_slider("Seleccione el tipo acorde a la imagen:", options=list(range(1, 8)), value=4)
         
         # Lógica Diarrea
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
-        label_d = "DIARREA DETECTADA" if es_diarrea else "diarrea"
-        placeholder_diarrea.toggle(label_d, value=es_diarrea, disabled=True, key="t_diarrea")
+        placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -131,7 +137,7 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Captura guardada. TA: {ta_final}")
+            st.success(f"Captura guardada para {paciente.iloc[4]}. TA final: {ta_final}")
 
     except Exception as e:
         st.error(f"Error: {e}")
