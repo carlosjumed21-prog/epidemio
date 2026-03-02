@@ -4,15 +4,6 @@ from datetime import datetime
 
 st.title("🏥 Seguimiento de Piso")
 
-# --- ESTILO CSS PERSONALIZADO ---
-# Elimina el sombreado gris de 'disabled' y pone el toggle en verde cuando es positivo
-st.markdown("""
-    <style>
-    .st-at { background-color: #28a745 !important; } /* Verde activo */
-    .st-ae { opacity: 1 !important; } /* Quita transparencia de deshabilitado */
-    </style>
-    """, unsafe_allow_html=True)
-
 # 1. CARGA DEL EXCEL
 st.info("### 📂 Archivo de Seguimiento")
 archivo_excel = st.file_uploader(
@@ -25,6 +16,7 @@ if archivo_excel:
     try:
         df = pd.read_excel(archivo_excel)
         
+        # Filtros de búsqueda (B=1, C=2)
         lista_especialidades = sorted(df.iloc[:, 1].dropna().unique())
         col_esp, col_cam = st.columns(2)
         with col_esp:
@@ -35,8 +27,10 @@ if archivo_excel:
         with col_cam:
             cama_sel = st.selectbox("Cama:", lista_camas)
 
+        # Mapeo de Paciente (D, E, F, G, I, J)
         paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
 
+        # --- PANEL DE VISTA PREVIA ---
         with st.container(border=True):
             st.markdown(f"### 👤 {paciente.iloc[4]}")
             c1, c2, c3 = st.columns(3)
@@ -49,6 +43,7 @@ if archivo_excel:
         # --- FORMULARIO DE CAPTURA ---
         st.subheader("📝 Captura de Seguimiento")
 
+        # 1. Estatus del Paciente
         status = st.segmented_control(
             "Seleccione el estatus de atención:",
             options=["Ingreso", "Seguimiento", "Egreso"],
@@ -62,11 +57,12 @@ if archivo_excel:
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
             
-            ta_input = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
-            if ta_input and "/" not in ta_input and len(ta_input) >= 5:
-                ta_final = f"{ta_input[:3]}/{ta_input[3:]}"
-            else:
-                ta_final = ta_input
+            # --- Tensión Arterial con auto-diagonal ---
+            ta_raw = st.text_input("tensión arterial (mmHg):", placeholder="Ej: 12080")
+            ta_final = ta_raw
+            if ta_raw.isdigit() and len(ta_raw) >= 5:
+                ta_final = f"{ta_raw[:3]}/{ta_raw[3:]}"
+                st.caption(f"Registrado: **{ta_final}**")
 
         with col_v2:
             frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
@@ -80,29 +76,37 @@ if archivo_excel:
         col_evac, col_bristol = st.columns([1, 2])
         with col_evac:
             num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
+            
+            # LÓGICA AUTOMÁTICA
             es_fiebre = temperatura >= 38.0
+            
             st.write("**Estatus Clínico:**")
+            # Sin CSS personalizado, se ve gris atenuado al estar deshabilitado
             st.toggle("FIEBRE DETECTADA" if es_fiebre else "fiebre", value=es_fiebre, disabled=True)
+            
             placeholder_diarrea = st.empty()
 
         with col_bristol:
             st.write("**Referencia: Escala de Bristol**")
-            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", use_container_width=True)
-            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", options=list(range(1, 8)), value=4)
+            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
+                     use_container_width=True)
+            bristol = st.select_slider("Seleccione el tipo acorde a la imagen superior:", 
+                                       options=list(range(1, 8)), 
+                                       value=4)
         
+        # Lógica Diarrea
         es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
         placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
-        # 3. Dispositivos Invasivos (REORGANIZADO EN LISTA)
+        # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
         
-        # Función para generar los campos de fecha de forma compacta
         def campos_fecha(key_prefix):
             f1, f2 = st.columns(2)
             with f1: st.date_input("Fecha de instalación", value=datetime.now(), key=f"inst_{key_prefix}")
             with f2: st.date_input("Fecha de retiro", value=None, key=f"ret_{key_prefix}")
 
-        # Lista de dispositivos
+        # Lista de dispositivos reorganizada
         cp = st.checkbox("Catéter Periférico")
         if cp: campos_fecha("cp")
 
@@ -128,9 +132,10 @@ if archivo_excel:
         with col_lab3:
             cultivos = st.radio("¿Cultivos?", ["No", "Sí"], horizontal=True)
 
+        # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Información validada para la cama {cama_sel}. TA: {ta_final}")
+            st.success(f"Captura completa para la cama {cama_sel}. TA: {ta_final}")
 
     except Exception as e:
         st.error(f"Error: {e}")
