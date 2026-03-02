@@ -53,7 +53,7 @@ if archivo_excel:
         # 2. Datos Clínicos
         st.markdown("#### 🌡️ Datos Clínicos")
         
-        # --- Signos Vitales (Minúsculas conforme a solicitud) ---
+        # --- Signos Vitales ---
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
@@ -67,28 +67,35 @@ if archivo_excel:
 
         st.markdown("---")
         
-        # --- Evacuaciones y Bristol con Lógica Médica ---
-        col_clin1, col_clin2 = st.columns([1, 1.2]) 
+        # --- Sección de Evacuaciones y Bristol (Imagen arriba del Slider) ---
+        col_evac, col_bristol = st.columns([1, 2])
         
-        with col_clin1:
+        with col_evac:
             num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
-            bristol = st.select_slider("escala de bristol:", options=list(range(1, 8)), value=4)
             
             # LÓGICA AUTOMÁTICA
-            # Fiebre: > 38 se activa
             es_fiebre = temperatura > 38.0
-            # Diarrea: >= 3 evacuaciones Y bristol >= 6 se activa
-            es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
             
-            st.write("**Estatus Clínico Automático:**")
-            st.toggle("fiebre", value=es_fiebre, disabled=True, help="Se activa automáticamente si temperatura > 38°C")
-            st.toggle("diarrea", value=es_diarrea, disabled=True, help="Se activa si evacuaciones ≥ 3 y Bristol ≥ 6")
+            st.write("**Estatus Clínico:**")
+            st.toggle("fiebre", value=es_fiebre, disabled=True)
+            
+            # El botón de diarrea se calculará después de obtener el valor de Bristol
+            # pero lo declaramos aquí para mantener el orden visual
+            placeholder_diarrea = st.empty()
 
-        with col_clin2:
-            # Inserción de imagen por LINK
+        with col_bristol:
+            st.write("**Referencia y Selección: Escala de Bristol**")
+            # Imagen Arriba
             st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
-                     caption="Referencia: Escala de Bristol", 
                      use_container_width=True)
+            # Slider Abajo
+            bristol = st.select_slider("Seleccione el tipo de acuerdo a la imagen superior:", 
+                                       options=list(range(1, 8)), 
+                                       value=4)
+        
+        # Actualizamos la lógica de diarrea con el valor del slider
+        es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
+        placeholder_diarrea.toggle("diarrea", value=es_diarrea, disabled=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -113,8 +120,7 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Información procesada para el paciente en la cama {cama_sel}.")
-            # Los datos ya están listos en variables para ser exportados al Excel
+            st.success(f"Captura completa para la cama {cama_sel}. Datos listos para procesar.")
 
     except Exception as e:
         st.error(f"Error: {e}")
