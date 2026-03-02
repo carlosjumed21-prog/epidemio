@@ -53,7 +53,7 @@ if archivo_excel:
         # 2. Datos Clínicos
         st.markdown("#### 🌡️ Datos Clínicos")
         
-        # --- Subsección: Signos Vitales ---
+        # --- Signos Vitales (Minúsculas conforme a solicitud) ---
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
             temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
@@ -67,27 +67,28 @@ if archivo_excel:
 
         st.markdown("---")
         
-        # --- Subsección: Evacuaciones y Bristol ---
-        col_clin1, col_clin2 = st.columns([1, 2])
+        # --- Evacuaciones y Bristol con Lógica Médica ---
+        col_clin1, col_clin2 = st.columns([1, 1.2]) 
         
         with col_clin1:
             num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
             bristol = st.select_slider("escala de bristol:", options=list(range(1, 8)), value=4)
             
-            # LÓGICA AUTOMÁTICA: Fiebre y Diarrea
-            # Fiebre: > 38
-            es_fiebre = True if temperatura > 38.0 else False
-            # Diarrea: Evacuaciones >= 3 Y Bristol >= 6
-            es_diarrea = True if (num_evacuaciones >= 3 and bristol >= 6) else False
+            # LÓGICA AUTOMÁTICA
+            # Fiebre: > 38 se activa
+            es_fiebre = temperatura > 38.0
+            # Diarrea: >= 3 evacuaciones Y bristol >= 6 se activa
+            es_diarrea = (num_evacuaciones >= 3 and bristol >= 6)
             
-            st.write("**Alertas detectadas:**")
-            fiebre = st.toggle("¿Presenta Fiebre?", value=es_fiebre, disabled=True, help="Se activa automáticamente si temperatura > 38°C")
-            diarrea = st.toggle("¿Presenta Diarrea?", value=es_diarrea, disabled=True, help="Se activa si evacuaciones >= 3 y Bristol >= 6")
+            st.write("**Estatus Clínico Automático:**")
+            st.toggle("fiebre", value=es_fiebre, disabled=True, help="Se activa automáticamente si temperatura > 38°C")
+            st.toggle("diarrea", value=es_diarrea, disabled=True, help="Se activa si evacuaciones ≥ 3 y Bristol ≥ 6")
 
         with col_clin2:
-            st.write("**Referencia: Escala de Bristol**")
-            # Mostramos la imagen de referencia para Bristol
-            st.image("image_0aa8f5.png", use_container_width=True)
+            # Inserción de imagen por LINK
+            st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRM9aDaAOLH7m9GQmTitcpcGGoTOdO7-WbotA&s", 
+                     caption="Referencia: Escala de Bristol", 
+                     use_container_width=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -112,27 +113,8 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            st.success(f"Seguimiento guardado para la cama {cama_sel} con estatus {status}")
-            
-            datos_capturados = {
-                "temperatura": temperatura,
-                "frecuencia_cardiaca": frecuencia_cardiaca,
-                "frecuencia_respiratoria": frecuencia_respiratoria,
-                "tension_arterial": tension_arterial,
-                "glucosa": glucosa,
-                "sat_o2": sat_o2,
-                "fiebre": fiebre,
-                "diarrea": diarrea,
-                "evacuaciones": num_evacuaciones,
-                "bristol": bristol,
-                "cvc": cat_venoso,
-                "cp": cat_periferico,
-                "sonda": sonda_urinaria,
-                "vmi": ventilacion,
-                "leucos": leucocitos,
-                "neutros": neutrofilos,
-                "cultivos": cultivos
-            }
+            st.success(f"Información procesada para el paciente en la cama {cama_sel}.")
+            # Los datos ya están listos en variables para ser exportados al Excel
 
     except Exception as e:
         st.error(f"Error: {e}")
