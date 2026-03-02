@@ -42,10 +42,9 @@ if archivo_excel:
         # --- FORMULARIO DE CAPTURA ---
         st.subheader("📝 Captura de Seguimiento")
 
-        # 1. Estatus del Paciente (Botones segmentados)
-        st.write("**Estatus de Atención:**")
+        # 1. Estatus del Paciente
         status = st.segmented_control(
-            "Seleccione el estado actual:",
+            "Seleccione el estatus de atención:",
             options=["Ingreso", "Seguimiento", "Egreso"],
             format_func=lambda x: f"📥 {x}" if x=="Ingreso" else (f"🔄 {x}" if x=="Seguimiento" else f"📤 {x}"),
             key="status_paciente"
@@ -53,14 +52,42 @@ if archivo_excel:
 
         # 2. Datos Clínicos
         st.markdown("#### 🌡️ Datos Clínicos")
-        col_clin1, col_clin2 = st.columns(2)
-        with col_clin1:
-            fiebre = st.toggle("¿Presenta Fiebre?", key="fiebre")
-            diarrea = st.toggle("¿Presenta Diarrea?", key="diarrea")
         
+        # --- Subsección: Signos Vitales ---
+        col_v1, col_v2, col_v3 = st.columns(3)
+        with col_v1:
+            temperatura = st.number_input("temperatura (°C):", min_value=30.0, max_value=45.0, value=36.5, step=0.1)
+            tension_arterial = st.text_input("tensión arterial (mmHg):", placeholder="120/80")
+        with col_v2:
+            frecuencia_cardiaca = st.number_input("frecuencia cardiaca (lpm):", min_value=0, step=1)
+            glucosa = st.number_input("glucosa (mg/dL):", min_value=0, step=1)
+        with col_v3:
+            frecuencia_respiratoria = st.number_input("frecuencia respiratoria (rpm):", min_value=0, step=1)
+            sat_o2 = st.number_input("sat o2 (%):", min_value=0, max_value=100, step=1)
+
+        st.markdown("---")
+        
+        # --- Subsección: Evacuaciones y Bristol ---
+        col_clin1, col_clin2 = st.columns([1, 2])
+        
+        with col_clin1:
+            num_evacuaciones = st.number_input("número de evacuaciones:", min_value=0, step=1)
+            bristol = st.select_slider("escala de bristol:", options=list(range(1, 8)), value=4)
+            
+            # LÓGICA AUTOMÁTICA: Fiebre y Diarrea
+            # Fiebre: > 38
+            es_fiebre = True if temperatura > 38.0 else False
+            # Diarrea: Evacuaciones >= 3 Y Bristol >= 6
+            es_diarrea = True if (num_evacuaciones >= 3 and bristol >= 6) else False
+            
+            st.write("**Alertas detectadas:**")
+            fiebre = st.toggle("¿Presenta Fiebre?", value=es_fiebre, disabled=True, help="Se activa automáticamente si temperatura > 38°C")
+            diarrea = st.toggle("¿Presenta Diarrea?", value=es_diarrea, disabled=True, help="Se activa si evacuaciones >= 3 y Bristol >= 6")
+
         with col_clin2:
-            num_evacuaciones = st.number_input("Número de evacuaciones:", min_value=0, step=1)
-            bristol = st.select_slider("Escala de Bristol:", options=list(range(1, 8)))
+            st.write("**Referencia: Escala de Bristol**")
+            # Mostramos la imagen de referencia para Bristol
+            st.image("image_0aa8f5.png", use_container_width=True)
 
         # 3. Dispositivos Invasivos
         st.markdown("#### 💉 Dispositivos Invasivos")
@@ -85,25 +112,27 @@ if archivo_excel:
         # --- BOTÓN DE GUARDADO ---
         st.divider()
         if st.button("💾 Guardar Seguimiento", type="primary", use_container_width=True):
-            # Aquí iría la lógica para añadir estas variables como columnas al final de la fila del paciente
             st.success(f"Seguimiento guardado para la cama {cama_sel} con estatus {status}")
             
-            # Tip: Podrías crear un diccionario con estos datos para exportarlos
             datos_capturados = {
-                "Status": status,
-                "Fiebre": fiebre,
-                "Diarrea": diarrea,
-                "Evacuaciones": num_evacuaciones,
-                "Bristol": bristol,
-                "CVC": cat_venoso,
-                "CP": cat_periferico,
-                "Sonda": sonda_urinaria,
-                "VMI": ventilacion,
-                "Leucos": leucocitos,
-                "Neutros": neutrofilos,
-                "Cultivos": cultivos
+                "temperatura": temperatura,
+                "frecuencia_cardiaca": frecuencia_cardiaca,
+                "frecuencia_respiratoria": frecuencia_respiratoria,
+                "tension_arterial": tension_arterial,
+                "glucosa": glucosa,
+                "sat_o2": sat_o2,
+                "fiebre": fiebre,
+                "diarrea": diarrea,
+                "evacuaciones": num_evacuaciones,
+                "bristol": bristol,
+                "cvc": cat_venoso,
+                "cp": cat_periferico,
+                "sonda": sonda_urinaria,
+                "vmi": ventilacion,
+                "leucos": leucocitos,
+                "neutros": neutrofilos,
+                "cultivos": cultivos
             }
-            # st.write(datos_capturados) # Debug para ver los datos
 
     except Exception as e:
         st.error(f"Error: {e}")
