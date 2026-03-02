@@ -80,7 +80,7 @@ if archivo_excel:
         placeholder_diarrea.toggle("DIARREA DETECTADA" if es_diarrea else "diarrea", value=es_diarrea, disabled=True)
 
         # 3. Dispositivos Invasivos
-        st.markdown("#### 💉 DISPOSITIVOS INVASIVOS")
+        st.markdown("#### 💉 Dispositivos Invasivos")
         tiene_dispositivos = st.checkbox("¿el paciente cuenta con dispositivos invasivos?")
         
         if tiene_dispositivos:
@@ -102,7 +102,7 @@ if archivo_excel:
             if vm: campos_fecha("vm")
 
         # 4. Procedimientos Quirúrgicos (Movido y en minúsculas)
-        st.markdown("#### 🔪 PROCEDIMIENTOS QUIRÚRGICOS")
+        st.markdown("#### 🔪 Procedimientos Quirúrgicos")
         cirugia = st.checkbox("¿se realizó cirugía?")
         if cirugia:
             c_col1, c_col2 = st.columns(2)
@@ -113,7 +113,7 @@ if archivo_excel:
                 st.text_area("tipo de procedimiento", placeholder="Describa la cirugía...", key="tipo_cirugia")
 
         # 5. Antibióticos (Movido y en minúsculas)
-        st.markdown("#### 💊 ANTIBIÓTICOS")
+        st.markdown("#### 💊 Antibióticos ")
         atb_activo = st.checkbox("¿paciente con antibióticos?")
         if atb_activo:
             a_col1, a_col2 = st.columns(2)
