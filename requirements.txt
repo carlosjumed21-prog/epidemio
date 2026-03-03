@@ -1,6 +1,5 @@
-streamlit
 pandas
-openpyxl
-lxml
-reportlab
-pip install gspread oauth2client
+numpy
+streamlit
+gspread
+oauth2client
