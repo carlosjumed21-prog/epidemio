@@ -1,5 +1,7 @@
+streamlit
 pandas
 numpy
-streamlit
-altair==4.2.2
-legacy-imghdr
+lxml
+html5lib
+openpyxl
+reportlab
