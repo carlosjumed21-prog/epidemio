@@ -1,4 +1,5 @@
 pandas
 numpy
 streamlit
-
+altair==4.2.2
+vega_datasets
