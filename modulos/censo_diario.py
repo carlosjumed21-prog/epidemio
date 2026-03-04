@@ -19,7 +19,7 @@ ORDEN_TERAPIAS_EXCEL = [
 
 VINCULO_AUTO_INCLUSION = {
     "COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"],
-    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS"],
+    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS", "UNIDAD DE TRASPLANTES"], # Agregado aquí
     "COORD_MODULARES": ["UNIDAD CORONARIA"],
     "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]
 }
@@ -52,7 +52,7 @@ CATALOGO = {
     "COORD_CIRUGIA": [
         "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
         "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
-        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS"
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE TRASPLANTES" # Agregado
     ],
     "COORD_GINECOLOGIA": [
         "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"
@@ -62,13 +62,21 @@ CATALOGO = {
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
+    
+    # --- PRIORIDAD POR CAMA (MAPEO ESTRICTO) ---
     if c.startswith("64"): return "UNIDAD CORONARIA"
     if c.startswith("55"): return "U.C.I.N."
     if c.startswith("45"): return "NEONATOLOGIA" 
     if c.startswith("56"): return "U.T.I.P."
     if c.startswith("85"): return "UNIDAD DE QUEMADOS"
     if c.startswith("73"): return "UCIA"
-    if c.isdigit() and 7401 <= int(c) <= 7409: return "TERAPIA POSQUIRURGICA"
+    
+    # NUEVA CONDICIÓN: Unidad de Trasplantes (7409 a 7426)
+    if c.isdigit() and 7409 <= int(c) <= 7426: return "UNIDAD DE TRASPLANTES"
+    
+    # Terapia Posquirúrgica (Ajustado para no chocar con el inicio de Trasplantes)
+    if c.isdigit() and 7401 <= int(c) <= 7408: return "TERAPIA POSQUIRURGICA"
+    
     return esp_html_clean
 
 def sync_group(cat_name, servicios):
@@ -103,7 +111,6 @@ else:
                     "ING": fila[9], "esp_real": esp_real
                 })
 
-        # --- ETIQUETA DE PACIENTES RECUPERADA ---
         st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
 
         buckets = {}
@@ -115,17 +122,16 @@ else:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Pediatría (Prioridad para M.I. Pediátrica)
+        # 2. Pediatría
         kws_ped = CATALOGO["COORD_PEDIATRIA"]
         ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
         if ped_found:
             buckets["COORD_PEDIATRIA"] = ped_found
             asignadas.update(ped_found)
 
-        # 3. Resto de Coordinaciones (Neurología en Modulares)
+        # 3. Resto de Coordinaciones
         orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
         for cat in orden_resto:
-            if cat in buckets: continue
             kws = CATALOGO[cat]
             found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
             if found:
@@ -171,6 +177,7 @@ else:
 
                 if datos_excel:
                     df_out = pd.DataFrame(datos_excel)
+                    # Asegurar orden: Terapias primero, luego el resto
                     otros_servs = sorted([s for s in list(especialidades_finales) if s not in ORDEN_TERAPIAS_EXCEL])
                     mapeo_orden = ORDEN_TERAPIAS_EXCEL + otros_servs
                     df_out['ESPECIALIDAD'] = pd.Categorical(df_out['ESPECIALIDAD'], categories=mapeo_orden, ordered=True)
