@@ -19,7 +19,7 @@ ORDEN_TERAPIAS_EXCEL = [
 
 VINCULO_AUTO_INCLUSION = {
     "COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"],
-    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS", "UNIDAD DE TRASPLANTES"],
+    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS"],
     "COORD_MODULARES": ["UNIDAD CORONARIA"],
     "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]
 }
@@ -27,7 +27,7 @@ VINCULO_AUTO_INCLUSION = {
 COLORES_INTERFAZ = {
     "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B",
     "COORD_PEDIATRIA": "#5DADE2",          
-    "COORD_MEDICINA": "#1B4F72",            
+    "COORD_MEDICINA": "#1B4F72",           
     "COORD_GINECOLOGIA": "#F06292",        
     "COORD_MODULARES": "#E67E22",          
     "OTRAS_ESPECIALIDADES": "#2C3E50",     
@@ -47,13 +47,12 @@ CATALOGO = {
     ],
     "COORD_MEDICINA": [
         "DERMATO", "ENDOCRINO", "GERIAT", "INMUNO", "MEDICINA INTERNA", 
-        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX",
-        "UNIDAD DE TERAPIA INTENSIVA AD" # Se añade para asegurar detección
+        "REUMA", "UCIA", "TERAPIA INTERMEDIA", "CLINICA DEL DOLOR", "TPQX"
     ],
     "COORD_CIRUGIA": [
         "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
         "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
-        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE TRASPLANTES"
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS"
     ],
     "COORD_GINECOLOGIA": [
         "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"
@@ -62,27 +61,14 @@ CATALOGO = {
 
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
-    # Limpieza inicial del texto del HTML
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
-    
-    # --- CONCORDANCIA UCIA ---
-    if "UNIDAD DE TERAPIA INTENSIVA AD" in esp_html_clean:
-        esp_html_clean = "UCIA"
-    
-    # --- PRIORIDAD POR CAMA (MAPEO ESTRICTO) ---
     if c.startswith("64"): return "UNIDAD CORONARIA"
     if c.startswith("55"): return "U.C.I.N."
     if c.startswith("45"): return "NEONATOLOGIA" 
     if c.startswith("56"): return "U.T.I.P."
     if c.startswith("85"): return "UNIDAD DE QUEMADOS"
     if c.startswith("73"): return "UCIA"
-    
-    # Unidad de Trasplantes (7409 a 7426)
-    if c.isdigit() and 7409 <= int(c) <= 7426: return "UNIDAD DE TRASPLANTES"
-    
-    # Terapia Posquirúrgica (7401 a 7408)
-    if c.isdigit() and 7401 <= int(c) <= 7408: return "TERAPIA POSQUIRURGICA"
-    
+    if c.isdigit() and 7401 <= int(c) <= 7409: return "TERAPIA POSQUIRURGICA"
     return esp_html_clean
 
 def sync_group(cat_name, servicios):
@@ -90,13 +76,6 @@ def sync_group(cat_name, servicios):
     for s in servicios: st.session_state[f"serv_{cat_name}_{s}"] = master_val
 
 st.title("📋 Censo Epidemiológico Diario")
-
-# Barra lateral para carga de archivo
-with st.sidebar:
-    st.header("Configuración")
-    archivo = st.file_uploader("Subir archivo HTML de pacientes", type=["html"])
-    if archivo:
-        st.session_state['archivo_compartido'] = archivo
 
 if 'archivo_compartido' not in st.session_state:
     st.info("👈 Por favor, sube el archivo HTML en la barra lateral.")
@@ -115,9 +94,7 @@ else:
             if "ESPECIALIDAD:" in val: esp_actual_temp = val; continue
             fila = [str(x).strip() for x in df_completo.iloc[i].values]
             if any(x in fila[0] for x in IGNORAR): continue
-            
-            # Validación de fila de paciente (Registro numérico y longitud mínima)
-            if len(fila) > 2 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+            if len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
                 esp_real = obtener_especialidad_real(fila[0], esp_actual_temp)
                 especialidades_encontradas.add(esp_real)
                 pacs_detectados.append({
@@ -126,38 +103,38 @@ else:
                     "ING": fila[9], "esp_real": esp_real
                 })
 
+        # --- ETIQUETA DE PACIENTES RECUPERADA ---
         st.subheader(f"📊 Pacientes Detectados: {len(pacs_detectados)}")
 
         buckets = {}
         asignadas = set()
 
-        # 1. Agrupamiento: Terapias
+        # 1. Terapias
         terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
         if terapias_list:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Agrupamiento: Pediatría
+        # 2. Pediatría (Prioridad para M.I. Pediátrica)
         kws_ped = CATALOGO["COORD_PEDIATRIA"]
         ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
         if ped_found:
             buckets["COORD_PEDIATRIA"] = ped_found
             asignadas.update(ped_found)
 
-        # 3. Resto de Coordinaciones
+        # 3. Resto de Coordinaciones (Neurología en Modulares)
         orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
         for cat in orden_resto:
+            if cat in buckets: continue
             kws = CATALOGO[cat]
             found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
             if found:
                 buckets[cat] = found
                 asignadas.update(found)
 
-        # 4. Otras (no mapeadas)
         otras = sorted([e for e in especialidades_encontradas if e not in asignadas])
         if otras: buckets["OTRAS_ESPECIALIDADES"] = otras
 
-        # Interfaz de selección por columnas
         cols = st.columns(3)
         for idx, (cat_name, servicios) in enumerate(buckets.items()):
             with cols[idx % 3]:
@@ -190,31 +167,15 @@ else:
                             f_ing = datetime.strptime(p["ING"], "%d/%m/%Y")
                             dias = (datetime(fecha_hoy.year, fecha_hoy.month, fecha_hoy.day) - datetime(f_ing.year, f_ing.month, f_ing.day)).days + 1
                         except: dias = "Rev."
-                        
-                        datos_excel.append({
-                            "FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), 
-                            "ESPECIALIDAD": p["esp_real"], 
-                            "CAMA": p["CAMA"], 
-                            "REGISTRO": p["REG"], 
-                            "PACIENTE": p["PAC"], 
-                            "SEXO": p["SEXO"], 
-                            "EDAD": p["EDAD"], 
-                            "DIAGNOSTICO": p["DIAG"], 
-                            "FECHA_INGRESO": p["ING"], 
-                            "DIAS_ESTANCIA": dias
-                        })
+                        datos_excel.append({"FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), "ESPECIALIDAD": p["esp_real"], "CAMA": p["CAMA"], "REGISTRO": p["REG"], "PACIENTE": p["PAC"], "SEXO": p["SEXO"], "EDAD": p["EDAD"], "DIAGNOSTICO": p["DIAG"], "FECHA_INGRESO": p["ING"], "DIAS_ESTANCIA": dias})
 
                 if datos_excel:
                     df_out = pd.DataFrame(datos_excel)
-                    
-                    # Definir orden jerárquico para el reporte final
                     otros_servs = sorted([s for s in list(especialidades_finales) if s not in ORDEN_TERAPIAS_EXCEL])
                     mapeo_orden = ORDEN_TERAPIAS_EXCEL + otros_servs
-                    
                     df_out['ESPECIALIDAD'] = pd.Categorical(df_out['ESPECIALIDAD'], categories=mapeo_orden, ordered=True)
                     df_out = df_out.sort_values(['ESPECIALIDAD', 'CAMA'])
 
-                    # Creación del archivo Excel
                     output = BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         df_out.to_excel(writer, index=False, sheet_name='Epidemiologia')
@@ -223,7 +184,6 @@ else:
                     wb = load_workbook(output); ws = wb.active
                     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
-                    # Estilo de celdas y auto-ajuste
                     for col in ws.columns:
                         max_length = 0
                         column_letter = get_column_letter(col[0].column)
@@ -237,22 +197,12 @@ else:
                             except: pass
                         ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
                     
-                    # Convertir a Tabla de Excel
                     tab = Table(displayName="CensoTable", ref=ws.dimensions)
                     tab.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
                     ws.add_table(tab)
                     
                     final_io = BytesIO(); wb.save(final_io)
                     st.success("✅ Reporte de censo generado.") 
-                    st.download_button(
-                        label="💾 DESCARGAR EXCEL", 
-                        data=final_io.getvalue(), 
-                        file_name=f"Censo_Epidemio_{fecha_hoy.strftime('%d%m%Y')}.xlsx", 
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                        use_container_width=True
-                    )
-                else:
-                    st.error("No hay datos para las especialidades seleccionadas.")
-                    
+                    st.download_button(label="💾 DESCARGAR EXCEL", data=final_io.getvalue(), file_name=f"Censo_Epidemio_{fecha_hoy.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     except Exception as e:
         st.error(f"Error detectado: {e}")
