@@ -19,9 +19,11 @@ def cargar_censo_total():
     df = df.iloc[:, 1:10]
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
+    # Rellenar datos
     df["CAMA"] = df["CAMA"].ffill()
     df["NOMBRE"] = df["NOMBRE"].ffill()
     
+    # Consolidar tipos de aislamiento
     def consolidar(group):
         res = group.iloc[0].copy()
         tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
@@ -30,72 +32,73 @@ def cargar_censo_total():
 
     df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
     
+    # Filtrar solo activos (sin fecha de término)
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    # Variables solicitadas
+    # --- SELECCIÓN DE VARIABLES Y LIMPIEZA DE FILAS VACÍAS ---
     columnas_deseadas = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "MOTIVO DE SEGUIMIENTO", "FECHA DE INICIO"]
     columnas_presentes = [c for c in columnas_deseadas if c in df.columns]
-    df = df[columnas_presentes].dropna(subset=["CAMA"]) # Elimina filas extra sin cama
+    df = df[columnas_presentes]
+    
+    # ELIMINAR FILAS FANTASMA: Solo mantener si tienen CAMA y NOMBRE real
+    df = df.replace(['nan', 'None', '', ' '], np.nan)
+    df = df.dropna(subset=["CAMA", "NOMBRE"], how='any')
     
     return df.reset_index(drop=True)
 
 # --- INTERFAZ ---
-st.title("🦠 Control de Aislamientos")
+st.title("🦠 Gestión de Aislamientos")
 
 try:
     df_final = cargar_censo_total()
 
-    # --- MÉTRICAS Y CONTEO ---
-    total_aislamientos = len(df_final)
-    st.metric(label="Total de Aislamientos Activos", value=total_aislamientos)
+    # Métrica exacta de pacientes
+    total_pacientes = len(df_final)
+    st.metric(label="Pacientes con Aislamiento Activo", value=total_pacientes)
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("🔄 Actualizar Servidor", use_container_width=True):
+        if st.button("🔄 Refrescar Monitor", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
     with col2:
-        if st.button("🚀 Enviar Datos al Censo", use_container_width=True):
-            # Enviamos sin el índice de pandas para evitar la "fila/columna de más"
+        if st.button("🚀 Sincronizar con Google Sheets", use_container_width=True):
+            # Enviamos datos limpios sin índice
             conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_final)
-            st.success(f"¡Sincronizado! {total_aislamientos} registros enviados.")
+            st.success(f"Se enviaron {total_pacientes} registros correctamente.")
             time.sleep(1)
             st.rerun()
     with col3:
-        st.link_button("📂 Abrir Google Sheet", SHEET_URL_EDITABLE, use_container_width=True)
+        st.link_button("📂 Abrir Excel en Drive", SHEET_URL_EDITABLE, use_container_width=True)
 
     st.divider()
 
-    # --- VISTA PREVIA / EDITOR ---
-    # Leemos con ttl=0 para frescura total
+    # Lectura del Censo Editable
     df_censo = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
 
     if not df_censo.empty:
-        # Forzar que el conteo visual empiece en 1
+        # Numeración visual empezando en 1
         df_censo.index = range(1, len(df_censo) + 1)
 
-        # Configuración de columnas para "Autoajuste" visual en la App
-        # Esto hace que el texto se ajuste y no se corte
-        st.data_editor(
+        # Editor con ajuste de texto visual en la App
+        df_editado = st.data_editor(
             df_censo,
             use_container_width=True,
             num_rows="dynamic",
             key="main_editor",
             column_config={
-                "TIPO DE AISLAMIENTO": st.column_config.TextColumn(width="medium"),
-                "NOMBRE": st.column_config.TextColumn(width="large"),
+                "NOMBRE": st.column_config.TextColumn("NOMBRE", width="large"),
+                "TIPO DE AISLAMIENTO": st.column_config.TextColumn("AISLAMIENTO", width="medium"),
             }
         )
-        
-        # Botón de guardado manual para cambios hechos en la tabla
+
         if st.button("💾 Guardar Cambios Manuales", use_container_width=True):
-            # Antes de guardar quitamos el índice 1,2,3 para no ensuciar el Sheet
-            df_save = df_censo.reset_index(drop=True)
+            df_save = df_editado.reset_index(drop=True)
             conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_save)
-            st.toast("Cambios guardados", icon="✅")
+            st.toast("Archivo actualizado", icon="✅")
     else:
-        st.info("El censo está vacío.")
+        st.info("No hay datos en el censo. Usa el botón de sincronizar.")
 
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(f"Error técnico: {e}")
