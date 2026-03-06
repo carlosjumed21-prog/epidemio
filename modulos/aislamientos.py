@@ -113,8 +113,8 @@ def generar_pdf_oficial(df):
     for row in df.values:
         data.append([Paragraph(str(item), estilo_celda) for item in row])
     
-    # Anchos ajustados para la nueva estructura
-    col_widths = [50, 65, 180, 100, 130, 80]
+    # Anchos de columna optimizados para el nuevo orden (CAMA, REG, NOM, TIPO, INSUMO, FECHA)
+    col_widths = [50, 65, 180, 110, 110, 80]
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
@@ -148,20 +148,23 @@ def cargar_datos_aislamiento():
     
     def consolidar(group):
         res = group.iloc[0].copy()
+        tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
+        res["TIPO DE AISLAMIENTO"] = " / ".join(tipos) if len(tipos) > 0 else np.nan
         return res
 
     df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    # NUEVA ESTRUCTURA DE COLUMNAS
-    # 1. Seleccionamos las columnas base
-    # 2. Reemplazamos 'TIPO DE AISLAMIENTO' (Columna D original) por 'INSUMO'
-    cols_base = ["CAMA", "REGISTRO", "NOMBRE", "MOTIVO DE SEGUIMIENTO", "FECHA DE INICIO"]
-    df = df[[c for c in cols_base if c in df.columns]]
+    # --- AJUSTE DE COLUMNAS SOLICITADO ---
+    # Queremos: A:CAMA, B:REGISTRO, C:NOMBRE, D:TIPO DE AISLAMIENTO, E:INSUMO, F:FECHA DE INICIO
+    # 1. Definimos las columnas a mantener (recorriendo Fecha de Inicio a la posición F original)
+    cols_finales = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
+    df = df[[c for c in cols_finales if c in df.columns]]
     
-    # 3. Insertamos la columna INSUMO en la posición 3 (Índice D)
-    df.insert(3, "INSUMO", "JABÓN/SANITAS")
+    # 2. Insertamos la columna INSUMO en la posición E (Índice 4)
+    # Esto desplaza automáticamente a "FECHA DE INICIO" a la derecha (Columna F)
+    df.insert(4, "INSUMO", "JABÓN/SANITAS")
     
     df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
     return df.reset_index(drop=True)
