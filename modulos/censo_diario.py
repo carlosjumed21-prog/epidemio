@@ -19,7 +19,7 @@ ORDEN_TERAPIAS_EXCEL = [
 
 VINCULO_AUTO_INCLUSION = {
     "COORD_MEDICINA": ["UCIA", "TERAPIA POSQUIRURGICA"],
-    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS", "UNIDAD DE TRASPLANTES"], # Agregado aquí
+    "COORD_CIRUGIA": ["UNIDAD DE QUEMADOS", "UNIDAD DE TRASPLANTES"],
     "COORD_MODULARES": ["UNIDAD CORONARIA"],
     "COORD_PEDIATRIA": ["U.C.I.N.", "U.T.I.P."]
 }
@@ -27,14 +27,14 @@ VINCULO_AUTO_INCLUSION = {
 COLORES_INTERFAZ = {
     "⚠️ UNIDADES DE TERAPIA ⚠️": "#C0392B",
     "COORD_PEDIATRIA": "#5DADE2",          
-    "COORD_MEDICINA": "#1B4F72",           
+    "COORD_MEDICINA": "#1B4F72",            
     "COORD_GINECOLOGIA": "#F06292",        
     "COORD_MODULARES": "#E67E22",          
     "OTRAS_ESPECIALIDADES": "#2C3E50",     
     "COORD_CIRUGIA": "#117864"             
 }
 
-# --- CATALOGO CORREGIDO ---
+# --- CATALOGO ---
 CATALOGO = {
     "COORD_PEDIATRIA": [
         "MEDICINA INTERNA PEDIATRICA", "PEDIATRI", "PEDIATRICA", 
@@ -52,7 +52,7 @@ CATALOGO = {
     "COORD_CIRUGIA": [
         "CIRUGIA GENERAL", "CIR. GENERAL", "MAXILO", "RECONSTRUCTIVA", 
         "PLASTICA", "GASTRO", "NEFROLOGIA", "OFTALMO", "ORTOPEDIA", 
-        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE TRASPLANTES" # Agregado
+        "OTORRINO", "UROLOGIA", "TRASPLANTES", "QUEMADOS", "UNIDAD DE TRASPLANTES"
     ],
     "COORD_GINECOLOGIA": [
         "GINECO", "OBSTETRICIA", "MATERNO", "REPRODUCCION"
@@ -61,7 +61,13 @@ CATALOGO = {
 
 def obtener_especialidad_real(cama, esp_html):
     c = str(cama).strip().upper()
+    # Limpieza inicial
     esp_html_clean = esp_html.replace("ESPECIALIDAD:", "").replace("&NBSP;", "").strip().upper()
+    
+    # --- CONDICIÓN DE EQUIVALENCIA ESTRICTA ---
+    # Si el HTML dice "UNIDAD DE TERAPIA INTENSIVA AD", para el sistema ES "UCIA"
+    if "UNIDAD DE TERAPIA INTENSIVA AD" in esp_html_clean:
+        esp_html_clean = "UCIA"
     
     # --- PRIORIDAD POR CAMA (MAPEO ESTRICTO) ---
     if c.startswith("64"): return "UNIDAD CORONARIA"
@@ -71,10 +77,10 @@ def obtener_especialidad_real(cama, esp_html):
     if c.startswith("85"): return "UNIDAD DE QUEMADOS"
     if c.startswith("73"): return "UCIA"
     
-    # NUEVA CONDICIÓN: Unidad de Trasplantes (7409 a 7426)
+    # Unidad de Trasplantes (7409 a 7426)
     if c.isdigit() and 7409 <= int(c) <= 7426: return "UNIDAD DE TRASPLANTES"
     
-    # Terapia Posquirúrgica (Ajustado para no chocar con el inicio de Trasplantes)
+    # Terapia Posquirúrgica (7401 a 7408)
     if c.isdigit() and 7401 <= int(c) <= 7408: return "TERAPIA POSQUIRURGICA"
     
     return esp_html_clean
@@ -82,6 +88,13 @@ def obtener_especialidad_real(cama, esp_html):
 def sync_group(cat_name, servicios):
     master_val = st.session_state[f"master_{cat_name}"]
     for s in servicios: st.session_state[f"serv_{cat_name}_{s}"] = master_val
+
+# --- BARRA LATERAL ---
+with st.sidebar:
+    st.header("Entrada de Datos")
+    archivo = st.file_uploader("Subir archivo HTML", type=["html"])
+    if archivo:
+        st.session_state['archivo_compartido'] = archivo
 
 st.title("📋 Censo Epidemiológico Diario")
 
@@ -102,7 +115,9 @@ else:
             if "ESPECIALIDAD:" in val: esp_actual_temp = val; continue
             fila = [str(x).strip() for x in df_completo.iloc[i].values]
             if any(x in fila[0] for x in IGNORAR): continue
-            if len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+            
+            if len(fila) > 2 and len(fila[1]) >= 5 and any(char.isdigit() for char in fila[1]):
+                # Aquí se aplica la lógica de equivalencia
                 esp_real = obtener_especialidad_real(fila[0], esp_actual_temp)
                 especialidades_encontradas.add(esp_real)
                 pacs_detectados.append({
@@ -116,21 +131,14 @@ else:
         buckets = {}
         asignadas = set()
 
-        # 1. Terapias
+        # 1. Terapias (Aquí caerá UCIA aunque el HTML diga el nombre largo)
         terapias_list = sorted([e for e in especialidades_encontradas if e in ORDEN_TERAPIAS_EXCEL])
         if terapias_list:
             buckets["⚠️ UNIDADES DE TERAPIA ⚠️"] = terapias_list
             asignadas.update(terapias_list)
 
-        # 2. Pediatría
-        kws_ped = CATALOGO["COORD_PEDIATRIA"]
-        ped_found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws_ped)])
-        if ped_found:
-            buckets["COORD_PEDIATRIA"] = ped_found
-            asignadas.update(ped_found)
-
-        # 3. Resto de Coordinaciones
-        orden_resto = ["COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
+        # 2. Coordinaciones restantes
+        orden_resto = ["COORD_PEDIATRIA", "COORD_MODULARES", "COORD_MEDICINA", "COORD_CIRUGIA", "COORD_GINECOLOGIA"]
         for cat in orden_resto:
             kws = CATALOGO[cat]
             found = sorted([e for e in especialidades_encontradas if e not in asignadas and any(kw in e for kw in kws)])
@@ -173,11 +181,22 @@ else:
                             f_ing = datetime.strptime(p["ING"], "%d/%m/%Y")
                             dias = (datetime(fecha_hoy.year, fecha_hoy.month, fecha_hoy.day) - datetime(f_ing.year, f_ing.month, f_ing.day)).days + 1
                         except: dias = "Rev."
-                        datos_excel.append({"FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), "ESPECIALIDAD": p["esp_real"], "CAMA": p["CAMA"], "REGISTRO": p["REG"], "PACIENTE": p["PAC"], "SEXO": p["SEXO"], "EDAD": p["EDAD"], "DIAGNOSTICO": p["DIAG"], "FECHA_INGRESO": p["ING"], "DIAS_ESTANCIA": dias})
+                        
+                        datos_excel.append({
+                            "FECHA_REPORTE": fecha_hoy.strftime("%d/%m/%Y"), 
+                            "ESPECIALIDAD": p["esp_real"], 
+                            "CAMA": p["CAMA"], 
+                            "REGISTRO": p["REG"], 
+                            "PACIENTE": p["PAC"], 
+                            "SEXO": p["SEXO"], 
+                            "EDAD": p["EDAD"], 
+                            "DIAGNOSTICO": p["DIAG"], 
+                            "FECHA_INGRESO": p["ING"], 
+                            "DIAS_ESTANCIA": dias
+                        })
 
                 if datos_excel:
                     df_out = pd.DataFrame(datos_excel)
-                    # Asegurar orden: Terapias primero, luego el resto
                     otros_servs = sorted([s for s in list(especialidades_finales) if s not in ORDEN_TERAPIAS_EXCEL])
                     mapeo_orden = ORDEN_TERAPIAS_EXCEL + otros_servs
                     df_out['ESPECIALIDAD'] = pd.Categorical(df_out['ESPECIALIDAD'], categories=mapeo_orden, ordered=True)
@@ -197,11 +216,9 @@ else:
                         for cell in col:
                             cell.border = thin_border
                             cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
-                            try:
-                                if cell.value:
-                                    val_len = len(str(cell.value))
-                                    if val_len > max_length: max_length = val_len
-                            except: pass
+                            if cell.value:
+                                val_len = len(str(cell.value))
+                                if val_len > max_length: max_length = val_len
                         ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
                     
                     tab = Table(displayName="CensoTable", ref=ws.dimensions)
