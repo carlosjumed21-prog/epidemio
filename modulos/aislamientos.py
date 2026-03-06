@@ -7,135 +7,91 @@ from streamlit_gsheets import GSheetsConnection
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layout="wide")
 
-# --- URLs DE LOS SHEETS ---
-# 1. Origen (Solo lectura - CSV publicado)
+# --- URLs ---
 SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
-
-# 2. Destino (Editable - Sheet de Carlos)
-# Nota: Usamos la URL limpia para evitar conflictos de parámetros de búsqueda
 SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
 
-# --- CONEXIÓN A GSHEETS ---
-# Esta línea buscará automáticamente los secretos en [connections.gsheets]
+# --- CONEXIÓN ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=2)
 def cargar_censo_total():
-    # Forzar lectura fresca del origen
     url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
-    
-    # 1. Leemos el archivo original
     df = pd.read_csv(url_final, skiprows=1, engine='python', encoding='utf-8')
-    
-    # 2. Recorte manual de columnas B a J (Índices 1 al 9)
     df = df.iloc[:, 1:10]
-    
-    # 3. Normalizar encabezados
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
-    c_cama = "CAMA"
-    c_nombre = "NOMBRE"
-    c_tipo = "TIPO DE AISLAMIENTO"
-    c_termino = "FECHA DE TÉRMINO"
+    # Lógica de limpieza y ffill
+    df["CAMA"] = df["CAMA"].ffill()
+    df["NOMBRE"] = df["NOMBRE"].ffill()
+    df = df.astype(str).replace(['nan', 'None', ''], np.nan)
 
-    # --- LIMPIEZA DE DATOS ---
-    df = df.astype(str).apply(lambda x: x.str.strip())
-    df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
-
-    # 4. LÓGICA DE FILAS DOBLES
-    df[c_cama] = df[c_cama].ffill()
-    df[c_nombre] = df[c_nombre].ffill()
-
-    def consolidar_evento(group):
+    def consolidar(group):
         res = group.iloc[0].copy()
-        tipos = group[c_tipo].dropna().unique()
-        res[c_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
-        for col in group.columns:
-            if col not in [c_tipo, c_cama, c_nombre]:
-                val_real = group[col].dropna()
-                res[col] = val_real.iloc[0] if not val_real.empty else np.nan
+        tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
+        res["TIPO DE AISLAMIENTO"] = " / ".join(tipos) if len(tipos) > 0 else np.nan
         return res
 
-    # Agrupación y aplicación de lógica
-    df = df.groupby([c_cama, c_nombre], as_index=False, sort=False).apply(consolidar_evento)
-
-    # 5. FILTRO DE ACTIVOS (Solo los que no tienen fecha de término)
-    if c_termino in df.columns:
-        df = df[df[c_termino].isna()]
-
-    df = df[df[c_cama].notna()]
+    df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
     
-    return df
+    if "FECHA DE TÉRMINO" in df.columns:
+        df = df[df["FECHA DE TÉRMINO"].isna()]
+    
+    return df[df["CAMA"].notna()]
 
-# --- INTERFAZ DE USUARIO ---
-st.title("🦠 Sistema de Control de Aislamientos")
+# --- INTERFAZ ÚNICA ---
+st.title("🦠 Control de Aislamientos Activos")
 
-# Pestañas para organizar la vista
-tab1, tab2 = st.tabs(["🔍 Monitor en Tiempo Real", "📝 Censo Editable (Carlos)"])
+try:
+    # 1. CARGA DE DATOS
+    df_final = cargar_censo_total()
 
-with tab1:
-    st.header("Aislamientos Detectados")
-    if st.button("🔄 Actualizar Datos del Servidor", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-    try:
-        df_final = cargar_censo_total()
-
-        if not df_final.empty:
-            busqueda = st.text_input("🔍 Buscar en tiempo real (cama, nombre, etc):")
-            if busqueda:
-                mask = df_final.apply(lambda r: r.astype(str).str.contains(busqueda, case=False).any(), axis=1)
-                df_mostrar = df_final[mask]
-            else:
-                df_mostrar = df_final
-
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
-            st.success(f"📋 **{len(df_final)}** Aislamientos Activos detectados.")
+    # 2. SECCIÓN DE ACCIONES (Botones principales)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col1:
+        if st.button("🔄 Actualizar Servidor", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
             
-            # BOTÓN PARA ENVIAR AL SEGUNDO SHEET
-            st.divider()
-            st.subheader("Sincronización de Datos")
-            if st.button("🚀 ENVIAR ESTA TABLA AL CENSO EDITABLE", use_container_width=True):
-                # Usamos conn.update para enviar los datos al Sheet de Carlos
-                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_final)
-                st.balloons()
-                st.success("✅ Datos sincronizados con el Sheet de Carlos.")
-        
-        else:
-            st.warning("⚠️ No se encontraron pacientes activos.")
+    with col2:
+        # BOTÓN DE ENVÍO DIRECTO
+        if st.button("🚀 Enviar Datos al Censo", use_container_width=True):
+            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_final)
+            st.success("¡Sincronizado!")
+            st.rerun()
 
-    except Exception as e:
-        st.error(f"Error al procesar el origen: {e}")
+    with col3:
+        # BOTÓN PARA ABRIR EL SHEET EN OTRA PESTAÑA
+        st.link_button("📂 Abrir Google Sheet", SHEET_URL_EDITABLE, use_container_width=True)
 
-with tab2:
-    st.header("Censo Aislamientos 26 (Carlos)")
-    st.info("Utiliza esta tabla para añadir observaciones o gestionar el censo manualmente.")
+    st.divider()
 
-    try:
-        # Leer la data actual del segundo sheet para edición
-        # Se añade ttl=0 para que siempre lea lo último guardado
-        df_editable = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
+    # 3. BUSCADOR Y TABLA EDITABLE
+    busqueda = st.text_input("🔍 Buscar paciente o cama:")
+    
+    # Leemos el censo de Carlos para que la edición sea persistente
+    df_censo = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
 
-        if df_editable.empty:
-            st.warning("El censo está vacío. Sincroniza los datos desde la pestaña 'Monitor'.")
-        else:
-            # Editor interactivo
-            df_actualizado = st.data_editor(
-                df_editable,
-                use_container_width=True,
-                num_rows="dynamic",
-                hide_index=True,
-                key="editor_carlos"
-            )
+    if not df_censo.empty:
+        if busqueda:
+            mask = df_censo.apply(lambda r: r.astype(str).str.contains(busqueda, case=False).any(), axis=1)
+            df_censo = df_censo[mask]
 
-            # Botón para guardar los cambios hechos en el editor
-            if st.button("💾 Guardar Cambios Manuales en Drive", use_container_width=True):
-                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_actualizado)
-                st.toast("Cambios guardados exitosamente", icon="✅")
-                time.sleep(1)
-                st.rerun()
-            
-    except Exception as e:
-        st.error(f"Error al conectar con el Censo Editable: {e}")
-        st.info("Revisa que los Secrets estén bien configurados y que el correo de la Service Account sea Editor en el Sheet.")
+        # EDITOR DE DATOS
+        df_editado = st.data_editor(
+            df_censo,
+            use_container_width=True,
+            num_rows="dynamic",
+            hide_index=True,
+            key="main_editor"
+        )
+
+        if st.button("💾 Guardar Cambios en el Censo", use_container_width=True):
+            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_editado)
+            st.toast("Cambios guardados", icon="✅")
+    else:
+        st.info("El censo está vacío. Presiona 'Enviar Datos' para comenzar.")
+
+except Exception as e:
+    st.error(f"Error en el sistema: {e}")
