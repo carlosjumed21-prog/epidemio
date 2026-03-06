@@ -36,11 +36,9 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-    
-    # Alineación centrada absoluta para Excel
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # 1. Título de Vigencia (Fila 1) - CENTRADO Y SIN "OFICIAL"
+    # 1. Título de Vigencia (Fila 1) - CENTRADO ABSOLUTO
     num_cols = len(df.columns)
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
     titulo_texto = f"{titulo_reporte} DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
@@ -50,7 +48,7 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
-    # 2. Encabezados (Fila 2) - CENTRADOS
+    # 2. Encabezados (Fila 2)
     for col_num, value in enumerate(df.columns, 1):
         cell = ws.cell(row=2, column=col_num, value=value)
         cell.fill = header_fill
@@ -64,7 +62,7 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
             cell.border = border
             cell.alignment = center_align
 
-    # 4. Pie de Página (NOM-045 y Firma) - CENTRADOS
+    # 4. Pie de Página (NOM-045 y Firma)
     fila_pie = len(df) + 3
     ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=num_cols)
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
@@ -80,13 +78,11 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     cell_auth.alignment = center_align
     cell_auth.font = Font(bold=True, size=11)
 
-    # Ajuste de ancho de columnas
     for i in range(1, num_cols + 1):
         ws.column_dimensions[get_column_letter(i)].width = 25
 
 def generar_pdf_oficial(df):
     output = BytesIO()
-    # Márgenes iguales para asegurar el centro real en landscape
     doc = SimpleDocTemplate(
         output, 
         pagesize=landscape(letter), 
@@ -97,7 +93,6 @@ def generar_pdf_oficial(df):
     )
     styles = getSampleStyleSheet()
     
-    # Estilos de párrafo con alignment=1 (CENTRADO ABSOLUTO)
     estilo_titulo = ParagraphStyle('T', parent=styles['Heading2'], alignment=1, fontSize=12, spaceAfter=5)
     estilo_subtitulo = ParagraphStyle('S', parent=styles['Normal'], alignment=1, fontSize=10, spaceAfter=15)
     estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1, leading=8)
@@ -108,19 +103,18 @@ def generar_pdf_oficial(df):
     hoy = datetime.now()
     vencimiento = hoy + timedelta(days=7)
     
-    # 1. ENCABEZADOS CENTRADOS
     elements.append(Paragraph("CENSO DE AISLAMIENTOS", estilo_titulo))
     elements.append(Paragraph(
         f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)", 
         estilo_subtitulo
     ))
     
-    # 2. TABLA CON AJUSTE DE TEXTO Y CENTRADO
     data = [[Paragraph(col, estilo_encabezado) for col in df.columns]]
     for row in df.values:
         data.append([Paragraph(str(item), estilo_celda) for item in row])
     
-    col_widths = [50, 65, 180, 130, 130, 80]
+    # Anchos ajustados para la nueva estructura
+    col_widths = [50, 65, 180, 100, 130, 80]
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
@@ -129,13 +123,10 @@ def generar_pdf_oficial(df):
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
     ]))
     
-    # Forzar que el objeto tabla se alinee al centro de la página
     t.hAlign = 'CENTER' 
-    
     elements.append(t)
     elements.append(Spacer(1, 20))
     
-    # 3. PIE DE PÁGINA CENTRADO
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
     elements.append(Paragraph(leyenda, estilo_leyenda))
     elements.append(Spacer(1, 15))
@@ -157,16 +148,21 @@ def cargar_datos_aislamiento():
     
     def consolidar(group):
         res = group.iloc[0].copy()
-        tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-        res["TIPO DE AISLAMIENTO"] = " / ".join(tipos) if len(tipos) > 0 else np.nan
         return res
 
     df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    cols_interes = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "MOTIVO DE SEGUIMIENTO", "FECHA DE INICIO"]
-    df = df[[c for c in cols_interes if c in df.columns]]
+    # NUEVA ESTRUCTURA DE COLUMNAS
+    # 1. Seleccionamos las columnas base
+    # 2. Reemplazamos 'TIPO DE AISLAMIENTO' (Columna D original) por 'INSUMO'
+    cols_base = ["CAMA", "REGISTRO", "NOMBRE", "MOTIVO DE SEGUIMIENTO", "FECHA DE INICIO"]
+    df = df[[c for c in cols_base if c in df.columns]]
+    
+    # 3. Insertamos la columna INSUMO en la posición 3 (Índice D)
+    df.insert(3, "INSUMO", "JABÓN/SANITAS")
+    
     df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
     return df.reset_index(drop=True)
 
@@ -203,7 +199,7 @@ with tab1:
 
 with tab2:
     st.header("Generación de Reportes de Insumos")
-    st.info("Descarga el censo con el formato para la Dra. Brenda Castillo.")
+    st.info("Descarga el censo de insumos con el formato para la Dra. Brenda Castillo.")
     
     df_insumos = cargar_datos_aislamiento()
     
