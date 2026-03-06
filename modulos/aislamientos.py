@@ -47,7 +47,7 @@ def cargar_censo_total():
     return df.reset_index(drop=True)
 
 # --- INTERFAZ ---
-st.title("🦠 Gestión de Aislamientos (Tabla Filtrable)")
+st.title("🦠 Gestión de Aislamientos")
 
 try:
     df_final = cargar_censo_total()
