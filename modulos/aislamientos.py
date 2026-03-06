@@ -113,8 +113,8 @@ def generar_pdf_oficial(df):
     for row in df.values:
         data.append([Paragraph(str(item), estilo_celda) for item in row])
     
-    # Anchos de columna optimizados para el nuevo orden (CAMA, REG, NOM, TIPO, INSUMO, FECHA)
-    col_widths = [50, 65, 180, 110, 110, 80]
+    # Anchos ajustados: CAMA, REG, NOM, TIPO, FECHA, INSUMO
+    col_widths = [50, 65, 180, 110, 80, 110]
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
@@ -156,15 +156,14 @@ def cargar_datos_aislamiento():
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    # --- AJUSTE DE COLUMNAS SOLICITADO ---
-    # Queremos: A:CAMA, B:REGISTRO, C:NOMBRE, D:TIPO DE AISLAMIENTO, E:INSUMO, F:FECHA DE INICIO
-    # 1. Definimos las columnas a mantener (recorriendo Fecha de Inicio a la posición F original)
-    cols_finales = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
-    df = df[[c for c in cols_finales if c in df.columns]]
+    # --- INTERCAMBIO DE POSICIÓN E y F ---
+    # Queremos: A:CAMA, B:REGISTRO, C:NOMBRE, D:TIPO DE AISLAMIENTO, E:FECHA DE INICIO, F:INSUMO
+    # 1. Seleccionamos el orden deseado de las columnas existentes
+    cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
+    df = df[[c for c in cols_orden if c in df.columns]]
     
-    # 2. Insertamos la columna INSUMO en la posición E (Índice 4)
-    # Esto desplaza automáticamente a "FECHA DE INICIO" a la derecha (Columna F)
-    df.insert(4, "INSUMO", "JABÓN/SANITAS")
+    # 2. Insertamos INSUMO al final (Columna F / Índice 5)
+    df["INSUMO"] = "JABÓN/SANITAS"
     
     df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
     return df.reset_index(drop=True)
