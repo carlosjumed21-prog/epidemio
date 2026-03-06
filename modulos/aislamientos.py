@@ -19,7 +19,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layout="wide")
 
-# URLs
+# URLs de Google Sheets
 SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
 SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
 
@@ -36,12 +36,17 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    # Alineación centrada absoluta para Excel
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     # 1. Título de Vigencia (Fila 1) - CENTRADO Y SIN "OFICIAL"
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(df.columns))
+    num_cols = len(df.columns)
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
     titulo_texto = f"{titulo_reporte} DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
-    cell_h = ws.cell(row=1, column=1, value=titulo_texto)
+    
+    cell_h = ws.cell(row=1, column=1)
+    cell_h.value = titulo_texto
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
@@ -54,53 +59,66 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
         cell.border = border
 
     # 3. Cuerpo de datos - CENTRADOS
-    for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=len(df.columns)):
+    for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=num_cols):
         for cell in row:
             cell.border = border
             cell.alignment = center_align
 
     # 4. Pie de Página (NOM-045 y Firma) - CENTRADOS
     fila_pie = len(df) + 3
-    ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=len(df.columns))
+    ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=num_cols)
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
+    
     cell_nom = ws.cell(row=fila_pie, column=1, value=leyenda)
     cell_nom.alignment = center_align
     cell_nom.font = Font(size=9, italic=True)
     ws.row_dimensions[fila_pie].height = 45
 
     fila_firma = fila_pie + 1
-    ws.merge_cells(start_row=fila_firma, start_column=1, end_row=fila_firma, end_column=len(df.columns))
+    ws.merge_cells(start_row=fila_firma, start_column=1, end_row=fila_firma, end_column=num_cols)
     cell_auth = ws.cell(row=fila_firma, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
     cell_auth.alignment = center_align
     cell_auth.font = Font(bold=True, size=11)
 
-    for i in range(1, len(df.columns) + 1):
+    # Ajuste de ancho de columnas
+    for i in range(1, num_cols + 1):
         ws.column_dimensions[get_column_letter(i)].width = 25
 
 def generar_pdf_oficial(df):
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(letter), topMargin=20, bottomMargin=20)
+    # Márgenes iguales para asegurar el centro real en landscape
+    doc = SimpleDocTemplate(
+        output, 
+        pagesize=landscape(letter), 
+        topMargin=30, 
+        bottomMargin=30, 
+        leftMargin=50, 
+        rightMargin=50
+    )
     styles = getSampleStyleSheet()
     
-    # Estilos de párrafo centrados
-    cell_style = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1, leading=8)
-    header_style = ParagraphStyle('header', parent=styles['Normal'], fontSize=8, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
-    footer_style = ParagraphStyle('footer', parent=styles['Normal'], fontSize=8, italic=True, alignment=1, leading=10)
-    auth_style = ParagraphStyle('auth', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', alignment=1, spaceBefore=10)
+    # Estilos de párrafo con alignment=1 (CENTRADO ABSOLUTO)
+    estilo_titulo = ParagraphStyle('T', parent=styles['Heading2'], alignment=1, fontSize=12, spaceAfter=5)
+    estilo_subtitulo = ParagraphStyle('S', parent=styles['Normal'], alignment=1, fontSize=10, spaceAfter=15)
+    estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1, leading=8)
+    estilo_encabezado = ParagraphStyle('header', parent=styles['Normal'], fontSize=8, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
+    estilo_leyenda = ParagraphStyle('footer', parent=styles['Normal'], fontSize=8, italic=True, alignment=1, leading=10)
     
     elements = []
     hoy = datetime.now()
     vencimiento = hoy + timedelta(days=7)
     
-    # Título Principal Centrado y sin "OFICIAL"
-    elements.append(Paragraph(f"<b>CENSO DE AISLAMIENTOS</b>", styles['Heading2']))
-    elements.append(Paragraph(f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)", styles['Normal']))
-    elements.append(Spacer(1, 10))
+    # 1. ENCABEZADOS CENTRADOS
+    elements.append(Paragraph("CENSO DE AISLAMIENTOS", estilo_titulo))
+    elements.append(Paragraph(
+        f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)", 
+        estilo_subtitulo
+    ))
     
-    # Tabla
-    data = [[Paragraph(col, header_style) for col in df.columns]]
+    # 2. TABLA CON AJUSTE DE TEXTO Y CENTRADO
+    data = [[Paragraph(col, estilo_encabezado) for col in df.columns]]
     for row in df.values:
-        data.append([Paragraph(str(item), cell_style) for item in row])
+        data.append([Paragraph(str(item), estilo_celda) for item in row])
     
     col_widths = [50, 65, 180, 130, 130, 80]
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
@@ -110,14 +128,18 @@ def generar_pdf_oficial(df):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
     ]))
-    elements.append(t)
-    elements.append(Spacer(1, 15))
     
-    # Pie de página centrado
+    # Forzar que el objeto tabla se alinee al centro de la página
+    t.hAlign = 'CENTER' 
+    
+    elements.append(t)
+    elements.append(Spacer(1, 20))
+    
+    # 3. PIE DE PÁGINA CENTRADO
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
-    elements.append(Paragraph(leyenda, footer_style))
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("AUTORIZÓ: DRA. BRENDA CASTILLO MATUS", auth_style))
+    elements.append(Paragraph(leyenda, estilo_leyenda))
+    elements.append(Spacer(1, 15))
+    elements.append(Paragraph("<b>AUTORIZÓ: DRA. BRENDA CASTILLO MATUS</b>", estilo_subtitulo))
 
     doc.build(elements)
     return output.getvalue()
