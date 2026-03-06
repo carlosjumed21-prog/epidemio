@@ -10,7 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
-# Librerías para PDF Profesional con ajuste de texto
+# Librerías para PDF Profesional
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table as RLTable, TableStyle, Paragraph, Spacer
@@ -38,14 +38,15 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # 1. Título de Vigencia (Fila 1)
+    # 1. Título de Vigencia (Fila 1) - TODO CENTRADO
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(df.columns))
+    # Se agrega el texto faltante solicitado
     titulo_texto = f"{titulo_reporte} DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
     cell_h = ws.cell(row=1, column=1, value=titulo_texto)
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
-    # 2. Encabezados (Fila 2)
+    # 2. Encabezados (Fila 2) - TODO CENTRADO
     for col_num, value in enumerate(df.columns, 1):
         cell = ws.cell(row=2, column=col_num, value=value)
         cell.fill = header_fill
@@ -53,25 +54,25 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
         cell.alignment = center_align
         cell.border = border
 
-    # 3. Cuerpo de datos
+    # 3. Cuerpo de datos - TODO CENTRADO
     for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=len(df.columns)):
         for cell in row:
             cell.border = border
             cell.alignment = center_align
 
-    # 4. Pie de Página (NOM-045 y Firma)
+    # 4. Pie de Página (NOM-045 y Firma) - TODO CENTRADO
     fila_pie = len(df) + 3
     ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=len(df.columns))
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
     cell_nom = ws.cell(row=fila_pie, column=1, value=leyenda)
-    cell_nom.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
+    cell_nom.alignment = center_align # Centrado corregido
     cell_nom.font = Font(size=9, italic=True)
     ws.row_dimensions[fila_pie].height = 45
 
     fila_firma = fila_pie + 1
     ws.merge_cells(start_row=fila_firma, start_column=1, end_row=fila_firma, end_column=len(df.columns))
     cell_auth = ws.cell(row=fila_firma, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
-    cell_auth.alignment = center_align
+    cell_auth.alignment = center_align # Centrado corregido
     cell_auth.font = Font(bold=True, size=11)
 
     for i in range(1, len(df.columns) + 1):
@@ -82,19 +83,23 @@ def generar_pdf_oficial(df):
     doc = SimpleDocTemplate(output, pagesize=landscape(letter), topMargin=20, bottomMargin=20)
     styles = getSampleStyleSheet()
     
+    # Estilos de párrafo centrados
     cell_style = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1, leading=8)
     header_style = ParagraphStyle('header', parent=styles['Normal'], fontSize=8, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
-    footer_style = ParagraphStyle('footer', parent=styles['Normal'], fontSize=8, italic=True, alignment=0, leading=10)
+    footer_style = ParagraphStyle('footer', parent=styles['Normal'], fontSize=8, italic=True, alignment=1, leading=10) # Centrado
+    auth_style = ParagraphStyle('auth', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', alignment=1, spaceBefore=10) # Centrado
     
     elements = []
     hoy = datetime.now()
     vencimiento = hoy + timedelta(days=7)
     
+    # Título Principal Centrado
     elements.append(Paragraph(f"<b>CENSO DE AISLAMIENTOS OFICIAL</b>", styles['Heading2']))
-    elements.append(Paragraph(f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')}", styles['Normal']))
+    # Se agrega el texto faltante solicitado
+    elements.append(Paragraph(f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)", styles['Normal']))
     elements.append(Spacer(1, 10))
     
-    # Tabla con wrap de texto
+    # Tabla
     data = [[Paragraph(col, header_style) for col in df.columns]]
     for row in df.values:
         data.append([Paragraph(str(item), cell_style) for item in row])
@@ -105,14 +110,16 @@ def generar_pdf_oficial(df):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'), # Centrado de toda la tabla
     ]))
     elements.append(t)
     elements.append(Spacer(1, 15))
     
-    leyenda = "<b>Comentario:</b> de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
+    # Pie de página centrado
+    leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
     elements.append(Paragraph(leyenda, footer_style))
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph("<b>AUTORIZÓ: DRA. BRENDA CASTILLO MATUS</b>", styles['Heading3']))
+    elements.append(Paragraph("AUTORIZÓ: DRA. BRENDA CASTILLO MATUS", auth_style))
 
     doc.build(elements)
     return output.getvalue()
@@ -185,6 +192,7 @@ with tab2:
     with col_ex:
         output_ex = BytesIO()
         with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
+            # Empezamos en startrow=1 para dejar espacio al título
             df_insumos.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
             aplicar_formato_excel_oficial(writer, "INSUMOS", df_insumos, "INSUMOS AISLAMIENTOS")
         
