@@ -12,9 +12,11 @@ st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layou
 SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
 
 # 2. Destino (Editable - Sheet de Carlos)
-SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit?usp=sharing"
+# Nota: Usamos la URL limpia para evitar conflictos de parámetros de búsqueda
+SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
 
 # --- CONEXIÓN A GSHEETS ---
+# Esta línea buscará automáticamente los secretos en [connections.gsheets]
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=2)
@@ -54,9 +56,10 @@ def cargar_censo_total():
                 res[col] = val_real.iloc[0] if not val_real.empty else np.nan
         return res
 
+    # Agrupación y aplicación de lógica
     df = df.groupby([c_cama, c_nombre], as_index=False, sort=False).apply(consolidar_evento)
 
-    # 5. FILTRO DE ACTIVOS
+    # 5. FILTRO DE ACTIVOS (Solo los que no tienen fecha de término)
     if c_termino in df.columns:
         df = df[df[c_termino].isna()]
 
@@ -92,7 +95,9 @@ with tab1:
             
             # BOTÓN PARA ENVIAR AL SEGUNDO SHEET
             st.divider()
+            st.subheader("Sincronización de Datos")
             if st.button("🚀 ENVIAR ESTA TABLA AL CENSO EDITABLE", use_container_width=True):
+                # Usamos conn.update para enviar los datos al Sheet de Carlos
                 conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_final)
                 st.balloons()
                 st.success("✅ Datos sincronizados con el Sheet de Carlos.")
@@ -105,26 +110,32 @@ with tab1:
 
 with tab2:
     st.header("Censo Aislamientos 26 (Carlos)")
-    st.info("Aquí puedes editar la información, agregar filas o modificar notas manualmente.")
+    st.info("Utiliza esta tabla para añadir observaciones o gestionar el censo manualmente.")
 
     try:
-        # Leer la data actual del segundo sheet
-        df_editable = conn.read(spreadsheet=SHEET_URL_EDITABLE)
+        # Leer la data actual del segundo sheet para edición
+        # Se añade ttl=0 para que siempre lea lo último guardado
+        df_editable = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
 
-        # Editor interactivo
-        df_actualizado = st.data_editor(
-            df_editable,
-            use_container_width=True,
-            num_rows="dynamic",
-            hide_index=True,
-            key="editor_carlos"
-        )
+        if df_editable.empty:
+            st.warning("El censo está vacío. Sincroniza los datos desde la pestaña 'Monitor'.")
+        else:
+            # Editor interactivo
+            df_actualizado = st.data_editor(
+                df_editable,
+                use_container_width=True,
+                num_rows="dynamic",
+                hide_index=True,
+                key="editor_carlos"
+            )
 
-        # Botón para guardar los cambios hechos en esta tabla
-        if st.button("💾 Guardar Cambios Manuales", use_container_width=True):
-            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_actualizado)
-            st.toast("Cambios guardados exitosamente", icon="✅")
+            # Botón para guardar los cambios hechos en el editor
+            if st.button("💾 Guardar Cambios Manuales en Drive", use_container_width=True):
+                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_actualizado)
+                st.toast("Cambios guardados exitosamente", icon="✅")
+                time.sleep(1)
+                st.rerun()
             
     except Exception as e:
         st.error(f"Error al conectar con el Censo Editable: {e}")
-        st.info("Asegúrate de que el Sheet tenga permisos de 'Editor' para cualquier persona con el enlace.")
+        st.info("Revisa que los Secrets estén bien configurados y que el correo de la Service Account sea Editor en el Sheet.")
