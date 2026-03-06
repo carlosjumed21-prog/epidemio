@@ -38,7 +38,6 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # 1. Título de Vigencia (Fila 1) - CENTRADO ABSOLUTO
     num_cols = len(df.columns)
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
     titulo_texto = f"{titulo_reporte} DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
@@ -48,7 +47,6 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
-    # 2. Encabezados (Fila 2)
     for col_num, value in enumerate(df.columns, 1):
         cell = ws.cell(row=2, column=col_num, value=value)
         cell.fill = header_fill
@@ -56,13 +54,11 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
         cell.alignment = center_align
         cell.border = border
 
-    # 3. Cuerpo de datos - CENTRADOS
     for row in ws.iter_rows(min_row=3, max_row=len(df)+2, min_col=1, max_col=num_cols):
         for cell in row:
             cell.border = border
             cell.alignment = center_align
 
-    # 4. Pie de Página (NOM-045 y Firma)
     fila_pie = len(df) + 3
     ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=num_cols)
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
@@ -83,21 +79,27 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
 
 def generar_pdf_oficial(df):
     output = BytesIO()
+    # Ajustamos márgenes mínimos para maximizar espacio en una sola hoja
     doc = SimpleDocTemplate(
         output, 
         pagesize=landscape(letter), 
-        topMargin=30, 
-        bottomMargin=30, 
-        leftMargin=50, 
-        rightMargin=50
+        topMargin=20, 
+        bottomMargin=20, 
+        leftMargin=30, 
+        rightMargin=30
     )
     styles = getSampleStyleSheet()
     
-    estilo_titulo = ParagraphStyle('T', parent=styles['Heading2'], alignment=1, fontSize=12, spaceAfter=5)
-    estilo_subtitulo = ParagraphStyle('S', parent=styles['Normal'], alignment=1, fontSize=10, spaceAfter=15)
-    estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1, leading=8)
-    estilo_encabezado = ParagraphStyle('header', parent=styles['Normal'], fontSize=8, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
-    estilo_leyenda = ParagraphStyle('footer', parent=styles['Normal'], fontSize=8, italic=True, alignment=1, leading=10)
+    # AJUSTE DINÁMICO DE FUENTE: Si hay muchos pacientes, reducimos la letra para que quepa
+    num_pacientes = len(df)
+    font_size_base = 7 if num_pacientes < 20 else 6
+    leading_base = 8 if num_pacientes < 20 else 7
+    
+    estilo_titulo = ParagraphStyle('T', parent=styles['Heading2'], alignment=1, fontSize=11, spaceAfter=2)
+    estilo_subtitulo = ParagraphStyle('S', parent=styles['Normal'], alignment=1, fontSize=9, spaceAfter=10)
+    estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=font_size_base, alignment=1, leading=leading_base)
+    estilo_encabezado = ParagraphStyle('header', parent=styles['Normal'], fontSize=font_size_base + 1, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
+    estilo_leyenda = ParagraphStyle('footer', parent=styles['Normal'], fontSize=7, italic=True, alignment=1, leading=8)
     
     elements = []
     hoy = datetime.now()
@@ -113,8 +115,9 @@ def generar_pdf_oficial(df):
     for row in df.values:
         data.append([Paragraph(str(item), estilo_celda) for item in row])
     
-    # Anchos ajustados: CAMA, REG, NOM, TIPO, FECHA, INSUMO
-    col_widths = [50, 65, 180, 110, 80, 110]
+    # Anchos calculados para ocupar el ancho total de la página horizontal
+    col_widths = [50, 65, 210, 140, 90, 140]
+    
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
@@ -125,11 +128,13 @@ def generar_pdf_oficial(df):
     
     t.hAlign = 'CENTER' 
     elements.append(t)
-    elements.append(Spacer(1, 20))
+    
+    # Espaciado mínimo antes del pie de página para ahorrar espacio
+    elements.append(Spacer(1, 10))
     
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
     elements.append(Paragraph(leyenda, estilo_leyenda))
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 5))
     elements.append(Paragraph("<b>AUTORIZÓ: DRA. BRENDA CASTILLO MATUS</b>", estilo_subtitulo))
 
     doc.build(elements)
@@ -156,13 +161,9 @@ def cargar_datos_aislamiento():
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    # --- INTERCAMBIO DE POSICIÓN E y F ---
-    # Queremos: A:CAMA, B:REGISTRO, C:NOMBRE, D:TIPO DE AISLAMIENTO, E:FECHA DE INICIO, F:INSUMO
-    # 1. Seleccionamos el orden deseado de las columnas existentes
+    # Orden solicitado: CAMA, REGISTRO, NOMBRE, TIPO AISLAMIENTO, FECHA INICIO, INSUMO
     cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
     df = df[[c for c in cols_orden if c in df.columns]]
-    
-    # 2. Insertamos INSUMO al final (Columna F / Índice 5)
     df["INSUMO"] = "JABÓN/SANITAS"
     
     df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
@@ -201,7 +202,7 @@ with tab1:
 
 with tab2:
     st.header("Generación de Reportes de Insumos")
-    st.info("Descarga el censo de insumos con el formato para la Dra. Brenda Castillo.")
+    st.info("Descarga el censo de insumos. El PDF está configurado para ajustarse a una sola página.")
     
     df_insumos = cargar_datos_aislamiento()
     
@@ -224,7 +225,7 @@ with tab2:
     with col_pdf:
         pdf_data = generar_pdf_oficial(df_insumos)
         st.download_button(
-            "📄 DESCARGAR PDF",
+            "📄 DESCARGAR PDF (UNA SOLA HOJA)",
             pdf_data,
             f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.pdf",
             "application/pdf",
