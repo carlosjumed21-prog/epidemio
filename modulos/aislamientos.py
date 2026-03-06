@@ -79,7 +79,6 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
 
 def generar_pdf_oficial(df):
     output = BytesIO()
-    # Ajustamos márgenes mínimos para maximizar espacio en una sola hoja
     doc = SimpleDocTemplate(
         output, 
         pagesize=landscape(letter), 
@@ -90,7 +89,6 @@ def generar_pdf_oficial(df):
     )
     styles = getSampleStyleSheet()
     
-    # AJUSTE DINÁMICO DE FUENTE: Si hay muchos pacientes, reducimos la letra para que quepa
     num_pacientes = len(df)
     font_size_base = 7 if num_pacientes < 20 else 6
     leading_base = 8 if num_pacientes < 20 else 7
@@ -115,7 +113,6 @@ def generar_pdf_oficial(df):
     for row in df.values:
         data.append([Paragraph(str(item), estilo_celda) for item in row])
     
-    # Anchos calculados para ocupar el ancho total de la página horizontal
     col_widths = [50, 65, 210, 140, 90, 140]
     
     t = RLTable(data, colWidths=col_widths, repeatRows=1)
@@ -128,8 +125,6 @@ def generar_pdf_oficial(df):
     
     t.hAlign = 'CENTER' 
     elements.append(t)
-    
-    # Espaciado mínimo antes del pie de página para ahorrar espacio
     elements.append(Spacer(1, 10))
     
     leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
@@ -161,7 +156,6 @@ def cargar_datos_aislamiento():
     if "FECHA DE TÉRMINO" in df.columns:
         df = df[df["FECHA DE TÉRMINO"].isna()]
     
-    # Orden solicitado: CAMA, REGISTRO, NOMBRE, TIPO AISLAMIENTO, FECHA INICIO, INSUMO
     cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
     df = df[[c for c in cols_orden if c in df.columns]]
     df["INSUMO"] = "JABÓN/SANITAS"
@@ -176,7 +170,20 @@ tab1, tab2 = st.tabs(["🔍 Monitor y Edición", "📝 Insumos Aislamientos"])
 
 with tab1:
     df_actual = cargar_datos_aislamiento()
-    st.metric("Pacientes Aislados", len(df_actual))
+    
+    # --- CÁLCULOS DE CONTEO ---
+    total_general = len(df_actual)
+    # Filtro para Protectores (busca la palabra en la columna de tipo)
+    mask_protector = df_actual["TIPO DE AISLAMIENTO"].str.contains("PROTECTOR", case=False, na=False)
+    df_protectores = df_actual[mask_protector]
+    total_protectores = len(df_protectores)
+    
+    # --- RENDERIZADO DE MÉTRICAS ---
+    m1, m2 = st.columns(2)
+    with m1:
+        st.metric("Total Pacientes Aislados", total_general)
+    with m2:
+        st.metric("Aislamientos Protectores", total_protectores)
     
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -192,13 +199,19 @@ with tab1:
 
     st.divider()
     
+    # Sección de Edición Principal
+    st.subheader("📋 Censo General (Editable)")
     df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
     if not df_drive.empty:
-        df_drive.index = range(1, len(df_drive) + 1)
         df_ed = st.data_editor(df_drive, use_container_width=True, num_rows="dynamic", hide_index=True)
         if st.button("💾 Guardar Cambios en Drive", use_container_width=True):
             conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
             st.toast("Datos guardados", icon="✅")
+    
+    # Sección Separada para Protectores
+    if total_protectores > 0:
+        with st.expander("🛡️ Ver detalle de Aislamientos Protectores"):
+            st.dataframe(df_protectores, use_container_width=True, hide_index=True)
 
 with tab2:
     st.header("Generación de Reportes de Insumos")
