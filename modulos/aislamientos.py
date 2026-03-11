@@ -140,45 +140,53 @@ def generar_pdf_oficial(df):
 @st.cache_data(ttl=2)
 def cargar_datos_aislamiento():
     try:
+        # Forzar recarga con cachebust
         url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
         df = pd.read_csv(url_final, skiprows=1, engine='python')
+        
+        # Selección de columnas (CAMA es la 1, NOMBRE es la 3, etc. en base a tu .iloc[:, 1:10])
         df = df.iloc[:, 1:10]
         
-        # Estandarizar columnas
+        # Estandarizar nombres de columnas (Quitar saltos de línea y espacios)
         df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
         
-        # Rellenar datos
+        # Rellenar datos de celdas combinadas
         df["CAMA"] = df["CAMA"].ffill()
         df["NOMBRE"] = df["NOMBRE"].ffill()
         
-        # --- FILTRO DE VIGENCIA (FECHA DE TÉRMINO VACÍA) ---
+        # --- FILTRO CLAVE: AISLAMIENTOS VIGENTES ---
+        # Si tiene Fecha de Término, ya no está aislado.
         if "FECHA DE TÉRMINO" in df.columns:
-            # Convertimos a string y tratamos diversos tipos de nulos
+            # Normalizar nulos: convertir strings 'nan' o celdas vacías a NaN real de Numpy
             df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).replace(['nan', 'None', ' ', '', 'NaT'], np.nan)
             df = df[df["FECHA DE TÉRMINO"].isna()].copy()
         
-        # Consolidación de tipos de aislamiento
+        # Consolidación por paciente
         def consolidar(group):
             res = group.iloc[0].copy()
             if "TIPO DE AISLAMIENTO" in group.columns:
                 tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-                res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else np.nan
+                res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else "N/A"
             return res
 
         if not df.empty:
+            # Agrupar para limpiar la vista previa
             df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
             df = df.reset_index(drop=True)
-        
-        # Orden de columnas
-        cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
-        df = df[[c for c in cols_orden if c in df.columns]].copy()
-        df["INSUMO"] = "JABÓN/SANITAS"
-        
-        # Limpieza final
-        df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
-        return df.reset_index(drop=True)
+            
+            # Ordenar columnas para el reporte
+            cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
+            df = df[[c for c in cols_orden if c in df.columns]].copy()
+            df["INSUMO"] = "JABÓN/SANITAS"
+            
+            # Limpieza final de filas vacías
+            df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
+            return df.reset_index(drop=True)
+        else:
+            return pd.DataFrame()
+            
     except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
+        st.error(f"Error cargando el CSV: {e}")
         return pd.DataFrame()
 
 # --- INTERFAZ ---
@@ -190,13 +198,11 @@ with tab1:
     df_actual = cargar_datos_aislamiento()
     
     if not df_actual.empty:
-        # --- CÁLCULOS DE CONTEO ---
+        # --- MÉTRICAS ---
         total_general = len(df_actual)
         mask_protector = df_actual["TIPO DE AISLAMIENTO"].str.contains("PROTECTOR", case=False, na=False)
-        df_protectores = df_actual[mask_protector]
-        total_protectores = len(df_protectores)
+        total_protectores = len(df_actual[mask_protector])
         
-        # --- RENDERIZADO DE MÉTRICAS ---
         m1, m2 = st.columns(2)
         with m1:
             st.metric("Total Pacientes Aislados", total_general)
@@ -217,57 +223,41 @@ with tab1:
 
         st.divider()
         
-        # Sección de Edición Principal
-        st.subheader("📋 Censo General (Editable)")
-        df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
+        # --- VISTA PREVIA / EDICIÓN ---
+        st.subheader("📋 Censo General (Vigentes)")
+        # Mostramos df_actual directamente para asegurar que se vea lo filtrado
+        st.dataframe(df_actual, use_container_width=True, hide_index=True)
         
+        st.subheader("📝 Editor de Hoja de Trabajo")
+        df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
         if not df_drive.empty:
             df_ed = st.data_editor(df_drive, use_container_width=True, num_rows="dynamic", hide_index=True)
             if st.button("💾 Guardar Cambios en Drive", use_container_width=True):
                 conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
                 st.toast("Datos guardados", icon="✅")
-        else:
-            st.warning("No se encontraron datos en la hoja de edición.")
         
-        # Sección Separada para Protectores
         if total_protectores > 0:
-            with st.expander("🛡️ Ver detalle de Aislamientos Protectores"):
-                st.dataframe(df_protectores, use_container_width=True, hide_index=True)
+            with st.expander("🛡️ Detalle de Aislamientos Protectores"):
+                st.table(df_actual[mask_protector])
     else:
-        st.warning("No hay pacientes con aislamientos vigentes según la base de datos.")
-        if st.button("🔄 Reintentar Carga"):
+        st.warning("No se detectaron pacientes aislados vigentes (sin fecha de término).")
+        if st.button("🔄 Forzar Recarga"):
             st.cache_data.clear()
             st.rerun()
 
 with tab2:
     st.header("Generación de Reportes de Insumos")
-    
     if not df_actual.empty:
-        st.info("Descarga el censo de insumos. El PDF está configurado para ajustarse a una sola página.")
         col_ex, col_pdf = st.columns(2)
-        
         with col_ex:
             output_ex = BytesIO()
             with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
                 df_actual.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
                 aplicar_formato_excel_oficial(writer, "INSUMOS", df_actual, "INSUMOS AISLAMIENTOS")
-            
-            st.download_button(
-                "💾 DESCARGAR EXCEL",
-                output_ex.getvalue(),
-                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, type="primary"
-            )
+            st.download_button("💾 EXCEL", output_ex.getvalue(), "Insumos.xlsx", use_container_width=True, type="primary")
             
         with col_pdf:
             pdf_data = generar_pdf_oficial(df_actual)
-            st.download_button(
-                "📄 DESCARGAR PDF (UNA SOLA HOJA)",
-                pdf_data,
-                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.pdf",
-                "application/pdf",
-                use_container_width=True
-            )
+            st.download_button("📄 PDF (Una Hoja)", pdf_data, "Insumos.pdf", use_container_width=True)
     else:
-        st.error("No hay datos disponibles para generar reportes.")
+        st.error("Sin datos para reporte.")
