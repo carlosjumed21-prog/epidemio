@@ -20,9 +20,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layout="wide")
 
 # URLs
-# Origen: CSV Público con todos los datos
+# Origen: CSV Público con todos los datos históricos
 SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
-# Destino: Hoja de edición para el equipo
+# Destino: Hoja de edición para el equipo (Editable)
 SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
 
 # --- CONEXIÓN ---
@@ -87,56 +87,62 @@ def generar_pdf_oficial(df):
 
 @st.cache_data(ttl=2)
 def cargar_datos_origen():
-    # Cargar desde Origen
-    url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
-    df = pd.read_csv(url_final, skiprows=1, engine='python')
-    
-    # Selección y limpieza de columnas
-    df = df.iloc[:, 1:10]
-    df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
-    
-    # Rellenar datos
-    df["CAMA"] = df["CAMA"].ffill()
-    df["NOMBRE"] = df["NOMBRE"].ffill()
-    
-    # --- FILTRADO REFORZADO ---
-    # 1. Eliminar filas donde el nombre sea nulo o basura del CSV
-    df = df.dropna(subset=["CAMA", "NOMBRE"])
-    df = df[df["NOMBRE"].astype(str).str.strip() != ""]
-    
-    # 2. Condicionante: Solo si FECHA DE TÉRMINO está vacía
-    if "FECHA DE TÉRMINO" in df.columns:
-        # Normalizamos la columna de término para detectar vacíos reales
-        df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).replace(['nan', 'None', ' ', '', 'NaT'], np.nan)
-        df = df[df["FECHA DE TÉRMINO"].isna()].copy()
-    
-    # Consolidar tipos de aislamiento
-    def consolidar(group):
-        res = group.iloc[0].copy()
-        tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-        res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else "N/A"
-        return res
+    try:
+        url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
+        df = pd.read_csv(url_final, skiprows=1, engine='python')
+        
+        # Selección y limpieza de columnas
+        df = df.iloc[:, 1:10]
+        df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
+        
+        # Rellenar datos ffill para celdas combinadas
+        df["CAMA"] = df["CAMA"].ffill()
+        df["NOMBRE"] = df["NOMBRE"].ffill()
+        
+        # --- FILTRADO ESTRICTO ---
+        # 1. Eliminar filas vacías residuales del CSV
+        df = df.dropna(subset=["CAMA", "NOMBRE"])
+        # Asegurarnos de que el nombre no sea una cadena vacía o "nan"
+        df = df[df["NOMBRE"].astype(str).str.strip().str.lower() != "nan"]
+        df = df[df["NOMBRE"].astype(str).str.strip() != ""]
+        
+        # 2. Filtrar solo los que NO tienen FECHA DE TÉRMINO
+        if "FECHA DE TÉRMINO" in df.columns:
+            # Limpiar variantes de nulos en la fecha
+            df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).str.strip().replace(['nan', 'None', '', 'NaT'], np.nan)
+            df = df[df["FECHA DE TÉRMINO"].isna()].copy()
+        
+        # Consolidar tipos de aislamiento por paciente
+        def consolidar(group):
+            res = group.iloc[0].copy()
+            tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
+            res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else "SIN ESPECIFICAR"
+            return res
 
-    if not df.empty:
-        df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar).reset_index(drop=True)
-    
-    cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
-    df = df[[c for c in cols_orden if c in df.columns]].copy()
-    df["INSUMO"] = "JABÓN/SANITAS"
-    
-    return df.reset_index(drop=True)
+        if not df.empty:
+            df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar).reset_index(drop=True)
+        
+        cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
+        df = df[[c for c in cols_orden if c in df.columns]].copy()
+        df["INSUMO"] = "JABÓN/SANITAS"
+        
+        return df.reset_index(drop=True)
+    except Exception as e:
+        st.error(f"Error al cargar origen: {e}")
+        return pd.DataFrame()
 
 # --- INTERFAZ ---
-st.title("🦠 Control de Aislamientos - Epidemiología")
+st.title("🦠 Control de Vigilancia Epidemiológica")
 
 tab1, tab2 = st.tabs(["🔍 Monitor y Edición", "📝 Reportes"])
 
 with tab1:
+    # 1. Obtenemos datos del origen
     df_vigentes = cargar_datos_origen()
     
-    # Métricas reales
+    # Métricas
     total_vigentes = len(df_vigentes)
-    st.metric("Aislamientos Vigentes Detectados", total_vigentes)
+    st.metric("Pacientes Aislados (Vigentes)", total_vigentes)
     
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -145,38 +151,56 @@ with tab1:
             st.rerun()
     with c2:
         if st.button("🚀 Sincronizar a Hoja Editable", use_container_width=True):
-            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_vigentes)
-            st.success("Hoja de vaciado actualizada")
+            if not df_vigentes.empty:
+                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_vigentes)
+                st.success(f"✅ Se han enviado {len(df_vigentes)} registros a la hoja editable.")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.warning("No hay datos vigentes para sincronizar.")
     with c3:
-        st.link_button("📂 Abrir Hoja de Vaciado", SHEET_URL_EDITABLE, use_container_width=True)
+        st.link_button("📂 Abrir Hoja de Trabajo", SHEET_URL_EDITABLE, use_container_width=True)
 
     st.divider()
     
+    # 2. Sección del Editor (Hoja Editable)
     st.subheader("📋 Editor de Trabajo (Vaciado)")
-    # Leemos la hoja donde se vacían los datos
     try:
+        # ttl=0 para asegurar lectura fresca
         df_vaciado = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
-        if not df_vaciado.empty:
+        
+        if df_vaciado is not None and not df_vaciado.empty:
+            st.info(f"Mostrando {len(df_vaciado)} registros actuales en la hoja de trabajo.")
             df_ed = st.data_editor(df_vaciado, use_container_width=True, num_rows="dynamic", hide_index=True)
+            
             if st.button("💾 Guardar Cambios Manuales", use_container_width=True):
                 conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
-                st.toast("Datos guardados", icon="✅")
+                st.toast("Cambios guardados en Google Sheets", icon="✅")
         else:
-            st.info("La hoja de vaciado está vacía. Presiona 'Sincronizar' para traer los datos vigentes.")
-    except:
-        st.error("No se pudo conectar con la hoja de vaciado.")
+            st.warning("⚠️ La hoja de trabajo está vacía.")
+            st.markdown("""
+            **¿Qué hacer?**
+            1. Verifica que el contador de arriba diga '20' (o los que correspondan).
+            2. Presiona el botón **'Sincronizar a Hoja Editable'**.
+            3. Esto copiará los datos filtrados del origen hacia aquí.
+            """)
+    except Exception as e:
+        st.error(f"Error de conexión con la hoja editable: {e}")
 
 with tab2:
     st.header("Generación de Reportes")
     if not df_vigentes.empty:
+        st.write("Datos listos para exportación oficial.")
         col_ex, col_pdf = st.columns(2)
         with col_ex:
             output_ex = BytesIO()
             with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
                 df_vigentes.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
                 aplicar_formato_excel_oficial(writer, "INSUMOS", df_vigentes, "INSUMOS")
-            st.download_button("💾 Excel de Insumos", output_ex.getvalue(), "Insumos.xlsx", use_container_width=True)
+            st.download_button("💾 Excel de Insumos", output_ex.getvalue(), f"Censo_{datetime.now().strftime('%d%m%Y')}.xlsx", use_container_width=True)
             
         with col_pdf:
             pdf_data = generar_pdf_oficial(df_vigentes)
-            st.download_button("📄 PDF de Insumos", pdf_data, "Insumos.pdf", use_container_width=True)
+            st.download_button("📄 PDF de Insumos", pdf_data, f"Censo_{datetime.now().strftime('%d%m%Y')}.pdf", use_container_width=True)
+    else:
+        st.error("No hay datos disponibles para generar reportes.")
