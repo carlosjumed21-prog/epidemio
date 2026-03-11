@@ -18,7 +18,7 @@ def enviar_a_google_sheets(df):
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # Acceso anidado para [connections.gsheets]
+        # Manejo de secretos para [connections.gsheets]
         if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
             info = st.secrets["connections"]["gsheets"]
         else:
@@ -30,7 +30,8 @@ def enviar_a_google_sheets(df):
         worksheet = sh.get_worksheet(0) 
         
         worksheet.clear()
-        # Convertimos todo a string para evitar conflictos de formato en la API
+        
+        # Convertir a texto para envío limpio
         df_envio = df.copy()
         for col in df_envio.columns:
             df_envio[col] = df_envio[col].astype(str)
@@ -43,42 +44,45 @@ def enviar_a_google_sheets(df):
         return False
 
 def cargar_aislamientos():
-    # 1. Carga inicial
+    # 1. Carga de datos
     df = pd.read_csv(SHEET_URL_READ, skiprows=1, engine='python', encoding='utf-8')
-    df = df.iloc[:, 1:10] # B a J
+    df = df.iloc[:, 1:10] # Columnas B a J
     df.columns = [str(c).strip().upper() for c in df.columns]
     
-    col_cama = df.columns[0]
-    col_nombre = df.columns[1]
-    col_tipo = df.columns[2]
-    col_protector = df.columns[3] # Columna E
-    col_inicio = df.columns[5]    # Columna G
-    col_dias = df.columns[6]      # Columna H
-    col_termino = df.columns[7]   # Columna I
+    col_cama = df.columns[0]     # B
+    col_nombre = df.columns[1]   # C
+    col_tipo = df.columns[2]     # D
+    col_protector = df.columns[3] # E
+    col_inicio = df.columns[5]    # G
+    col_dias = df.columns[6]      # H
+    col_termino = df.columns[7]   # I
 
     # 2. Rellenar celdas combinadas
     df[col_cama] = df[col_cama].replace(['nan', 'None', ''], np.nan).ffill()
     df[col_nombre] = df[col_nombre].replace(['nan', 'None', ''], np.nan).ffill()
 
-    # --- 3. CÁLCULO DE FÓRMULA (COLUMNA H) ANTES DE CONSOLIDAR ---
-    def calcular_formula(fecha_str):
-        if str(fecha_str).strip() in ['nan', 'None', '', 'VACIO', 'NAN']: return 0
+    # --- 3. CÁLCULO DE DÍAS (FÓRMULA REAL TIEMPO TRANSCURRIDO) ---
+    def calcular_dias_reales(fecha_str):
+        if str(fecha_str).strip() in ['nan', 'None', '', 'VACIO']: return 0
         try:
-            # Limpiar fecha (tomar solo la parte de fecha si hay hora)
-            limpia = str(fecha_str).split(' ')[0].strip()
+            # Limpieza de fecha: Tomar solo los primeros 10 caracteres (DD/MM/AAAA)
+            limpia = str(fecha_str).strip()[:10]
+            # Forzar interpretación Día/Mes/Año
             fecha_inicio = pd.to_datetime(limpia, dayfirst=True, errors='coerce')
+            
             if pd.isna(fecha_inicio): return 0
             
+            # Fecha actual del sistema (11 de marzo 2026)
             hoy = datetime.now()
             diferencia = (hoy - fecha_inicio).days + 1
             return diferencia if diferencia >= 0 else 0
         except:
             return 0
 
-    # Sobrescribimos la columna H con el cálculo fresco
-    df[col_dias] = df[col_inicio].apply(calcular_formula)
+    # Aplicamos el cálculo a la columna H basándonos en la columna G
+    df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # 4. Consolidación de filas
+    # 4. Consolidación de pacientes (Agrupar filas múltiples)
     def consolidar(group):
         res = group.iloc[0].copy()
         nulos = ['nan', 'None', 'none', '', 'NULL', 'NAN']
@@ -91,21 +95,21 @@ def cargar_aislamientos():
         prots = [p for p in group[col_protector].unique() if str(p).strip() not in nulos]
         res[col_protector] = " / ".join(prots) if prots else "VACIO"
         
-        # Fecha de inicio y término (G e I)
+        # Fechas
         res[col_inicio] = next((i for i in group[col_inicio].values if str(i).strip() not in nulos), "VACIO")
         res[col_termino] = next((f for f in group[col_termino].values if str(f).strip() not in nulos), "VACIO")
         
-        # Días (H): Tomamos el máximo del grupo calculado previamente
+        # Días calculados: Tomamos el máximo del grupo
         res[col_dias] = group[col_dias].max()
         return res
 
     df = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
 
-    # 5. Filtro de Activos (Solo donde Columna I sea VACIO)
+    # 5. Filtro de Activos (Término vacío)
     df = df[df[col_termino] == "VACIO"]
     df = df.drop(columns=[col_termino])
     
-    # Asegurar formato numérico para la vista previa
+    # Formato numérico limpio
     df[col_dias] = pd.to_numeric(df[col_dias], errors='coerce').fillna(0).astype(int)
     
     return df[df[col_cama].notna()].sort_values(by=col_cama)
@@ -117,7 +121,7 @@ try:
     df_base = cargar_aislamientos()
     col_prot_name = df_base.columns[3]
     
-    # Filtro de búsqueda
+    # Buscador
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
     if busqueda:
         mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
@@ -130,7 +134,6 @@ try:
     with m1:
         st.metric(label="AISLAMIENTOS TOTALES", value=len(df_filtrado))
     with m2:
-        # Conteo estricto de PROTECTORES en Columna E
         es_prot = df_filtrado[col_prot_name].str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="PROTECTORES DETECTADOS", value=len(df_filtrado[es_prot]))
 
@@ -146,7 +149,7 @@ try:
         if st.button("📤 Enviar Datos a Censo", type="primary"):
             with st.spinner("Actualizando Censo Público..."):
                 if enviar_a_google_sheets(df_base):
-                    st.success(f"✅ Censo actualizado con éxito ({datetime.now().strftime('%H:%M')})")
+                    st.success(f"✅ Censo actualizado ({datetime.now().strftime('%H:%M')})")
                     st.balloons()
     with c3:
         st.link_button("📂 Abrir Hoja de Google Sheets", DESTINATION_SHEET_URL)
@@ -155,7 +158,7 @@ try:
     if not df_filtrado.empty:
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
     else:
-        st.warning("⚠️ No hay aislamientos activos para mostrar.")
+        st.warning("⚠️ No se encontraron resultados.")
 
 except Exception as e:
     st.error(f"Error en el sistema: {e}")
