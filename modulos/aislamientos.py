@@ -139,29 +139,47 @@ def generar_pdf_oficial(df):
 
 @st.cache_data(ttl=2)
 def cargar_datos_aislamiento():
-    url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
-    df = pd.read_csv(url_final, skiprows=1, engine='python')
-    df = df.iloc[:, 1:10]
-    df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
-    df["CAMA"] = df["CAMA"].ffill()
-    df["NOMBRE"] = df["NOMBRE"].ffill()
-    
-    def consolidar(group):
-        res = group.iloc[0].copy()
-        tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-        res["TIPO DE AISLAMIENTO"] = " / ".join(tipos) if len(tipos) > 0 else np.nan
-        return res
+    try:
+        url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
+        df = pd.read_csv(url_final, skiprows=1, engine='python')
+        df = df.iloc[:, 1:10]
+        
+        # Estandarizar columnas
+        df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
+        
+        # Rellenar datos
+        df["CAMA"] = df["CAMA"].ffill()
+        df["NOMBRE"] = df["NOMBRE"].ffill()
+        
+        # --- FILTRO DE VIGENCIA (FECHA DE TÉRMINO VACÍA) ---
+        if "FECHA DE TÉRMINO" in df.columns:
+            # Convertimos a string y tratamos diversos tipos de nulos
+            df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).replace(['nan', 'None', ' ', '', 'NaT'], np.nan)
+            df = df[df["FECHA DE TÉRMINO"].isna()].copy()
+        
+        # Consolidación de tipos de aislamiento
+        def consolidar(group):
+            res = group.iloc[0].copy()
+            if "TIPO DE AISLAMIENTO" in group.columns:
+                tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
+                res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else np.nan
+            return res
 
-    df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
-    if "FECHA DE TÉRMINO" in df.columns:
-        df = df[df["FECHA DE TÉRMINO"].isna()]
-    
-    cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
-    df = df[[c for c in cols_orden if c in df.columns]]
-    df["INSUMO"] = "JABÓN/SANITAS"
-    
-    df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
-    return df.reset_index(drop=True)
+        if not df.empty:
+            df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar)
+            df = df.reset_index(drop=True)
+        
+        # Orden de columnas
+        cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
+        df = df[[c for c in cols_orden if c in df.columns]].copy()
+        df["INSUMO"] = "JABÓN/SANITAS"
+        
+        # Limpieza final
+        df = df.replace(['nan', 'None', '', ' '], np.nan).dropna(subset=["CAMA", "NOMBRE"])
+        return df.reset_index(drop=True)
+    except Exception as e:
+        st.error(f"Error al cargar datos: {e}")
+        return pd.DataFrame()
 
 # --- INTERFAZ ---
 st.title("🦠 Gestión de Vigilancia Epidemiológica")
@@ -171,76 +189,85 @@ tab1, tab2 = st.tabs(["🔍 Monitor y Edición", "📝 Insumos Aislamientos"])
 with tab1:
     df_actual = cargar_datos_aislamiento()
     
-    # --- CÁLCULOS DE CONTEO ---
-    total_general = len(df_actual)
-    # Filtro para Protectores (busca la palabra en la columna de tipo)
-    mask_protector = df_actual["TIPO DE AISLAMIENTO"].str.contains("PROTECTOR", case=False, na=False)
-    df_protectores = df_actual[mask_protector]
-    total_protectores = len(df_protectores)
-    
-    # --- RENDERIZADO DE MÉTRICAS ---
-    m1, m2 = st.columns(2)
-    with m1:
-        st.metric("Total Pacientes Aislados", total_general)
-    with m2:
-        st.metric("Aislamientos Protectores", total_protectores)
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("🔄 Actualizar Monitor", use_container_width=True):
+    if not df_actual.empty:
+        # --- CÁLCULOS DE CONTEO ---
+        total_general = len(df_actual)
+        mask_protector = df_actual["TIPO DE AISLAMIENTO"].str.contains("PROTECTOR", case=False, na=False)
+        df_protectores = df_actual[mask_protector]
+        total_protectores = len(df_protectores)
+        
+        # --- RENDERIZADO DE MÉTRICAS ---
+        m1, m2 = st.columns(2)
+        with m1:
+            st.metric("Total Pacientes Aislados", total_general)
+        with m2:
+            st.metric("Aislamientos Protectores", total_protectores)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("🔄 Actualizar Monitor", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        with c2:
+            if st.button("🚀 Sincronizar Drive", use_container_width=True):
+                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_actual)
+                st.success("Drive Actualizado")
+        with c3:
+            st.link_button("📂 Abrir Sheets", SHEET_URL_EDITABLE, use_container_width=True)
+
+        st.divider()
+        
+        # Sección de Edición Principal
+        st.subheader("📋 Censo General (Editable)")
+        df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
+        
+        if not df_drive.empty:
+            df_ed = st.data_editor(df_drive, use_container_width=True, num_rows="dynamic", hide_index=True)
+            if st.button("💾 Guardar Cambios en Drive", use_container_width=True):
+                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
+                st.toast("Datos guardados", icon="✅")
+        else:
+            st.warning("No se encontraron datos en la hoja de edición.")
+        
+        # Sección Separada para Protectores
+        if total_protectores > 0:
+            with st.expander("🛡️ Ver detalle de Aislamientos Protectores"):
+                st.dataframe(df_protectores, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No hay pacientes con aislamientos vigentes según la base de datos.")
+        if st.button("🔄 Reintentar Carga"):
             st.cache_data.clear()
             st.rerun()
-    with c2:
-        if st.button("🚀 Sincronizar Drive", use_container_width=True):
-            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_actual)
-            st.success("Drive Actualizado")
-    with c3:
-        st.link_button("📂 Abrir Sheets", SHEET_URL_EDITABLE, use_container_width=True)
-
-    st.divider()
-    
-    # Sección de Edición Principal
-    st.subheader("📋 Censo General (Editable)")
-    df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
-    if not df_drive.empty:
-        df_ed = st.data_editor(df_drive, use_container_width=True, num_rows="dynamic", hide_index=True)
-        if st.button("💾 Guardar Cambios en Drive", use_container_width=True):
-            conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
-            st.toast("Datos guardados", icon="✅")
-    
-    # Sección Separada para Protectores
-    if total_protectores > 0:
-        with st.expander("🛡️ Ver detalle de Aislamientos Protectores"):
-            st.dataframe(df_protectores, use_container_width=True, hide_index=True)
 
 with tab2:
     st.header("Generación de Reportes de Insumos")
-    st.info("Descarga el censo de insumos. El PDF está configurado para ajustarse a una sola página.")
     
-    df_insumos = cargar_datos_aislamiento()
-    
-    col_ex, col_pdf = st.columns(2)
-    
-    with col_ex:
-        output_ex = BytesIO()
-        with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
-            df_insumos.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
-            aplicar_formato_excel_oficial(writer, "INSUMOS", df_insumos, "INSUMOS AISLAMIENTOS")
+    if not df_actual.empty:
+        st.info("Descarga el censo de insumos. El PDF está configurado para ajustarse a una sola página.")
+        col_ex, col_pdf = st.columns(2)
         
-        st.download_button(
-            "💾 DESCARGAR EXCEL",
-            output_ex.getvalue(),
-            f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True, type="primary"
-        )
-        
-    with col_pdf:
-        pdf_data = generar_pdf_oficial(df_insumos)
-        st.download_button(
-            "📄 DESCARGAR PDF (UNA SOLA HOJA)",
-            pdf_data,
-            f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.pdf",
-            "application/pdf",
-            use_container_width=True
-        )
+        with col_ex:
+            output_ex = BytesIO()
+            with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
+                df_actual.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
+                aplicar_formato_excel_oficial(writer, "INSUMOS", df_actual, "INSUMOS AISLAMIENTOS")
+            
+            st.download_button(
+                "💾 DESCARGAR EXCEL",
+                output_ex.getvalue(),
+                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, type="primary"
+            )
+            
+        with col_pdf:
+            pdf_data = generar_pdf_oficial(df_actual)
+            st.download_button(
+                "📄 DESCARGAR PDF (UNA SOLA HOJA)",
+                pdf_data,
+                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.pdf",
+                "application/pdf",
+                use_container_width=True
+            )
+    else:
+        st.error("No hay datos disponibles para generar reportes.")
