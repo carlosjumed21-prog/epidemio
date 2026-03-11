@@ -6,3 +6,5 @@ html5lib
 openpyxl
 reportlab
 st-gsheets-connection
+gspread
+google-auth
