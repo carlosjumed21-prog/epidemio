@@ -1,123 +1,86 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
-from io import BytesIO
-from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
 
-# Librerías para Excel y PDF (se mantienen igual)
-from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table as RLTable, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+st.title("🦠 Control de Aislamientos Activos")
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layout="wide")
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8qN_ymtBcRCY2DcyEAANAzPPasVeYL6h0l4-AhuL2JYXpBOQ0e-mtrtoeSRvcnnl66HEh9aCJQwpx/pub?gid=0&single=true&output=csv"
 
-SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
-SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
-
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# --- FUNCIONES DE FORMATO (Omitidas por brevedad, se mantienen igual que tu original) ---
-def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
-    ws = writer.sheets[sheet_name]
-    # ... (Tu código de formato original)
-    pass
-
-def generar_pdf_oficial(df):
-    # ... (Tu código de PDF original)
-    pass
-
-# --- LÓGICA DE DATOS CORREGIDA PARA CELDAS COMBINADAS ---
-
-@st.cache_data(ttl=2)
-def cargar_y_filtrar_datos():
-    try:
-        url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
-        df = pd.read_csv(url_final, skiprows=1, engine='python')
-        
-        # 1. Limpieza inicial de columnas
-        df = df.iloc[:, 1:12] # Tomamos un rango amplio para no perder columnas
-        df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
-        
-        # 2. TRATAMIENTO DE CELDAS COMBINADAS (IMPORTANTE)
-        # Reemplazamos vacíos de texto por NaN real para que ffill funcione
-        df = df.replace(['nan', 'None', '', ' '], np.nan)
-        
-        # Rellenamos hacia abajo las columnas que suelen estar combinadas
-        columnas_a_rellenar = ["CAMA", "REGISTRO", "NOMBRE", "FECHA DE TÉRMINO", "FECHA DE INICIO"]
-        for col in columnas_a_rellenar:
-            if col in df.columns:
-                df[col] = df[col].ffill()
-
-        # 3. FILTRADO DE AISLAMIENTOS VIGENTES
-        # Ahora que ffill ya puso la fecha de término en todas las filas del paciente...
-        # Filtramos: Solo si la FECHA DE TÉRMINO sigue siendo NaN (Vigente)
-        if "FECHA DE TÉRMINO" in df.columns:
-            # Eliminamos filas que tengan CUALQUIER dato en fecha de término
-            df = df[df["FECHA DE TÉRMINO"].isna()].copy()
-
-        # 4. LIMPIEZA DE FILAS VACÍAS (Basura del Sheets)
-        df = df.dropna(subset=["NOMBRE"])
-
-        # 5. CONSOLIDACIÓN DE FILAS (Si un paciente tiene varios tipos de aislamiento)
-        def consolidar(group):
-            res = group.iloc[0].copy()
-            if "TIPO DE AISLAMIENTO" in group.columns:
-                tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-                res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else "N/A"
-            return res
-
-        if not df.empty:
-            df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar).reset_index(drop=True)
-            
-            # Seleccionamos columnas finales
-            cols_ok = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
-            df = df[[c for c in cols_ok if c in df.columns]].copy()
-            df["INSUMO"] = "JABÓN/SANITAS"
-            
-            return df
-        return pd.DataFrame()
-
-    except Exception as e:
-        st.error(f"Error procesando datos: {e}")
-        return pd.DataFrame()
-
-# --- INTERFAZ ---
-st.title("🦠 Control Epidemiológico de Aislamientos")
-
-df_vigentes = cargar_y_filtrar_datos()
-
-tab1, tab2 = st.tabs(["🔍 Monitor y Sincronización", "📝 Reportes"])
-
-with tab1:
-    st.metric("Total Aislamientos Vigentes", len(df_vigentes))
+def cargar_aislamientos_definitivo():
+    # 1. Carga inicial saltando el título
+    df = pd.read_csv(SHEET_URL, skiprows=1, engine='python', encoding='utf-8')
     
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("🔄 1. Actualizar desde Origen", use_container_width=True):
+    # 2. Recorte estricto de Columna B a J (Índices 1 al 9)
+    df = df.iloc[:, 1:10]
+    
+    # Limpiar encabezados
+    df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
+    
+    col_cama = "CAMA"
+    col_nombre = "NOMBRE"
+    col_tipo = "TIPO DE AISLAMIENTO"
+    col_termino = "FECHA DE TÉRMINO"
+
+    # --- LIMPIEZA CRÍTICA DE "NONE" Y ESPACIOS ---
+    # Convertimos todo a string, quitamos espacios y reemplazamos variantes de vacío por NaN real
+    df = df.apply(lambda x: x.astype(str).str.strip())
+    df = df.replace(['nan', 'None', 'none', 'NULL', '', ' '], np.nan)
+
+    # 3. LÓGICA DE UNIÓN DE FILAS DOBLES (SIN PERDER DATOS)
+    # Rellenamos Cama y Nombre hacia abajo para identificar que la fila de abajo es del mismo paciente
+    df[col_cama] = df[col_cama].ffill()
+    df[col_nombre] = df[col_nombre].ffill()
+
+    # Agrupamos por paciente y aplicamos reglas específicas por columna
+    # - TIPO DE AISLAMIENTO: Se combinan con "/"
+    # - DEMÁS COLUMNAS: Se toma el primer valor que NO sea nulo (el dato lleno)
+    def consolidar_paciente(group):
+        # Tomamos la primera fila como base
+        res = group.iloc[0].copy()
+        # Combinamos los Tipos de Aislamiento únicos
+        tipos = group[col_tipo].dropna().unique()
+        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else np.nan
+        # Para el resto de columnas, buscamos el valor que sí tenga datos en el grupo
+        for col in group.columns:
+            if col not in [col_tipo, col_cama, col_nombre]:
+                val_real = group[col].dropna()
+                res[col] = val_real.iloc[0] if not val_real.empty else np.nan
+        return res
+
+    # Aplicamos la consolidación y reseteamos el índice
+    df = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
+
+    # 4. FILTRO DE FECHA DE TÉRMINO (Sombreado verde)
+    # Si la celda tiene cualquier dato, el paciente se oculta
+    if col_termino in df.columns:
+        df = df[df[col_termino].isna()]
+
+    # Limpieza de basura y ordenamiento por cama
+    df = df[df[col_cama].notna()]
+    df = df.sort_values(by=col_cama)
+
+    return df
+
+try:
+    with st.container(border=True):
+        if st.button("🔄 Sincronizar Censo en Tiempo Real"):
             st.cache_data.clear()
             st.rerun()
-    with col_btn2:
-        if st.button("🚀 2. Sincronizar hacia Hoja de Trabajo", use_container_width=True):
-            if not df_vigentes.empty:
-                conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_vigentes)
-                st.success("¡Datos filtrados enviados correctamente!")
-            else:
-                st.warning("No hay datos para enviar.")
 
-    st.divider()
-    st.subheader("📋 Vista Previa de Aislamientos Vigentes")
-    st.dataframe(df_vigentes, use_container_width=True, hide_index=True)
+        df_final = cargar_aislamientos_definitivo()
+        
+        if not df_final.empty:
+            busqueda = st.text_input("🔍 Buscar por Cama o Nombre:", placeholder="Ej. 7305...")
+            if busqueda:
+                mask = df_final.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
+                df_final = df_final[mask]
 
-with tab2:
-    # (Aquí iría tu código de generación de Excel/PDF usando df_vigentes)
-    if not df_vigentes.empty:
-        st.success("Datos listos para descargar.")
-        # Aquí puedes pegar tus botones de descarga de Excel y PDF
-    else:
-        st.error("No hay datos vigentes.")
+            # Mostramos la tabla limpia
+            st.dataframe(df_final, use_container_width=True, hide_index=True)
+            st.success(f"📋 {len(df_final)} Aislamientos Activos detectados.")
+        else:
+            st.warning("⚠️ No se detectaron aislamientos activos (Todos tienen Fecha de Término).")
+
+except Exception as e:
+    st.error(f"Error en la sincronización: {e}")
