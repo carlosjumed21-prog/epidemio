@@ -19,14 +19,16 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Control de Aislamientos", page_icon="🦠", layout="wide")
 
-# URLs de Google Sheets
+# URLs
+# Origen: CSV Público con todos los datos
 SHEET_URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmU8ibxYHge7Mq0bcdBz5oa7TPtWt6-3uxungBZlfHCM7oUzUy2TNL43tOmeHOzHebX-xGfvqFcxiy/pub?gid=1090111501&single=true&output=csv"
+# Destino: Hoja de edición para el equipo
 SHEET_URL_EDITABLE = "https://docs.google.com/spreadsheets/d/1LfQTTfto_I5bpLIyiWblfypD3gu99MoWldmW9bmuJ4A/edit"
 
 # --- CONEXIÓN ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FUNCIONES DE FORMATO DE REPORTES ---
+# --- FUNCIONES DE FORMATO ---
 
 def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     ws = writer.sheets[sheet_name]
@@ -42,8 +44,7 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
     titulo_texto = f"{titulo_reporte} DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)"
     
-    cell_h = ws.cell(row=1, column=1)
-    cell_h.value = titulo_texto
+    cell_h = ws.cell(row=1, column=1, value=titulo_texto)
     cell_h.alignment = center_align
     cell_h.font = Font(bold=True, size=11)
 
@@ -59,144 +60,83 @@ def aplicar_formato_excel_oficial(writer, sheet_name, df, titulo_reporte):
             cell.border = border
             cell.alignment = center_align
 
-    fila_pie = len(df) + 3
-    ws.merge_cells(start_row=fila_pie, start_column=1, end_row=fila_pie, end_column=num_cols)
-    leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
-    
-    cell_nom = ws.cell(row=fila_pie, column=1, value=leyenda)
-    cell_nom.alignment = center_align
-    cell_nom.font = Font(size=9, italic=True)
-    ws.row_dimensions[fila_pie].height = 45
-
-    fila_firma = fila_pie + 1
-    ws.merge_cells(start_row=fila_firma, start_column=1, end_row=fila_firma, end_column=num_cols)
-    cell_auth = ws.cell(row=fila_firma, column=1, value="AUTORIZÓ: DRA. BRENDA CASTILLO MATUS")
-    cell_auth.alignment = center_align
-    cell_auth.font = Font(bold=True, size=11)
-
-    for i in range(1, num_cols + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 25
-
 def generar_pdf_oficial(df):
     output = BytesIO()
-    doc = SimpleDocTemplate(
-        output, 
-        pagesize=landscape(letter), 
-        topMargin=20, 
-        bottomMargin=20, 
-        leftMargin=30, 
-        rightMargin=30
-    )
+    doc = SimpleDocTemplate(output, pagesize=landscape(letter), topMargin=20, bottomMargin=20, leftMargin=30, rightMargin=30)
     styles = getSampleStyleSheet()
-    
-    num_pacientes = len(df)
-    font_size_base = 7 if num_pacientes < 20 else 6
-    leading_base = 8 if num_pacientes < 20 else 7
-    
     estilo_titulo = ParagraphStyle('T', parent=styles['Heading2'], alignment=1, fontSize=11, spaceAfter=2)
-    estilo_subtitulo = ParagraphStyle('S', parent=styles['Normal'], alignment=1, fontSize=9, spaceAfter=10)
-    estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=font_size_base, alignment=1, leading=leading_base)
-    estilo_encabezado = ParagraphStyle('header', parent=styles['Normal'], fontSize=font_size_base + 1, textColor=colors.whitesmoke, alignment=1, fontName='Helvetica-Bold')
-    estilo_leyenda = ParagraphStyle('footer', parent=styles['Normal'], fontSize=7, italic=True, alignment=1, leading=8)
+    estilo_celda = ParagraphStyle('cell', parent=styles['Normal'], fontSize=7, alignment=1)
     
-    elements = []
-    hoy = datetime.now()
-    vencimiento = hoy + timedelta(days=7)
+    elements = [Paragraph("CENSO DE AISLAMIENTOS VIGENTES", estilo_titulo), Spacer(1, 10)]
+    data = [df.columns.tolist()] + df.values.tolist()
     
-    elements.append(Paragraph("CENSO DE AISLAMIENTOS", estilo_titulo))
-    elements.append(Paragraph(
-        f"VIGENCIA: DEL {hoy.strftime('%d/%m/%Y')} AL {vencimiento.strftime('%d/%m/%Y')} (PARA LOS 3 TURNOS Y FINES DE SEMANA)", 
-        estilo_subtitulo
-    ))
-    
-    data = [[Paragraph(col, estilo_encabezado) for col in df.columns]]
-    for row in df.values:
-        data.append([Paragraph(str(item), estilo_celda) for item in row])
-    
-    col_widths = [50, 65, 210, 140, 90, 140]
-    
-    t = RLTable(data, colWidths=col_widths, repeatRows=1)
+    t = RLTable(data, colWidths=[50, 70, 200, 150, 100, 100])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
-    
-    t.hAlign = 'CENTER' 
     elements.append(t)
-    elements.append(Spacer(1, 10))
-    
-    leyenda = "Comentario: de acuerdo con la Norma Oficial Mexicana NOM-045-SSA2-2005, Para la vigilancia epidemiológica, prevención y control de las infecciones nosocomiales. NINGUN RECIPIENTE QUE CONTENGA EL INSUMO DEBERÁ SER RELLENADO O REUTILIZADO."
-    elements.append(Paragraph(leyenda, estilo_leyenda))
-    elements.append(Spacer(1, 5))
-    elements.append(Paragraph("<b>AUTORIZÓ: DRA. BRENDA CASTILLO MATUS</b>", estilo_subtitulo))
-
     doc.build(elements)
     return output.getvalue()
 
-# --- LÓGICA DE DATOS REFORZADA ---
+# --- LÓGICA DE DATOS ---
 
 @st.cache_data(ttl=2)
-def cargar_datos_aislamiento():
-    # 1. Cargar desde URL de Origen (Histórico)
+def cargar_datos_origen():
+    # Cargar desde Origen
     url_final = f"{SHEET_URL_ORIGEN}&cachebust={time.time()}"
     df = pd.read_csv(url_final, skiprows=1, engine='python')
     
-    # 2. Selección de columnas y limpieza de nombres
+    # Selección y limpieza de columnas
     df = df.iloc[:, 1:10]
     df.columns = [str(c).strip().replace('\n', ' ').upper() for c in df.columns]
     
-    # 3. Rellenar datos compartidos (Cama y Nombre)
+    # Rellenar datos
     df["CAMA"] = df["CAMA"].ffill()
     df["NOMBRE"] = df["NOMBRE"].ffill()
     
-    # --- FILTRO CRÍTICO DE VIGENCIA ---
+    # --- FILTRADO REFORZADO ---
+    # 1. Eliminar filas donde el nombre sea nulo o basura del CSV
+    df = df.dropna(subset=["CAMA", "NOMBRE"])
+    df = df[df["NOMBRE"].astype(str).str.strip() != ""]
+    
+    # 2. Condicionante: Solo si FECHA DE TÉRMINO está vacía
     if "FECHA DE TÉRMINO" in df.columns:
-        # Convertimos a string, quitamos espacios y reemplazamos variantes de "vacío" por NaN real
-        df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).str.strip().replace(['nan', 'None', '', 'nan'], np.nan)
-        # Solo nos quedamos con los que tienen la celda vacía (Aislamientos vigentes)
+        # Normalizamos la columna de término para detectar vacíos reales
+        df["FECHA DE TÉRMINO"] = df["FECHA DE TÉRMINO"].astype(str).replace(['nan', 'None', ' ', '', 'NaT'], np.nan)
         df = df[df["FECHA DE TÉRMINO"].isna()].copy()
     
-    # 4. Consolidar tipos de aislamiento (por si un paciente tiene varios en filas distintas)
+    # Consolidar tipos de aislamiento
     def consolidar(group):
         res = group.iloc[0].copy()
         tipos = group["TIPO DE AISLAMIENTO"].dropna().unique()
-        res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else np.nan
+        res["TIPO DE AISLAMIENTO"] = " / ".join(map(str, tipos)) if len(tipos) > 0 else "N/A"
         return res
 
     if not df.empty:
         df = df.groupby(["CAMA", "NOMBRE"], as_index=False, sort=False).apply(consolidar).reset_index(drop=True)
     
-    # 5. Seleccionar columnas finales para el Sheet editable y reportes
     cols_orden = ["CAMA", "REGISTRO", "NOMBRE", "TIPO DE AISLAMIENTO", "FECHA DE INICIO"]
     df = df[[c for c in cols_orden if c in df.columns]].copy()
     df["INSUMO"] = "JABÓN/SANITAS"
     
-    # Limpieza final de filas que resulten estar vacías por error en el origen
-    df = df.dropna(subset=["CAMA", "NOMBRE"])
-    
     return df.reset_index(drop=True)
 
 # --- INTERFAZ ---
-st.title("🦠 Gestión de Vigilancia Epidemiológica")
+st.title("🦠 Control de Aislamientos - Epidemiología")
 
-tab1, tab2 = st.tabs(["🔍 Monitor y Edición", "📝 Insumos Aislamientos"])
+tab1, tab2 = st.tabs(["🔍 Monitor y Edición", "📝 Reportes"])
 
 with tab1:
-    # Este es el DF filtrado desde el Origen (Solo Vigentes)
-    df_vigentes = cargar_datos_aislamiento()
+    df_vigentes = cargar_datos_origen()
     
-    # --- MÉTRICAS ---
-    total_general = len(df_vigentes)
-    mask_protector = df_vigentes["TIPO DE AISLAMIENTO"].str.contains("PROTECTOR", case=False, na=False)
-    total_protectores = len(df_vigentes[mask_protector])
-    
-    m1, m2 = st.columns(2)
-    with m1:
-        st.metric("Total Aislamientos Vigentes", total_general)
-    with m2:
-        st.metric("Aislamientos Protectores", total_protectores)
+    # Métricas reales
+    total_vigentes = len(df_vigentes)
+    st.metric("Aislamientos Vigentes Detectados", total_vigentes)
     
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -204,60 +144,39 @@ with tab1:
             st.cache_data.clear()
             st.rerun()
     with c2:
-        if st.button("🚀 Sincronizar hacia Hoja Editable", use_container_width=True):
-            # Aquí mandamos lo filtrado al segundo Sheets
+        if st.button("🚀 Sincronizar a Hoja Editable", use_container_width=True):
             conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_vigentes)
-            st.success("Hoja Editable Actualizada con datos Vigentes")
+            st.success("Hoja de vaciado actualizada")
     with c3:
-        st.link_button("📂 Abrir Sheets Editable", SHEET_URL_EDITABLE, use_container_width=True)
+        st.link_button("📂 Abrir Hoja de Vaciado", SHEET_URL_EDITABLE, use_container_width=True)
 
     st.divider()
     
-    # --- SECCIÓN DE EDICIÓN ---
-    st.subheader("📋 Censo de Trabajo (Editable)")
-    # Leemos lo que hay en el Sheet editable
+    st.subheader("📋 Editor de Trabajo (Vaciado)")
+    # Leemos la hoja donde se vacían los datos
     try:
-        df_drive = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
-        if not df_drive.empty:
-            df_ed = st.data_editor(df_drive, use_container_width=True, num_rows="dynamic", hide_index=True)
+        df_vaciado = conn.read(spreadsheet=SHEET_URL_EDITABLE, ttl=0)
+        if not df_vaciado.empty:
+            df_ed = st.data_editor(df_vaciado, use_container_width=True, num_rows="dynamic", hide_index=True)
             if st.button("💾 Guardar Cambios Manuales", use_container_width=True):
                 conn.update(spreadsheet=SHEET_URL_EDITABLE, data=df_ed.reset_index(drop=True))
-                st.toast("Datos guardados en Drive", icon="✅")
+                st.toast("Datos guardados", icon="✅")
         else:
-            st.info("La hoja editable está vacía. Usa el botón 'Sincronizar' para traer los datos vigentes.")
+            st.info("La hoja de vaciado está vacía. Presiona 'Sincronizar' para traer los datos vigentes.")
     except:
-        st.error("Error al conectar con la hoja editable.")
+        st.error("No se pudo conectar con la hoja de vaciado.")
 
 with tab2:
-    st.header("Generación de Reportes de Insumos")
-    # Usamos los datos vigentes para los reportes oficiales
-    df_insumos = df_vigentes 
-    
-    col_ex, col_pdf = st.columns(2)
-    
-    if not df_insumos.empty:
+    st.header("Generación de Reportes")
+    if not df_vigentes.empty:
+        col_ex, col_pdf = st.columns(2)
         with col_ex:
             output_ex = BytesIO()
             with pd.ExcelWriter(output_ex, engine='openpyxl') as writer:
-                df_insumos.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
-                aplicar_formato_excel_oficial(writer, "INSUMOS", df_insumos, "INSUMOS AISLAMIENTOS")
-            
-            st.download_button(
-                "💾 DESCARGAR EXCEL",
-                output_ex.getvalue(),
-                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, type="primary"
-            )
+                df_vigentes.to_excel(writer, index=False, sheet_name="INSUMOS", startrow=1)
+                aplicar_formato_excel_oficial(writer, "INSUMOS", df_vigentes, "INSUMOS")
+            st.download_button("💾 Excel de Insumos", output_ex.getvalue(), "Insumos.xlsx", use_container_width=True)
             
         with col_pdf:
-            pdf_data = generar_pdf_oficial(df_insumos)
-            st.download_button(
-                "📄 DESCARGAR PDF (UNA SOLA HOJA)",
-                pdf_data,
-                f"Insumos_Aislamiento_{datetime.now().strftime('%d%m%Y')}.pdf",
-                "application/pdf",
-                use_container_width=True
-            )
-    else:
-        st.warning("No hay datos vigentes para generar reportes.")
+            pdf_data = generar_pdf_oficial(df_vigentes)
+            st.download_button("📄 PDF de Insumos", pdf_data, "Insumos.pdf", use_container_width=True)
