@@ -35,12 +35,13 @@ def enviar_a_google_sheets(df):
 
 def cargar_aislamientos():
     df = pd.read_csv(SHEET_URL_READ, skiprows=1, engine='python', encoding='utf-8')
-    df = df.iloc[:, 1:10]
+    df = df.iloc[:, 1:10] # B a J
     df.columns = [str(c).strip().upper() for c in df.columns]
     
     col_cama = df.columns[0]
     col_nombre = df.columns[1]
     col_tipo = df.columns[2]
+    col_protector = df.columns[3] # Esta es la Columna E original
     col_termino = df.columns[7]
 
     df = df.astype(str).apply(lambda x: x.str.strip())
@@ -53,6 +54,11 @@ def cargar_aislamientos():
         res = group.iloc[0].copy()
         tipos = [t for t in group[col_tipo].unique() if t not in nulos]
         res[col_tipo] = " / ".join(tipos) if tipos else "SIN ESPECIFICAR"
+        
+        # Consolidar protectores (Columna E)
+        prots = [p for p in group[col_protector].unique() if p not in nulos]
+        res[col_protector] = " / ".join(prots) if prots else "VACIO"
+        
         fechas = [f for f in group[col_termino].values if f not in nulos]
         res[col_termino] = fechas[0] if fechas else "VACIO"
         return res
@@ -68,44 +74,31 @@ st.title("🦠 Control de Aislamientos Activos")
 
 try:
     df_base = cargar_aislamientos()
+    col_prot_name = df_base.columns[3] # Referencia a la columna de protectores
     
-    # 1. Buscador (para que los encabezados respondan al filtro)
-    busqueda = st.text_input("🔍 Buscar por Cama o Nombre (filtra las estadísticas):")
-    
+    # Buscador
+    busqueda = st.text_input("🔍 Filtrar vista previa:")
     if busqueda:
         mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
         df_filtrado = df_base[mask]
     else:
         df_filtrado = df_base
 
-    # --- SECCIÓN DE ENCABEZADOS (MÉTRICAS) ---
-    col_m1, col_m2 = st.columns([1, 3])
+    # --- ENCABEZADOS DE CONTEO ---
+    m1, m2 = st.columns(2)
     
-    with col_m1:
-        st.metric(label="Total en Vista", value=len(df_filtrado))
-
-    with col_m2:
-        # Extraer y contar tipos de aislamiento (manejando los que tienen "/" )
-        if not df_filtrado.empty:
-            # Separamos los tipos combinados para contar cada uno individualmente
-            col_tipo_nombre = df_filtrado.columns[2]
-            todos_los_tipos = []
-            for row in df_filtrado[col_tipo_nombre]:
-                todos_los_tipos.extend([t.strip() for t in row.split("/")])
-            
-            conteo_tipos = pd.Series(todos_los_tipos).value_counts()
-            
-            # Formatear el resumen como texto elegante
-            resumen_texto = " | ".join([f"**{tipo}:** {count}" for tipo, count in conteo_tipos.items()])
-            st.write("### Desglose por Tipo")
-            st.markdown(resumen_texto)
-        else:
-            st.write("### Desglose por Tipo")
-            st.write("No hay datos.")
+    with m1:
+        st.metric(label="AISLAMIENTOS TOTALES", value=len(df_filtrado))
+    
+    with m2:
+        # Contamos solo las filas donde la columna de protectores NO sea "VACIO"
+        nulos_prot = ['VACIO', 'nan', 'None', '']
+        total_protectores = len(df_filtrado[~df_filtrado[col_prot_name].isin(nulos_prot)])
+        st.metric(label="PROTECTORES DETECTADOS", value=total_protectores)
 
     st.divider()
 
-    # --- BOTONES DE ACCIÓN ---
+    # --- BOTONES ---
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         if st.button("🔄 Sincronizar Origen"):
@@ -114,17 +107,16 @@ try:
     with c2:
         if st.button("📤 Enviar Datos a Censo", type="primary"):
             with st.spinner("Actualizando Google Sheet..."):
-                if enviar_a_google_sheets(df_base): # Enviamos la base completa, no la filtrada
+                if enviar_a_google_sheets(df_base):
                     st.success("✅ Censo actualizado")
-                    st.balloons()
     with c3:
-        st.link_button("📂 Abrir Google Sheet", DESTINATION_SHEET_URL)
+        st.link_button("📂 Visualizar Censo Público", DESTINATION_SHEET_URL)
 
-    # --- TABLA DE DATOS ---
+    # --- TABLA ---
     if not df_filtrado.empty:
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
     else:
-        st.warning("⚠️ No se encontraron resultados.")
+        st.warning("⚠️ Sin datos.")
 
 except Exception as e:
     st.error(f"Error: {e}")
