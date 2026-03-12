@@ -7,10 +7,9 @@ import time
 
 st.header("🏥 Hoja Diaria - Generador de Kardex")
 
-# --- 1. CONEXIÓN SEGURA Y DINÁMICA ---
+# --- 1. CONEXIÓN SEGURA Y OBTENCIÓN DE IDS INTERNOS ---
 def conectar_google_sheets():
     try:
-        # Extraemos credenciales desde secrets de Streamlit
         creds_dict = dict(st.secrets["connections"]["gsheets"])
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
@@ -19,26 +18,25 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # Abrir el archivo por su ID
         ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
         
-        # Detectamos la hoja maestra (índice 0) dinámicamente
+        # Necesitamos los IDs numéricos (GID) de las hojas para el traspaso forzado
         hoja_maestra = ss.get_worksheet(0)
-        nombre_maestra = hoja_maestra.title # Resuelve el error de 'Hoja 1'
+        gid_maestra = hoja_maestra.id
         
-        # Buscamos o creamos la pestaña de Historial
         try:
             hoja_historial = ss.worksheet("Historial")
         except:
-            # Si no existe, crea una hoja con espacio suficiente
             hoja_historial = ss.add_worksheet(title="Historial", rows="3000", cols="35")
+        
+        gid_historial = hoja_historial.id
             
-        return ss, hoja_maestra, nombre_maestra, hoja_historial
+        return ss, hoja_maestra, gid_maestra, hoja_historial, gid_historial
     except Exception as e:
         st.error(f"⚠️ Error de conexión: {e}")
-        return None, None, None, None
+        return None, None, None, None, None
 
-# --- 2. LECTURA DEL CENSO (ORIGEN) ---
+# --- 2. LECTURA DEL CENSO ---
 URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
 def cargar_censo():
@@ -49,15 +47,18 @@ def cargar_censo():
 
 df_pacientes = cargar_censo()
 
-# --- 3. LÓGICA DE PROCESAMIENTO: LLENAR -> CLONAR FORMATO ---
-def procesar_paciente(ss, h_orig, nombre_orig, h_dest, fila_datos, index_paciente):
+# --- 3. FUNCIÓN DE TRASPASO FORZADO (VÍA GOOGLE API REQUEST) ---
+def traspaso_forzado_con_formato(ss, gid_orig, gid_dest, fila_datos, index_p):
     try:
-        # Procesar fecha y columna X
-        fecha_str = str(fila_datos.iloc[0])
-        dt = datetime.strptime(fecha_str, "%d/%m/%Y")
-        columna_x = dt.day + 3 # Día 1 = Columna D (4)
+        dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
+        columna_x = dt.day + 3 # Día 1 = Col D (índice 3 en API)
         
-        # 1. Llenar los datos primero en la Hoja 1 (donde está el formato)
+        # Cálculo de fila destino (0-indexed para la API)
+        # Bloques de 8 filas. Paciente 0 -> fila 0, Paciente 1 -> fila 8...
+        start_row = index_p * 8
+        
+        # PREPARAR EL PROCESO: Primero escribimos en la MAESTRA (Filas 3-10 -> índices 2-10)
+        hoja_maestra = ss.get_worksheet(0)
         batch = [
             {'range': 'B3', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
             {'range': 'B4', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
@@ -65,73 +66,76 @@ def procesar_paciente(ss, h_orig, nombre_orig, h_dest, fila_datos, index_pacient
             {'range': 'B8', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
             {'range': 'B9', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
             {'range': 'B10', 'values': [[str(fila_datos.iloc[8])]]},# Ingreso
-            {'range': 'D4:AH4', 'values': [[''] * 31]}             # Limpieza X previa
+            {'range': 'D4:AH4', 'values': [[''] * 31]}             # Limpiar X
         ]
-        h_orig.batch_update(batch)
-        h_orig.update_cell(4, columna_x, "X") # Marcar día actual
+        hoja_maestra.batch_update(batch)
+        hoja_maestra.update_cell(4, columna_x, "X")
 
-        # 2. Copiar bloque completo (datos + formato) a la pestaña Historial
-        # Bloques de 8 filas (A3:AI10)
-        fila_dest = (index_paciente * 8) + 1
-        
-        # Sintaxis de rango cruzado: 'Nombre de Hoja'!A1:B2
-        rango_orig_completo = f"'{nombre_orig}'!A3:AI10"
-        rango_dest_completo = f"A{fila_dest}:AI{fila_dest + 7}"
-        
-        # Comando para duplicar el rango de una pestaña a otra
-        h_dest.copy_range(rango_orig_completo, rango_dest_completo)
-        
+        # PASO MAESTRO: Copiar de Hoja 1 a Hoja 2 usando "CopyPasteRequest" de Google
+        # Esto clona TODO: bordes, colores, anchos de columna y datos.
+        body = {
+            "requests": [
+                {
+                    "copyPaste": {
+                        "source": {
+                            "sheetId": gid_orig,
+                            "startRowIndex": 2, "endRowIndex": 10, # Filas 3 a 10
+                            "startColumnIndex": 0, "endColumnIndex": 35 # Col A a AI
+                        },
+                        "destination": {
+                            "sheetId": gid_dest,
+                            "startRowIndex": start_row,
+                            "endRowIndex": start_row + 8,
+                            "startColumnIndex": 0, "endColumnIndex": 35
+                        },
+                        "pasteType": "PASTE_NORMAL" # Copia TODO (Formato + Valores)
+                    }
+                }
+            ]
+        }
+        ss.batch_update(body)
         return True
     except Exception as e:
         if "429" in str(e):
-            st.warning("⏳ Pausa por límite de Google. Esperando 15s...")
             time.sleep(15)
             return False
-        st.error(f"Error con {fila_datos.iloc[4]}: {e}")
+        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
         return False
 
 # --- 4. INTERFAZ ---
 if df_pacientes is not None:
-    st.link_button("📂 Abrir Kardex en Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    st.link_button("📂 Abrir Kardex", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    st.metric("Pacientes en Censo", len(df_pacientes))
     
-    st.metric("Total de Pacientes en Censo", len(df_pacientes))
-    
-    with st.expander("🔍 Ver listado de pacientes"):
-        st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
-
     st.divider()
-    
-    limpiar_h = st.checkbox("Limpiar historial antes de iniciar el procesamiento", value=True)
+    limpiar = st.checkbox("Limpiar Historial antes de empezar", value=True)
 
     if st.button("📥 INICIAR VACIADO MASIVO A HISTORIAL", type="primary"):
-        ss, h_maestra, n_maestra, h_historial = conectar_google_sheets()
+        ss, h_ma, gid_ma, h_hi, gid_hi = conectar_google_sheets()
         
-        if h_maestra and h_historial:
-            if limpiar_h:
-                h_historial.clear()
-                st.info(f"Historial vaciado. Usando plantilla de: {n_maestra}")
+        if h_ma and h_hi:
+            if limpiar:
+                h_hi.clear()
+                st.info("Historial reseteado. Iniciando traspaso forzado...")
 
             progreso = st.progress(0)
             status = st.empty()
-            total_p = len(df_pacientes)
             
             for i, row in df_pacientes.iterrows():
                 nombre_p = row.iloc[4]
-                status.text(f"Procesando ({i+1}/{total_p}): {nombre_p}")
+                status.text(f"Traspasando con formato ({i+1}/{len(df_pacientes)}): {nombre_p}")
                 
-                # Ejecutar proceso
-                if not procesar_paciente(ss, h_maestra, n_maestra, h_historial, row, i):
+                if not traspaso_forzado_con_formato(ss, gid_ma, gid_hi, row, i):
                     time.sleep(10)
-                    procesar_paciente(ss, h_maestra, n_maestra, h_historial, row, i)
+                    traspaso_forzado_con_formato(ss, gid_ma, gid_hi, row, i)
                 
-                progreso.progress((i + 1) / total_p)
-                # Pausa necesaria para evitar error 429 de Google al copiar formatos
-                time.sleep(8) 
+                progreso.progress((i + 1) / len(df_pacientes))
+                time.sleep(8) # Pausa para estabilidad de cuota
             
-            # Limpieza final de la hoja maestra (Opcional, borra los datos del último paciente)
-            h_maestra.batch_update([{'range': 'A3:AI10', 'values': [[''] * 35] * 8}])
+            # Limpieza final de Hoja 1
+            h_ma.batch_update([{'range': 'A3:AI10', 'values': [[''] * 35] * 8}])
             
-            status.success("✅ ¡Censo completado! Revisa la pestaña 'Historial' para ver todos los formatos.")
+            status.success("✅ ¡Proceso terminado! Todos los datos y formatos están en 'Historial'.")
             st.balloons()
 else:
-    st.error("No se pudo cargar el censo de origen.")
+    st.error("No se pudo cargar el censo.")
