@@ -1,105 +1,93 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 st.header("🏥 Hoja Diaria Piso")
-st.markdown("---")
 
-# --- CONFIGURACIÓN DE LINKS ---
+# --- 1. CONFIGURACIÓN DE CONEXIÓN (GSPREAD) ---
+def conectar_google_sheets():
+    # Cargamos credenciales desde secrets.toml
+    creds_dict = st.secrets["connections"]["gsheets"]
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    client = gspread.authorize(creds)
+    # Abrimos por el ID del sheet de salida
+    return client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc").sheet1
+
+# --- 2. LECTURA DE VISTA PREVIA (Censo Origen) ---
 URL_VISTA_PREVIA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=300)
-def cargar_vista_previa():
-    try:
-        # Forzamos que las columnas se lean correctamente por índice
-        df = pd.read_csv(URL_VISTA_PREVIA)
-        return df
-    except Exception as e:
-        st.error(f"Error al cargar la vista previa: {e}")
-        return None
+@st.cache_data(ttl=60)
+def cargar_censo():
+    return pd.read_csv(URL_VISTA_PREVIA)
 
-df_pacientes = cargar_vista_previa()
+df_pacientes = cargar_censo()
 
 if df_pacientes is not None:
-    # --- MÉTRICA: TOTAL DE PACIENTES ---
-    total_pacientes = len(df_pacientes)
-    st.metric(label="Pacientes Totales en Censo", value=total_pacientes)
-    
-    st.subheader("📋 Vista Previa de Pacientes")
+    # Encabezado con totales
+    st.metric("Pacientes en Censo", len(df_pacientes))
     st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
-    
+
     st.divider()
-    
-    with st.form("form_vaciado"):
-        st.subheader("✍️ Registro de Seguimiento")
+
+    # --- 3. FORMULARIO DE SELECCIÓN Y VACIADO ---
+    with st.form("vaciado_kardex"):
+        st.subheader("✍️ Seleccionar Paciente para Vaciado")
         
-        # El usuario selecciona al paciente por nombre (Columna E / Índice 4)
-        nombres_pacientes = df_pacientes.iloc[:, 4].unique()
-        paciente_sel = st.selectbox("Seleccionar Paciente", nombres_pacientes)
+        # Usamos la columna E (Paciente) que es el índice 4
+        nombres = df_pacientes.iloc[:, 4].dropna().unique()
+        paciente_sel = st.selectbox("Paciente a procesar:", nombres)
         
-        comentarios = st.text_area("Notas / Observaciones adicionales")
-        
-        if st.form_submit_button("Guardar en Plantilla"):
+        submit = st.form_submit_button("🚀 Transferir a Plantilla")
+
+        if submit:
             try:
-                # 1. Obtener la fila completa del paciente seleccionado
-                datos_paciente = df_pacientes[df_pacientes.iloc[:, 4] == paciente_sel].iloc[0]
+                # Extraer datos de la fila del paciente
+                datos = df_pacientes[df_pacientes.iloc[:, 4] == paciente_sel].iloc[0]
                 
-                # 2. Procesar la FECHA (Columna A / Índice 0) para el mapeo dinámico
-                # Formato esperado: dd/mm/aaaa
-                fecha_str = str(datos_paciente.iloc[0])
-                fecha_dt = datetime.strptime(fecha_str, "%d/%m/%Y")
+                # --- PROCESAMIENTO DE FECHA Y DÍA ---
+                # Columna A (Índice 0) -> formato dd/mm/aaaa
+                fecha_raw = str(datos.iloc[0])
+                fecha_dt = datetime.strptime(fecha_raw, "%d/%m/%Y")
                 dia = fecha_dt.day
                 mes_num = fecha_dt.month
                 
-                # Diccionario para traducir mes a texto para celda B2
-                meses_txt = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
-                             7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
-                nombre_mes = meses_txt.get(mes_num, "")
+                meses = {1:"Enero", 2:"Febrero", 3:"Marzo", 4:"Abril", 5:"Mayo", 6:"Junio",
+                         7:"Julio", 8:"Agosto", 9:"Septiembre", 10:"Octubre", 11:"Noviembre", 12:"Diciembre"}
+                
+                # --- CÁLCULO DE COLUMNA PARA LA "X" ---
+                # Si el día 1 es columna D (4), entonces la columna es: dia + 3
+                # gspread usa números: A=1, B=2, C=3, D=4...
+                col_x = dia + 3 
 
-                # 3. Lógica de conexión para escritura
-                conn = st.connection("gsheets", type=GSheetsConnection)
+                # --- OPERACIÓN EN GOOGLE SHEETS ---
+                hoja = conectar_google_sheets()
                 
-                # Mapeo de celdas según tus instrucciones:
-                # Paciente (E) -> A4
-                # Cama (C) -> B3
-                # Edad (G) -> B7
-                # Registro (D) -> B8
-                # F. Ingreso (I) -> B9
-                # Mes (mm) -> B2
-                
-                updates = [
-                    {"cell": "A4", "value": str(datos_paciente.iloc[4])}, # Paciente
-                    {"cell": "B3", "value": str(datos_paciente.iloc[2])}, # Cama
-                    {"cell": "B7", "value": str(datos_paciente.iloc[6])}, # Edad
-                    {"cell": "B8", "value": str(datos_paciente.iloc[3])}, # Registro
-                    {"cell": "B9", "value": str(datos_paciente.iloc[8])}, # Fecha Ingreso
-                    {"cell": "B2", "value": nombre_mes}                  # Mes en texto
+                # Lista de actualizaciones (Celda, Valor)
+                batch_updates = [
+                    {'range': 'A4', 'values': [[str(datos.iloc[4])]]}, # Paciente (Col E)
+                    {'range': 'B3', 'values': [[str(datos.iloc[2])]]}, # Cama (Col C)
+                    {'range': 'B7', 'values': [[str(datos.iloc[6])]]}, # Edad (Col G)
+                    {'range': 'B8', 'values': [[str(datos.iloc[3])]]}, # Registro (Col D)
+                    {'range': 'B9', 'values': [[str(datos.iloc[8])]]}, # F. Ingreso (Col I)
+                    {'range': 'B2', 'values': [[meses[mes_num]]]]}    # Mes
                 ]
-
-                # --- LÓGICA DE LA "X" EN EL DÍA ---
-                # D es 1, E es 2... AH es 31. 
-                # Calculamos la letra de la columna sumando el offset al código ASCII de 'D'
-                # Para días > 23 (columna Z), esto se complica en Excel/Sheets, 
-                # pero st-gsheets-connection permite mapear por DataFrame o gspread.
                 
-                # Como es una plantilla fija, lo más seguro es usar gspread o actualizar el rango
-                # Por simplicidad aquí calculamos la columna de la D (col 4) a la AH (col 34)
-                col_dia_idx = 3 + dia # 1 de marzo -> col 4 (D)
+                # Ejecutar actualizaciones básicas
+                for update in batch_updates:
+                    hoja.update(range_name=update['range'], values=update['values'])
                 
-                # Registramos en consola o interfaz para verificar
-                st.write(f"Día detectado: {dia}. Marcando columna del día.")
-
-                # Aquí ejecutamos la actualización (requiere que el service account tenga permisos)
-                # Nota: st-gsheets-connection es mejor para DataFrames. 
-                # Para celdas exactas como A4, B3, lo ideal es usar la librería gspread directamente
-                # pero con st.connection podemos intentar enviar un registro.
+                # Colocar la "X" en la fila 3, columna calculada por el día
+                hoja.update_cell(3, col_x, "X")
                 
-                st.success(f"✅ Datos de {paciente_sel} procesados para el día {dia} de {nombre_mes}.")
+                st.success(f"✅ Se transfirieron los datos de {paciente_sel}. Día {dia} marcado con X.")
                 st.balloons()
 
             except Exception as e:
-                st.error(f"Error al procesar el mapeo: {e}")
+                st.error(f"Error al guardar: {e}")
+                st.info("Asegúrate de que el Service Account tenga permiso de EDITOR en el Sheet de destino.")
 
 else:
-    st.warning("No hay datos en el censo para mostrar.")
+    st.warning("No se pudo cargar el censo.")
