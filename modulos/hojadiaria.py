@@ -1,118 +1,106 @@
 import streamlit as st
 import pandas as pd
 import gspread
+from gspread_formatting import * # Librería para asegurar formatos si fuera necesario
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import time
 
 st.header("🏥 Hoja Diaria Piso")
 
-# --- 1. CONFIGURACIÓN DE CONEXIÓN ---
+# --- 1. CONEXIÓN ---
 def conectar_google_sheets():
     try:
         creds_dict = dict(st.secrets["connections"]["gsheets"])
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-            
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
-        
-        SHEET_ID = "116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc"
-        spreadsheet = client.open_by_key(SHEET_ID)
-        return spreadsheet.get_worksheet(0) 
+        # Necesitamos el objeto spreadsheet para operaciones de copiado
+        ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
+        return ss.get_worksheet(0)
     except Exception as e:
         st.error(f"⚠️ Error de conexión: {e}")
         return None
 
-# --- 2. LECTURA DEL CENSO ---
+# --- 2. LECTURA ---
 URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
 @st.cache_data(ttl=30)
-def cargar_censo_publico():
-    try:
-        return pd.read_csv(URL_ORIGEN)
-    except Exception as e:
-        st.error(f"Error al leer el censo de origen: {e}")
-        return None
+def cargar_datos():
+    return pd.read_csv(URL_ORIGEN)
 
-df_pacientes = cargar_censo_publico()
+df_pacientes = cargar_datos()
 
-# --- 3. FUNCIÓN CORE DE VACIADO ---
-def vaciar_paciente(hoja, fila_datos):
-    """Lógica para clonar plantilla y llenar datos de un solo paciente"""
+# --- 3. FUNCIÓN DE VACIADO CON FORMATO ---
+def vaciar_paciente_con_formato(hoja, fila_datos):
     try:
-        # Extraer info
         dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
         dia_num = dt.day
-        
-        # A. Clonación: Insertar espacio y desplazar (A3:AI10 -> A11:AI18)
-        hoja.insert_rows([[''] * 35] * 8, row=11)
-        rango_plantilla = hoja.get('A3:AI10')
-        hoja.update(range_name='A11:AI18', values=rango_plantilla)
-
-        # B. Limpieza de X en fila 4 original
-        limpieza_x = [[''] * 31]
-        hoja.update(range_name='D4:AH4', values=limpieza_x)
-
-        # C. Llenado de datos en plantilla superior
-        hoja.update_acell('B3', str(fila_datos.iloc[1]))  # Especialidad
-        hoja.update_acell('B4', str(fila_datos.iloc[2]))  # Cama
-        hoja.update_acell('A5', str(fila_datos.iloc[4]))  # Paciente
-        hoja.update_acell('B8', str(fila_datos.iloc[6]))  # Edad
-        hoja.update_acell('B9', str(fila_datos.iloc[3]))  # Registro
-        hoja.update_acell('B10', str(fila_datos.iloc[8])) # Ingreso
-
-        # D. Nueva X
         columna_x = dia_num + 3
+
+        # 1. CLONACIÓN CON FORMATO
+        # Insertamos las 8 filas vacías
+        hoja.insert_rows([[''] * 35] * 8, row=11)
+        
+        # Copiamos el rango A3:AI10 al A11:AI18 manteniendo TODO el formato
+        # Esta función de gspread es la que permite duplicar colores, bordes, etc.
+        hoja.copy_range("A3:AI10", "A11:AI18", copy_format=True, strategy="DEFAULT")
+
+        # 2. VACIADO DE DATOS (Batch)
+        batch_data = [
+            {'range': 'B3', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
+            {'range': 'B4', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
+            {'range': 'A5', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
+            {'range': 'B8', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
+            {'range': 'B9', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
+            {'range': 'B10', 'values': [[str(fila_datos.iloc[8])]]},# Ingreso
+            {'range': 'D4:AH4', 'values': [[''] * 31]}             # Limpiar X
+        ]
+        hoja.batch_update(batch_data)
+
+        # 3. Colocar la nueva X
         hoja.update_cell(4, columna_x, "X")
+        
         return True
     except Exception as e:
-        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
+        if "429" in str(e):
+            time.sleep(10)
+            return False
+        st.error(f"Error con {fila_datos.iloc[4]}: {e}")
         return False
 
 # --- 4. INTERFAZ ---
 if df_pacientes is not None:
-    # Fila de botones superiores
-    col_btn1, col_btn2 = st.columns([1, 4])
-    with col_btn1:
-        st.link_button("📂 Ver Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        st.link_button("📂 Abrir Sheet", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
     
-    st.metric("Pacientes listos para capturar", len(df_pacientes))
-
+    st.metric("Pacientes en Censo", len(df_pacientes))
     st.divider()
 
-    # Opción 1: Captura Individual
-    with st.expander("🎯 Captura Individual"):
-        with st.form("individual"):
-            nombres = df_pacientes.iloc[:, 4].dropna().unique().tolist()
-            p_sel = st.selectbox("Selecciona Paciente:", nombres)
-            if st.form_submit_button("Registrar Solo Este"):
-                hoja = conectar_google_sheets()
-                if hoja:
-                    f_datos = df_pacientes[df_pacientes.iloc[:, 4] == p_sel].iloc[0]
-                    if vaciar_paciente(hoja, f_datos):
-                        st.success(f"Registrado: {p_sel}")
-                        st.balloons()
-
-    # Opción 2: Captura Masiva
-    st.subheader("🚀 Acciones Masivas")
-    if st.button("📥 Capturar TODOS los pacientes del censo", type="primary"):
+    # Opción Masiva
+    if st.button("📥 Capturar TODO el Censo con Formato", type="primary"):
         hoja = conectar_google_sheets()
         if hoja:
             progreso = st.progress(0)
-            status_text = st.empty()
+            status = st.empty()
             total = len(df_pacientes)
             
             for i, row in df_pacientes.iterrows():
                 nombre_p = row.iloc[4]
-                status_text.text(f"Procesando {i+1}/{total}: {nombre_p}")
-                vaciar_paciente(hoja, row)
+                status.text(f"Procesando {i+1}/{total}: {nombre_p}")
+                
+                exito = vaciar_paciente_con_formato(hoja, row)
+                if not exito: # Reintento por cuota
+                    time.sleep(5)
+                    vaciar_paciente_con_formato(hoja, row)
+                
                 progreso.progress((i + 1) / total)
-                time.sleep(1) # Pausa breve para evitar bloqueos de API de Google
+                time.sleep(3) # Pausa más larga para proteger la cuota de formato
             
-            status_text.success(f"✅ ¡Se han capturado {total} pacientes exitosamente!")
+            status.success(f"✅ ¡Vaciado masivo completado con éxito!")
             st.balloons()
-
 else:
-    st.warning("No se detectó el censo de origen.")
+    st.error("No se pudo cargar el censo.")
