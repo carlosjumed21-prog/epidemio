@@ -26,10 +26,11 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. LÓGICA DE PROCESAMIENTO ---
+# --- 2. MOTOR DE PROCESAMIENTO (SIN LLAMADAS A CELL()) ---
 def procesar_paciente_individual(ss, h_ma, h_hi, fila_datos, reg_map, fila_disponible):
     registro = str(fila_datos.iloc[3]).strip()
-    dia = int(str(fila_datos.iloc[0]).split('/')[0])
+    fecha_str = str(fila_datos.iloc[0])
+    dia = int(fecha_str.split('/')[0])
     col_x = dia + 3
     
     es_nuevo = False
@@ -38,7 +39,7 @@ def procesar_paciente_individual(ss, h_ma, h_hi, fila_datos, reg_map, fila_dispo
     else:
         fila_base = fila_disponible
         es_nuevo = True
-        # Clonar Plantilla
+        # Clonar Plantilla (Esta es una llamada necesaria)
         body = {"requests": [{"copyPaste": {
             "source": {"sheetId": h_ma.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
             "destination": {"sheetId": h_hi.id, "startRowIndex": fila_base - 1, "endRowIndex": fila_base + 7, "startColumnIndex": 0, "endColumnIndex": 35},
@@ -46,26 +47,19 @@ def procesar_paciente_individual(ss, h_ma, h_hi, fila_datos, reg_map, fila_dispo
         }}]}
         ss.batch_update(body)
 
-    # Preparar celdas a actualizar en el bloque
-    # B3, B4, A5, B7, B8, B9 y la X
-    celdas = [
-        (fila_base, 2, str(fila_datos.iloc[1])),     # Especialidad
-        (fila_base + 1, 2, str(fila_datos.iloc[2])), # Cama
-        (fila_base + 2, 1, str(fila_datos.iloc[4])), # Paciente
-        (fila_base + 4, 2, str(fila_datos.iloc[6])), # Edad
-        (fila_base + 5, 2, str(fila_datos.iloc[3])), # Registro
-        (fila_base + 6, 2, str(fila_datos.iloc[8])), # Ingreso
-        (fila_base + 1, col_x, "X")                 # Marcado de fecha
+    # Creamos los objetos Cell localmente (SIN consultar a la API de Google)
+    lista_celdas_locales = [
+        gspread.Cell(row=fila_base, col=2, value=str(fila_datos.iloc[1])),     # B3
+        gspread.Cell(row=fila_base + 1, col=2, value=str(fila_datos.iloc[2])), # B4
+        gspread.Cell(row=fila_base + 2, col=1, value=str(fila_datos.iloc[4])), # A5
+        gspread.Cell(row=fila_base + 4, col=2, value=str(fila_datos.iloc[6])), # B7
+        gspread.Cell(row=fila_base + 5, col=2, value=str(fila_datos.iloc[3])), # B8
+        gspread.Cell(row=fila_base + 6, col=2, value=str(fila_datos.iloc[8])), # B9
+        gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  # Marcado X
     ]
     
-    # Actualización por bloque para evitar saturar la API
-    lista_celdas = []
-    for r, c, val in celdas:
-        cell = h_hi.cell(r, c)
-        cell.value = val
-        lista_celdas.append(cell)
-    
-    h_hi.update_cells(lista_celdas, value_input_option='USER_ENTERED')
+    # Mandamos el bloque de celdas del paciente de una sola vez
+    h_hi.update_cells(lista_celdas_locales, value_input_option='USER_ENTERED')
     
     return es_nuevo
 
@@ -90,24 +84,33 @@ if 'df_vig' in st.session_state:
             status = st.empty()
             status.info("🔍 Analizando historial...")
             
-            # Obtener registros actuales en Historial (Columna B / Fila 6 de cada bloque)
+            # Obtenemos TODO el historial de una vez para no pedir fila por fila
             data_h = h_hi.get_all_values()
             reg_map = {}
             for r in range(5, len(data_h), 8):
-                rv = str(data_h[r][1]).strip()
-                if rv: reg_map[rv] = r - 5 + 1
+                if r < len(data_h):
+                    rv = str(data_h[r][1]).strip()
+                    if rv: reg_map[rv] = r - 5 + 1
             
             fila_nueva = len(data_h) + 1
             progreso = st.progress(0)
             
             for i, row in df.iterrows():
-                status.text(f"Procesando: {row.iloc[4]}")
-                creado = procesar_paciente_individual(ss, h_ma, h_hi, row, reg_map, fila_nueva)
-                if creado:
-                    fila_nueva += 8
+                nombre_p = str(row.iloc[4])
+                status.text(f"Procesando: {nombre_p}")
+                
+                try:
+                    creado = procesar_paciente_individual(ss, h_ma, h_hi, row, reg_map, fila_nueva)
+                    if creado:
+                        fila_nueva += 8
+                    
+                    # Pausa estratégica para no quemar la cuota
+                    time.sleep(3) 
+                except Exception as e:
+                    st.error(f"Error en {nombre_p}: {e}")
+                    break
                 
                 progreso.progress((i + 1) / len(df))
-                time.sleep(2) # Pausa pequeña para estabilidad
 
             status.success("✅ Sincronización terminada.")
             st.balloons()
