@@ -7,7 +7,7 @@ import time
 
 st.header("🏥 Hoja Diaria - Generador de Kardex")
 
-# --- 1. CONEXIÓN SEGURA Y OBTENCIÓN DE IDS INTERNOS ---
+# --- 1. CONEXIÓN SEGURA Y OBTENCIÓN DE IDS ---
 def conectar_google_sheets():
     try:
         creds_dict = dict(st.secrets["connections"]["gsheets"])
@@ -20,10 +20,11 @@ def conectar_google_sheets():
         
         ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
         
-        # Necesitamos los IDs numéricos (GID) de las hojas para el traspaso forzado
+        # Identificamos la Hoja Maestra (Índice 0)
         hoja_maestra = ss.get_worksheet(0)
         gid_maestra = hoja_maestra.id
         
+        # Identificamos o creamos la Hoja de Historial
         try:
             hoja_historial = ss.worksheet("Historial")
         except:
@@ -47,48 +48,52 @@ def cargar_censo():
 
 df_pacientes = cargar_censo()
 
-# --- 3. FUNCIÓN DE TRASPASO FORZADO (VÍA GOOGLE API REQUEST) ---
-def traspaso_forzado_con_formato(ss, gid_orig, gid_dest, fila_datos, index_p):
+# --- 3. FUNCIÓN DE TRASPASO CON MAPEO ACTUALIZADO ---
+def traspaso_con_formato(ss, gid_orig, gid_dest, fila_datos, index_p):
     try:
         dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
-        columna_x = dt.day + 3 # Día 1 = Col D (índice 3 en API)
+        columna_x = dt.day + 3 
         
-        # Cálculo de fila destino (0-indexed para la API)
-        # Bloques de 8 filas. Paciente 0 -> fila 0, Paciente 1 -> fila 8...
-        start_row = index_p * 8
+        # Fila destino en la Hoja 2 (0-indexed)
+        start_row_dest = index_p * 8
         
-        # PREPARAR EL PROCESO: Primero escribimos en la MAESTRA (Filas 3-10 -> índices 2-10)
+        # AJUSTE DE MAPEO POR ELIMINACIÓN DE FILA 5:
+        # iloc[0]: Fecha (se mantiene)
+        # iloc[1]: Especialidad (se mantiene)
+        # iloc[2]: Cama (se mantiene)
+        # iloc[3]: Registro (antes era 3, ahora se extrae de la nueva posición)
+        # iloc[4]: Nombre (antes era 4, ahora es el nuevo 3 o 4 dependiendo del CSV)
+        
         hoja_maestra = ss.get_worksheet(0)
         batch = [
             {'range': 'B3', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
             {'range': 'B4', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
-            {'range': 'A5', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
-            {'range': 'B8', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
-            {'range': 'B9', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
-            {'range': 'B10', 'values': [[str(fila_datos.iloc[8])]]},# Ingreso
+            {'range': 'A5', 'values': [[str(fila_datos.iloc[3])]]}, # Paciente (Ajustado)
+            {'range': 'B8', 'values': [[str(fila_datos.iloc[5])]]}, # Edad (Ajustado)
+            {'range': 'B9', 'values': [[str(fila_datos.iloc[2])]]}, # Registro (Ajustado)
+            {'range': 'B10', 'values': [[str(fila_datos.iloc[7])]]},# Ingreso (Ajustado)
             {'range': 'D4:AH4', 'values': [[''] * 31]}             # Limpiar X
         ]
         hoja_maestra.batch_update(batch)
         hoja_maestra.update_cell(4, columna_x, "X")
 
-        # PASO MAESTRO: Copiar de Hoja 1 a Hoja 2 usando "CopyPasteRequest" de Google
-        # Esto clona TODO: bordes, colores, anchos de columna y datos.
+        # B. Copiamos el bloque completo de Hoja 1 a Hoja 2 (Historial)
         body = {
             "requests": [
                 {
                     "copyPaste": {
                         "source": {
                             "sheetId": gid_orig,
-                            "startRowIndex": 2, "endRowIndex": 10, # Filas 3 a 10
-                            "startColumnIndex": 0, "endColumnIndex": 35 # Col A a AI
+                            "startRowIndex": 2, "endRowIndex": 10, 
+                            "startColumnIndex": 0, "endColumnIndex": 35
                         },
                         "destination": {
                             "sheetId": gid_dest,
-                            "startRowIndex": start_row,
-                            "endRowIndex": start_row + 8,
+                            "startRowIndex": start_row_dest,
+                            "endRowIndex": start_row_dest + 8,
                             "startColumnIndex": 0, "endColumnIndex": 35
                         },
-                        "pasteType": "PASTE_NORMAL" # Copia TODO (Formato + Valores)
+                        "pasteType": "PASTE_NORMAL"
                     }
                 }
             ]
@@ -99,43 +104,42 @@ def traspaso_forzado_con_formato(ss, gid_orig, gid_dest, fila_datos, index_p):
         if "429" in str(e):
             time.sleep(15)
             return False
-        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
+        st.error(f"Error con {fila_datos.iloc[3] if len(fila_datos)>3 else 'Paciente'}: {e}")
         return False
 
 # --- 4. INTERFAZ ---
 if df_pacientes is not None:
-    st.link_button("📂 Abrir Kardex", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    st.link_button("📂 Abrir Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
     st.metric("Pacientes en Censo", len(df_pacientes))
     
     st.divider()
-    limpiar = st.checkbox("Limpiar Historial antes de empezar", value=True)
+    limpiar_h = st.checkbox("Limpiar Historial antes de empezar", value=True)
 
-    if st.button("📥 INICIAR VACIADO MASIVO A HISTORIAL", type="primary"):
+    if st.button("📥 INICIAR VACIADO MASIVO", type="primary"):
         ss, h_ma, gid_ma, h_hi, gid_hi = conectar_google_sheets()
         
         if h_ma and h_hi:
-            if limpiar:
+            if limpiar_h:
                 h_hi.clear()
-                st.info("Historial reseteado. Iniciando traspaso forzado...")
+                st.info("Historial reseteado. Procesando con nuevo mapeo...")
 
             progreso = st.progress(0)
             status = st.empty()
+            total = len(df_pacientes)
             
             for i, row in df_pacientes.iterrows():
-                nombre_p = row.iloc[4]
-                status.text(f"Traspasando con formato ({i+1}/{len(df_pacientes)}): {nombre_p}")
+                # Nombre ahora está en iloc[3] tras eliminar la fila 5
+                nombre_p = row.iloc[3] if len(row) > 3 else "Paciente"
+                status.text(f"Procesando ({i+1}/{total}): {nombre_p}")
                 
-                if not traspaso_forzado_con_formato(ss, gid_ma, gid_hi, row, i):
+                if not traspaso_con_formato(ss, gid_ma, gid_hi, row, i):
                     time.sleep(10)
-                    traspaso_forzado_con_formato(ss, gid_ma, gid_hi, row, i)
+                    traspaso_con_formato(ss, gid_ma, gid_hi, row, i)
                 
-                progreso.progress((i + 1) / len(df_pacientes))
-                time.sleep(8) # Pausa para estabilidad de cuota
+                progreso.progress((i + 1) / total)
+                time.sleep(8) 
             
-            # Limpieza final de Hoja 1
-            h_ma.batch_update([{'range': 'A3:AI10', 'values': [[''] * 35] * 8}])
-            
-            status.success("✅ ¡Proceso terminado! Todos los datos y formatos están en 'Historial'.")
+            status.success("✅ ¡Proceso completado con el nuevo mapeo!")
             st.balloons()
 else:
     st.error("No se pudo cargar el censo.")
