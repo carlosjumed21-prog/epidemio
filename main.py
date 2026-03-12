@@ -1,7 +1,6 @@
 import streamlit as st
 
 # --- 1. CONFIGURACIÓN GLOBAL ---
-# Debe ser la primera instrucción de Streamlit en el archivo
 st.set_page_config(
     page_title="EpidemioManager - CMN 20 de Noviembre", 
     page_icon="🏥",
@@ -29,8 +28,7 @@ else:
 st.sidebar.divider()
 
 # --- 3. NAVEGACIÓN Y ESTRUCTURA DE PÁGINAS ---
-# Definimos las rutas a los archivos dentro de la carpeta 'modulos'
-# IMPORTANTE: Asegúrate de que los archivos existan físicamente en esa carpeta.
+# Aquí vinculamos el nombre visible con el archivo físico hojadiaria.py
 pg = st.navigation([
     st.Page(
         "modulos/censo_diario.py", 
@@ -49,12 +47,11 @@ pg = st.navigation([
         icon="🦠"
     ),
     st.Page(
-        "modulos/piso.py", 
-        title="Seguimiento de Piso", 
+        "modulos/hojadiaria.py", # Nombre del archivo físico en la carpeta modulos
+        title="Censo Diario Piso", # Nombre que verá el usuario en el menú
         icon="🏥"
     ),
 ])
 
 # --- 4. EJECUCIÓN ---
-# Este comando renderiza la página seleccionada en la navegación
 pg.run()
