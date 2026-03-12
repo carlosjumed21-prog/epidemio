@@ -18,7 +18,6 @@ archivo_subido = st.sidebar.file_uploader(
     help="Arrastra aquí el archivo generado por el sistema del hospital."
 )
 
-# Manejo del estado de la sesión para el archivo compartido
 if archivo_subido:
     st.session_state['archivo_compartido'] = archivo_subido
     st.sidebar.success("✅ Censo cargado")
@@ -28,7 +27,6 @@ else:
 st.sidebar.divider()
 
 # --- 3. NAVEGACIÓN Y ESTRUCTURA DE PÁGINAS ---
-# Aquí vinculamos el nombre visible con el archivo físico hojadiaria.py
 pg = st.navigation([
     st.Page(
         "modulos/censo_diario.py", 
@@ -46,10 +44,17 @@ pg = st.navigation([
         title="Aislamientos", 
         icon="🦠"
     ),
+    # Tu pestaña original
     st.Page(
-        "modulos/hojadiaria.py", # Nombre del archivo físico en la carpeta modulos
-        title="Censo Diario Piso", # Nombre que verá el usuario en el menú
+        "modulos/piso.py", 
+        title="Seguimiento de Piso", 
         icon="🏥"
+    ),
+    # La nueva pestaña agregada
+    st.Page(
+        "modulos/hojadiaria.py", 
+        title="Hoja Diaria Piso", 
+        icon="📝" 
     ),
 ])
 
