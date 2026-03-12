@@ -5,9 +5,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import time
 
-st.header("🏥 Sincronizador de Vigilancia (Mapeo por Registro)")
-
-# --- 1. CONEXIÓN ---
+# --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 def conectar_google_sheets():
     try:
         creds_dict = dict(st.secrets["connections"]["gsheets"])
@@ -25,35 +23,24 @@ def conectar_google_sheets():
             h_historial = ss.add_worksheet(title="Historial", rows="5000", cols="35")
         return ss, h_maestra, h_historial
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. LECTURA DEL CENSO ---
-URL_CENSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
-
-def cargar_censo_nube():
-    try:
-        return pd.read_csv(URL_CENSO)
-    except:
-        return None
-
-# --- 3. MOTOR DE VIGILANCIA (NUEVO vs EXISTENTE) ---
+# --- 2. MOTOR DE VIGILANCIA (LÓGICA DE DUPLICADOS) ---
 def procesar_registro(ss, h_maestra, h_historial, fila_datos, reg_map):
-    # Extraemos datos del censo (A=0, B=1, C=2, D=3, E=4, G=6, I=8)
+    # Mapeo: A=0, B=1, C=2, D=3, E=4, G=6, I=8
     registro = str(fila_datos.iloc[3]).strip()
     fecha_str = str(fila_datos.iloc[0])
     dia = int(fecha_str.split('/')[0])
-    col_x = dia + 3 # Día 1 = Col D (4)
+    col_x = dia + 3 
 
     if registro in reg_map:
-        # --- PACIENTE EXISTENTE ---
         fila_base = reg_map[registro]
         accion = "Actualizado"
     else:
-        # --- PACIENTE NUEVO ---
         vals = h_historial.get_all_values()
         fila_base = len(vals) + 1
-        # Clonar Plantilla (CopyPaste Request)
+        # Clonar Plantilla (A3:AI10)
         body = {"requests": [{"copyPaste": {
             "source": {"sheetId": h_maestra.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
             "destination": {"sheetId": h_historial.id, "startRowIndex": fila_base - 1, "endRowIndex": fila_base + 7, "startColumnIndex": 0, "endColumnIndex": 35},
@@ -62,69 +49,81 @@ def procesar_registro(ss, h_maestra, h_historial, fila_datos, reg_map):
         ss.batch_update(body)
         accion = "Nuevo"
 
-    # ESCRIBIR/ACTUALIZAR DATOS EN EL BLOQUE (B3, B4, A5, B7, B8, B9)
-    # B3 es fila_base, B4 es fila_base+1, A5 es fila_base+2, B7 es fila_base+4, B8 es fila_base+5, B9 es fila_base+6
+    # Actualizar datos en el bloque
     batch_updates = [
-        {'range': f'Historial!B{fila_base}',     'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
-        {'range': f'Historial!B{fila_base + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
-        {'range': f'Historial!A{fila_base + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
-        {'range': f'Historial!B{fila_base + 4}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
-        {'range': f'Historial!B{fila_base + 5}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
-        {'range': f'Historial!B{fila_base + 6}', 'values': [[str(fila_datos.iloc[8])]]}  # Ingreso
+        {'range': f'Historial!B{fila_base}',     'values': [[str(fila_datos.iloc[1])]]}, # Especialidad (B3)
+        {'range': f'Historial!B{fila_base + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama (B4)
+        {'range': f'Historial!A{fila_base + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente (A5)
+        {'range': f'Historial!B{fila_base + 4}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad (B7)
+        {'range': f'Historial!B{fila_base + 5}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro (B8)
+        {'range': f'Historial!B{fila_base + 6}', 'values': [[str(fila_datos.iloc[8])]]}  # Ingreso (B9)
     ]
     ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': batch_updates})
-    
-    # Marcar X en la fila 4 del bloque (fila_base + 1)
     h_historial.update_cell(fila_base + 1, col_x, "X")
     return accion
 
-# --- 4. INTERFAZ ---
-if st.button("🔄 1. REFRESH: Cargar Censo Actual"):
-    df = cargar_censo_nube()
-    if df is not None:
-        st.session_state['df_vig'] = df
-        st.success(f"Censo listo con {len(df)} pacientes.")
+# --- 3. INTERFAZ Y ENCABEZADOS RESTAURADOS ---
+st.title("🏥 Vigilancia Epidemiológica")
+
+# Botón de Refresh
+if st.button("🔄 1. REFRESH: Cargar Censo Actual", use_container_width=True):
+    URL_CENSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
+    try:
+        df_cloud = pd.read_csv(URL_CENSO)
+        st.session_state['df_vig'] = df_cloud
+        st.success("Censo sincronizado desde la nube.")
+    except:
+        st.error("Error al conectar con el Censo.")
 
 if 'df_vig' in st.session_state:
     df = st.session_state['df_vig']
-    st.dataframe(df.iloc[:, [3,4,2]], use_container_width=True) # Vista rápida: Registro, Nombre, Cama
+    
+    # --- ENCABEZADOS RESTAURADOS ---
+    st.metric("📊 Total de Pacientes en Censo", len(df))
+    
+    with st.expander("🔍 Ver listado de pacientes para procesar"):
+        st.dataframe(df.iloc[:, [3,4,2,1]], use_container_width=True, hide_index=True)
 
+    st.divider()
+
+    # --- BOTONES DE ACCIÓN ---
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🚩 INICIO DE VIGILANCIA (BORRAR TODO)"):
+        if st.button("🚩 INICIO DE VIGILANCIA (BORRAR TODO)", use_container_width=True):
             ss, h_ma, h_hi = conectar_google_sheets()
             if ss:
                 h_hi.clear()
                 st.warning("Historial reseteado. Creando base...")
+                prog = st.progress(0)
                 for i, row in df.iterrows():
                     procesar_registro(ss, h_ma, h_hi, row, {})
-                    time.sleep(4)
+                    prog.progress((i+1)/len(df))
+                    time.sleep(5)
                 st.success("Base de vigilancia creada.")
 
     with col2:
-        if st.button("🔄 VIGILANCIA DIARIA (ACTUALIZAR)", type="primary"):
+        if st.button("🔄 VIGILANCIA DIARIA (ACTUALIZAR)", type="primary", use_container_width=True):
             ss, h_ma, h_hi = conectar_google_sheets()
             if ss:
-                msg = st.empty()
-                msg.info("Buscando registros existentes en el Historial...")
+                status_msg = st.empty()
+                status_msg.info("⏳ Buscando pacientes existentes en el historial...")
                 
-                # Leemos la columna B del historial para buscar registros (donde cae el B8)
-                # Obtenemos todos los valores de la columna B
-                col_b = h_historial.col_values(2) # Columna B es la 2
+                # Corregido: Obtener columna B directamente de h_hi después de conectar
+                col_b = h_hi.col_values(2) 
                 reg_map = {}
-                # Buscamos el registro en las posiciones 8, 16, 24... (índices 7, 15, 23...)
                 for idx, val in enumerate(col_b):
                     clean_val = str(val).strip()
-                    if clean_val and clean_val.isdigit(): # Si parece un número de registro
-                        # El bloque empieza 5 filas arriba de donde está el registro (B8)
+                    if clean_val and clean_val.isdigit():
+                        # El registro está en B8, el bloque inicia 5 filas arriba
                         fila_inicio_bloque = (idx + 1) - 5
                         reg_map[clean_val] = fila_inicio_bloque
                 
                 prog = st.progress(0)
                 for i, row in df.iterrows():
-                    nombre = row.iloc[4]
-                    msg.text(f"Analizando: {nombre}")
+                    nombre_p = row.iloc[4]
+                    status_msg.text(f"Analizando: {nombre_p}")
                     procesar_registro(ss, h_ma, h_hi, row, reg_map)
                     prog.progress((i+1)/len(df))
-                    time.sleep(4)
-                msg.success("Sincronización completa: Se actualizaron existentes y se añadieron nuevos.")
+                    time.sleep(5)
+                status_msg.success("✅ Sincronización completa.")
+                st.balloons()
