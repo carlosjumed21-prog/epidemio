@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
 import time
 
 # --- 1. CONEXIÓN ---
@@ -26,12 +25,9 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. FUNCIÓN DE ACTUALIZACIÓN ACUMULATIVA ---
-def actualizar_bloque_paciente(ss, h_hi, fila_base, fila_datos, col_x):
-    """
-    Escribe datos y AGREGA una 'X' en el día correspondiente sin borrar las anteriores.
-    """
-    # Preparar los datos clínicos para actualizar (Cama, Edad, etc. pueden cambiar)
+# --- 2. FUNCIÓN DE ACTUALIZACIÓN ---
+def actualizar_bloque_paciente(h_hi, fila_base, fila_datos, col_x):
+    """Actualiza datos clínicos y marca la X acumulativa"""
     lista_celdas = [
         gspread.Cell(row=fila_base, col=2, value=str(fila_datos.iloc[1])),     # B3: Especialidad
         gspread.Cell(row=fila_base + 1, col=2, value=str(fila_datos.iloc[2])), # B4: Cama
@@ -39,14 +35,12 @@ def actualizar_bloque_paciente(ss, h_hi, fila_base, fila_datos, col_x):
         gspread.Cell(row=fila_base + 4, col=2, value=str(fila_datos.iloc[6])), # B7: Edad
         gspread.Cell(row=fila_base + 5, col=2, value=str(fila_datos.iloc[3])), # B8: Registro
         gspread.Cell(row=fila_base + 6, col=2, value=str(fila_datos.iloc[8])), # B9: F. Ingreso
-        gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  # Agrega X en el día actual
+        gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  # Marcado X
     ]
-    
-    # Enviar actualización masiva de celdas del bloque
     h_hi.update_cells(lista_celdas, value_input_option='USER_ENTERED')
 
 # --- 3. INTERFAZ ---
-st.title("🏥 Vigilancia Epidemiológica Acumulativa")
+st.title("🏥 Vigilancia Epidemiológica - Control de Duplicados")
 
 if st.button("🔄 1. REFRESH: Cargar Censo Actual", use_container_width=True):
     URL_CENSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
@@ -58,91 +52,82 @@ if st.button("🔄 1. REFRESH: Cargar Censo Actual", use_container_width=True):
 
 if 'df_vig' in st.session_state:
     df = st.session_state['df_vig']
-    st.metric("📊 Pacientes en Censo Hoy", len(df))
+    st.metric("📊 Pacientes en Censo", len(df))
     
     col_inic, col_diaria = st.columns(2)
 
     with col_inic:
-        if st.button("🚩 INICIO DE VIGILANCIA (LIMPIAR TODO)", use_container_width=True):
+        if st.button("🚩 INICIO (LIMPIEZA TOTAL)", use_container_width=True):
             ss, h_ma, h_hi = conectar_google_sheets()
             if ss:
                 h_hi.clear()
-                st.warning("Historial reseteado. Creando base inicial...")
+                st.warning("Historial borrado. Creando base desde cero...")
                 prog = st.progress(0)
-                fila_n = 1
+                f_nueva = 1
                 for i, row in df.iterrows():
-                    # Clonar plantilla de Hoja 1
-                    body = {"requests": [{"copyPaste": {
+                    # Clonar plantilla
+                    ss.batch_update({"requests": [{"copyPaste": {
                         "source": {"sheetId": h_ma.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
-                        "destination": {"sheetId": h_hi.id, "startRowIndex": fila_n - 1, "endRowIndex": fila_n + 7, "startColumnIndex": 0, "endColumnIndex": 35},
+                        "destination": {"sheetId": h_hi.id, "startRowIndex": f_nueva - 1, "endRowIndex": f_nueva + 7, "startColumnIndex": 0, "endColumnIndex": 35},
                         "pasteType": "PASTE_NORMAL"
-                    }}]}
-                    ss.batch_update(body)
-                    
+                    }}]})
                     dia = int(str(row.iloc[0]).split('/')[0])
-                    actualizar_bloque_paciente(ss, h_hi, fila_n, row, dia + 3)
-                    
-                    fila_n += 8
+                    actualizar_bloque_paciente(h_hi, f_nueva, row, dia + 3)
+                    f_nueva += 8
                     prog.progress((i+1)/len(df))
                     time.sleep(2)
                 st.success("✅ Base inicial creada.")
 
     with col_diaria:
-        if st.button("🔄 VIGILANCIA DIARIA (AGREGAR 'X' DE HOY)", type="primary", use_container_width=True):
+        if st.button("🔄 VIGILANCIA DIARIA (SIN DUPLICADOS)", type="primary", use_container_width=True):
             ss, h_ma, h_hi = conectar_google_sheets()
             if ss:
                 status = st.empty()
-                status.info("🔍 Analizando censo y acumulando días...")
+                status.info("🔍 Mapeando Historial para evitar duplicados...")
                 
-                data_h = h_hi.get_all_values()
+                # 1. Obtener todos los valores de la columna B para buscar Registros
+                col_b = h_hi.col_values(2) # Obtiene toda la columna B
                 reg_map = {}
-                registros_historial_set = set()
                 
-                # Mapeo de registros existentes en Col B (Fila 8 de cada bloque)
-                for r_idx, fila_lista in enumerate(data_h):
-                    if len(fila_lista) > 1:
-                        val_reg = str(fila_lista[1]).strip()
-                        if val_reg and val_reg.isdigit():
-                            fila_base_bloque = (r_idx + 1) - 5
-                            reg_map[val_reg] = fila_base_bloque
-                            registros_historial_set.add(val_reg)
+                # Buscamos el Registro en la fila 8, 16, 24... (index 7, 15, 23 en Python)
+                for i in range(5, len(col_b), 8):
+                    val = str(col_b[i]).strip()
+                    if val and val != "" and val != "Registro":
+                        # La fila base del bloque es (i+1) - 5
+                        reg_map[val] = (i + 1) - 5
 
                 ingresos = 0
                 seguimientos = 0
-                procesados_hoy = set()
-                fila_nueva = len(data_h) + 1
-                
+                f_disponible = len(col_b) + 1
                 prog = st.progress(0)
-                for i, row in df.iterrows():
+                
+                for idx, row in df.iterrows():
                     reg_id = str(row.iloc[3]).strip()
                     dia = int(str(row.iloc[0]).split('/')[0])
-                    procesados_hoy.add(reg_id)
-                    
+                    status.text(f"Analizando: {row.iloc[4]}")
+
                     if reg_id in reg_map:
-                        # SEGUIMIENTO: Solo agrega la X en el nuevo día
-                        actualizar_bloque_paciente(ss, h_hi, reg_map[reg_id], row, dia + 3)
+                        # PACIENTE EXISTE: Actualizar
+                        actualizar_bloque_paciente(h_hi, reg_map[reg_id], row, dia + 3)
                         seguimientos += 1
                     else:
-                        # INGRESO: Nueva plantilla
-                        body = {"requests": [{"copyPaste": {
+                        # PACIENTE NUEVO: Crear plantilla al final
+                        ss.batch_update({"requests": [{"copyPaste": {
                             "source": {"sheetId": h_ma.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
-                            "destination": {"sheetId": h_hi.id, "startRowIndex": fila_nueva - 1, "endRowIndex": fila_nueva + 7, "startColumnIndex": 0, "endColumnIndex": 35},
+                            "destination": {"sheetId": h_hi.id, "startRowIndex": f_disponible - 1, "endRowIndex": f_disponible + 7, "startColumnIndex": 0, "endColumnIndex": 35},
                             "pasteType": "PASTE_NORMAL"
-                        }}]}
-                        ss.batch_update(body)
-                        actualizar_bloque_paciente(ss, h_hi, fila_nueva, row, dia + 3)
-                        fila_nueva += 8
+                        }}]})
+                        actualizar_bloque_paciente(h_hi, f_disponible, row, dia + 3)
+                        reg_map[reg_id] = f_disponible # Evitar duplicar si aparece 2 veces en el mismo censo
+                        f_disponible += 8
                         ingresos += 1
                     
-                    prog.progress((i+1)/len(df))
+                    prog.progress((idx+1)/len(df))
                     time.sleep(2)
 
-                egresos = registros_historial_set - procesados_hoy
-                
                 status.empty()
-                st.subheader("📋 Resumen Epidemiológico")
-                c1, c2, c3 = st.columns(3)
+                st.subheader("📋 Resumen Diario")
+                c1, c2 = st.columns(2)
                 c1.metric("🆕 Ingresos", ingresos)
                 c2.metric("📋 Seguimientos", seguimientos)
-                c3.metric("🚪 Egresos (Altas)", len(egresos))
-                st.success("✅ Historial actualizado con las marcas del día.")
+                st.success("✅ Sincronización terminada correctamente.")
