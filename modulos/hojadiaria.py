@@ -26,7 +26,7 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. MOTOR DE PROCESAMIENTO OPTIMIZADO ---
+# --- 2. PREPARACIÓN DE DATOS ---
 def preparar_datos_paciente(h_maestra, h_historial, fila_datos, reg_map, fila_disponible_nueva):
     registro = str(fila_datos.iloc[3]).strip()
     fecha_str = str(fila_datos.iloc[0])
@@ -34,7 +34,7 @@ def preparar_datos_paciente(h_maestra, h_historial, fila_datos, reg_map, fila_di
     col_x = dia + 3 
 
     requests_formato = []
-    batch_data = []
+    batch_values = []
     es_nuevo = False
     fila_actual_bloque = 0
 
@@ -43,7 +43,6 @@ def preparar_datos_paciente(h_maestra, h_historial, fila_datos, reg_map, fila_di
     else:
         fila_actual_bloque = fila_disponible_nueva
         es_nuevo = True
-        # Request para clonar plantilla
         requests_formato.append({
             "copyPaste": {
                 "source": {"sheetId": h_maestra.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
@@ -52,24 +51,22 @@ def preparar_datos_paciente(h_maestra, h_historial, fila_datos, reg_map, fila_di
             }
         })
 
-    # Datos a escribir
-    celdas_y_valores = [
-        (f'B{fila_actual_bloque}', str(fila_datos.iloc[1])),     # Especialidad
-        (f'B{fila_actual_bloque + 1}', str(fila_datos.iloc[2])), # Cama
-        (f'A{fila_actual_bloque + 2}', str(fila_datos.iloc[4])), # Paciente
-        (f'B{fila_actual_bloque + 4}', str(fila_datos.iloc[6])), # Edad
-        (f'B{fila_actual_bloque + 5}', str(fila_datos.iloc[3])), # Registro
-        (f'B{fila_actual_bloque + 6}', str(fila_datos.iloc[8]))  # Ingreso
+    # Datos a escribir (Mapeo estricto Carlos)
+    val_map = [
+        (fila_actual_bloque, 2, str(fila_datos.iloc[1])),     # B3: Especialidad
+        (fila_actual_bloque + 1, 2, str(fila_datos.iloc[2])), # B4: Cama
+        (fila_actual_bloque + 2, 1, str(fila_datos.iloc[4])), # A5: Paciente
+        (fila_actual_bloque + 4, 2, str(fila_datos.iloc[6])), # B7: Edad
+        (fila_actual_bloque + 5, 2, str(fila_datos.iloc[3])), # B8: Registro
+        (fila_actual_bloque + 6, 2, str(fila_datos.iloc[8])), # B9: Ingreso
+        (fila_actual_bloque + 1, col_x, "X")                 # Marcado de X
     ]
     
-    for celda, valor in celdas_y_valores:
-        batch_data.append({'range': f'Historial!{celda}', 'values': [[valor]]})
-    
-    # Marcado de X (Columna dinámica)
-    letra_col = gspread.utils.rowcol_to_a1(fila_actual_bloque + 1, col_x)
-    batch_data.append({'range': f'Historial!{letra_col}', 'values': [['X']]})
+    for r, c, val in val_map:
+        range_a1 = f"Historial!{gspread.utils.rowcol_to_a1(r, c)}"
+        batch_values.append({'range': range_a1, 'values': [[val]]})
 
-    return requests_formato, batch_data, es_nuevo
+    return requests_formato, batch_values, es_nuevo
 
 # --- 3. INTERFAZ ---
 st.title("🏥 Vigilancia Epidemiológica")
@@ -84,15 +81,14 @@ if st.button("🔄 REFRESH: Cargar Censo", use_container_width=True):
 
 if 'df_vig' in st.session_state:
     df = st.session_state['df_vig']
-    st.metric("📊 Pacientes en Censo", len(df))
+    st.metric("📊 Total Pacientes", len(df))
     
-    if st.button("🚀 VIGILANCIA DIARIA (Sincronización Total)", type="primary", use_container_width=True):
+    if st.button("🚀 VIGILANCIA DIARIA (Sincronización)", type="primary", use_container_width=True):
         ss, h_ma, h_hi = conectar_google_sheets()
         if ss:
             status = st.empty()
-            status.info("🔍 Mapeando historial y preparando datos...")
+            status.info("🔍 Mapeando historial...")
             
-            # 1. Mapeo inicial
             data_h = h_hi.get_all_values()
             reg_map = {}
             for r in range(5, len(data_h), 8):
@@ -101,25 +97,30 @@ if 'df_vig' in st.session_state:
             
             fila_nueva = len(data_h) + 1
             all_format_reqs = []
-            all_batch_data = []
+            all_batch_values = []
 
-            # 2. Procesar pacientes localmente (Rápido)
             for i, row in df.iterrows():
-                f_reqs, b_data, es_nuevo = preparar_datos_paciente(h_ma, h_hi, row, reg_map, fila_nueva)
+                f_reqs, b_vals, es_nuevo = preparar_datos_paciente(h_ma, h_hi, row, reg_map, fila_nueva)
                 all_format_reqs.extend(f_reqs)
-                all_batch_data.extend(b_data)
+                all_batch_values.extend(b_vals)
                 if es_nuevo: fila_nueva += 8
             
-            # 3. EJECUCIÓN MASIVA (Pocas peticiones a la API)
             try:
+                # A. Primero aplicamos formatos (Estructura)
                 if all_format_reqs:
-                    status.text("🎨 Clonando plantillas nuevas...")
+                    status.text("🎨 Generando plantillas nuevas...")
                     ss.batch_update({"requests": all_format_reqs})
                 
-                status.text("✍️ Escribiendo datos clínicos...")
-                ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': all_batch_data})
+                # B. Luego aplicamos los valores (Datos)
+                if all_batch_values:
+                    status.text("✍️ Actualizando datos clínicos...")
+                    # USAMOS values_batch_update PARA LOS DATOS
+                    h_hi.spreadsheet.values_batch_update({
+                        'valueInputOption': 'USER_ENTERED', 
+                        'data': all_batch_values
+                    })
                 
-                status.success("✅ ¡Sincronización terminada con éxito!")
+                status.success("✅ Sincronización terminada con éxito.")
                 st.balloons()
             except Exception as e:
-                st.error(f"Error en la subida masiva: {e}")
+                st.error(f"Error técnico en la subida: {e}")
