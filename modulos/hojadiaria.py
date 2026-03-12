@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import time
 
-st.header("🏥 Hoja Diaria - Generador de Kardex")
+st.header("🏥 Sistema de Vigilancia Epidemiológica")
 
 # --- 1. CONEXIÓN SEGURA Y OBTENCIÓN DE IDS ---
 def conectar_google_sheets():
@@ -36,114 +36,121 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return [None]*6
 
-# --- 2. LECTURA DEL CENSO ---
+# --- 2. LECTURA DEL CENSO (URL NUBE) ---
 URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
 def cargar_censo():
     try:
-        # Cargamos el CSV y nos aseguramos de que no haya problemas con columnas vacías
         return pd.read_csv(URL_ORIGEN)
     except:
         return None
 
-df_pacientes = cargar_censo()
-
-# --- 3. FUNCIÓN DE PROCESAMIENTO (MAPEO CORREGIDO) ---
-def traspaso_con_formato(ss, h_orig, n_orig, gid_orig, h_dest, gid_dest, fila_datos, index_p):
+# --- 3. FUNCIÓN MAESTRA: PROCESAR VIGILANCIA ---
+def motor_vigilancia(ss, h_orig, n_orig, gid_orig, h_dest, gid_dest, fila_datos, reg_map, index_p):
     try:
-        dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
-        columna_x = dt.day + 3 
+        # Mapeo origen: A=0, B=1, C=2, D=3, E=4, G=6, I=8
+        registro = str(fila_datos.iloc[3]).strip()
+        fecha_dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
+        columna_x = fecha_dt.day + 3 
         
-        fila_dest_inicio = (index_p * 8) + 1
-
-        # Mapeo estricto basado en tus columnas de origen (A=0, B=1, C=2, D=3, E=4, G=6, I=8)
-        # y celdas de destino (B3, B4, A5, B7, B8, B9)
-        batch = [
-            {'range': 'B3', 'values': [[str(fila_datos.iloc[1])]]}, # ESPECIALIDAD -> B3 (Col B)
-            {'range': 'B4', 'values': [[str(fila_datos.iloc[2])]]}, # CAMA -> B4 (Col C)
-            {'range': 'A5', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente -> A5 (Col E)
-            {'range': 'B7', 'values': [[str(fila_datos.iloc[6])]]}, # EDAD -> B7 (Col G)
-            {'range': 'B8', 'values': [[str(fila_datos.iloc[3])]]}, # REGISTRO -> B8 (Col D)
-            {'range': 'B9', 'values': [[str(fila_datos.iloc[8])]]}, # Fecha de ingreso -> B9 (Col I)
-            {'range': 'D4:AH4', 'values': [[''] * 31]}            # Limpiar X
-        ]
-        
-        h_orig.batch_update(batch)
-        h_orig.update_cell(4, columna_x, "X")
-
-        # Traspaso al historial manteniendo formato
-        body = {
-            "requests": [
-                {
+        # DECISIÓN: ¿Existe el paciente?
+        if registro in reg_map:
+            fila_inicio_dest = reg_map[registro]
+            accion = "Actualizado"
+        else:
+            # Si es nuevo, se coloca al final (basado en index_p o filas existentes)
+            # Para esta lógica de "Vigilancia Diaria", buscamos la última fila con datos
+            vals = h_dest.get_all_values()
+            fila_inicio_dest = len(vals) + 1
+            
+            # Clonamos la plantilla (A3:AI10)
+            body = {
+                "requests": [{
                     "copyPaste": {
-                        "source": {
-                            "sheetId": gid_orig,
-                            "startRowIndex": 2, "endRowIndex": 10,
-                            "startColumnIndex": 0, "endColumnIndex": 35
-                        },
-                        "destination": {
-                            "sheetId": gid_dest,
-                            "startRowIndex": fila_dest_inicio - 1,
-                            "endRowIndex": fila_dest_inicio + 7,
-                            "startColumnIndex": 0, "endColumnIndex": 35
-                        },
+                        "source": {"sheetId": gid_orig, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
+                        "destination": {"sheetId": gid_dest, "startRowIndex": fila_inicio_dest - 1, "endRowIndex": fila_inicio_dest + 7, "startColumnIndex": 0, "endColumnIndex": 35},
                         "pasteType": "PASTE_NORMAL"
                     }
-                }
-            ]
-        }
-        ss.batch_update(body)
-        return True
+                }]
+            }
+            ss.batch_update(body)
+            accion = "Nuevo"
+
+        # Llenamos/Actualizamos datos en el bloque
+        # Celdas: B3(+0), B4(+1), A5(+2), B7(+4), B8(+5), B9(+6)
+        batch = [
+            {'range': f'Historial!B{fila_inicio_dest + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # ESPECIALIDAD
+            {'range': f'Historial!B{fila_inicio_dest + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # CAMA
+            {'range': f'Historial!A{fila_inicio_dest + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
+            {'range': f'Historial!B{fila_inicio_dest + 4}', 'values': [[str(fila_datos.iloc[6])]]}, # EDAD
+            {'range': f'Historial!B{fila_inicio_dest + 5}', 'values': [[str(fila_datos.iloc[3])]]}, # REGISTRO
+            {'range': f'Historial!B{fila_inicio_dest + 6}', 'values': [[str(fila_datos.iloc[8])]]}  # F. INGRESO
+        ]
+        ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': batch})
+        
+        # Marcamos la "X" (Fila 4 original -> fila_inicio_dest + 1)
+        h_dest.update_cell(fila_inicio_dest + 1, columna_x, "X")
+        
+        return accion
     except Exception as e:
         if "429" in str(e):
             time.sleep(15)
             return False
-        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
-        return False
+        return f"Error: {e}"
 
 # --- 4. INTERFAZ ---
-if df_pacientes is not None:
-    # 1. ENCABEZADO Y MÉTRICA
-    st.metric("📊 Total de Pacientes en Censo", len(df_pacientes))
-    
-    col_link, _ = st.columns([1, 2])
-    with col_link:
-        st.link_button("📂 Ver Google Sheets (Kardex)", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+# Botón de Refresh para cargar censo
+if st.button("🔄 ACTUALIZAR CENSO (Refresh)", use_container_width=True):
+    df = cargar_censo()
+    if df is not None:
+        st.session_state['df_vigilancia'] = df
+        st.success(f"Censo cargado: {len(df)} pacientes detectados.")
 
-    # 2. VISTA PREVIA
-    with st.expander("🔍 Ver listado de pacientes para capturar"):
-        st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
+if 'df_vigilancia' in st.session_state:
+    df_pacientes = st.session_state['df_vigilancia']
+    
+    st.metric("📊 Pacientes en Censo", len(df_pacientes))
+    
+    with st.expander("🔍 Ver listado de pacientes detectados"):
+        st.dataframe(df_pacientes.iloc[:, [3,4,2,1]], use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # 3. ACCIONES
-    limpiar_h = st.checkbox("Limpiar historial antes de empezar", value=True)
+    # BOTONES DE DECISIÓN
+    st.subheader("🛠️ Acciones de Vigilancia")
+    col1, col2 = st.columns(2)
 
-    if st.button("📥 INICIAR VACIADO MASIVO", type="primary"):
-        ss, h_ma, n_ma, gid_ma, h_hi, gid_hi = conectar_google_sheets()
-        
-        if h_ma and h_hi:
-            if limpiar_h:
+    with col1:
+        if st.button("🚩 INICIO DE VIGILANCIA", help="Borra historial y genera plantillas nuevas para todos"):
+            ss, h_ma, n_ma, gid_ma, h_hi, gid_hi = conectar_google_sheets()
+            if ss:
                 h_hi.clear()
-                st.info("Historial reseteado. Procesando...")
+                st.warning("Historial reseteado. Generando cuadros...")
+                prog = st.progress(0)
+                for i, row in df_pacientes.iterrows():
+                    motor_vigilancia(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, {}, i)
+                    prog.progress((i+1)/len(df_pacientes))
+                    time.sleep(5)
+                st.success("¡Vigilancia inicial completa!")
 
-            progreso = st.progress(0)
-            status = st.empty()
-            total = len(df_pacientes)
-            
-            for i, row in df_pacientes.iterrows():
-                nombre = row.iloc[4]
-                status.text(f"Procesando ({i+1}/{total}): {nombre}")
+    with col2:
+        if st.button("🔄 VIGILANCIA DIARIA", type="primary", help="Sincroniza: actualiza existentes y añade nuevos"):
+            ss, h_ma, n_ma, gid_ma, h_hi, gid_hi = conectar_google_sheets()
+            if ss:
+                msg = st.empty()
+                msg.info("Analizando historial para evitar duplicados...")
                 
-                if not traspaso_con_formato(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, i):
-                    # Pausa si falla por cuota y reintento
-                    time.sleep(10)
-                    traspaso_con_formato(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, i)
+                # Mapeo de registros en B8 (fila 6 de cada bloque)
+                data_h = h_hi.get_all_values()
+                reg_map = {}
+                for r in range(5, len(data_h), 8):
+                    reg_val = str(data_h[r][1]).strip()
+                    if reg_val: reg_map[reg_val] = r - 5 + 1
                 
-                progreso.progress((i + 1) / total)
-                time.sleep(8) # Pausa de seguridad
-            
-            status.success("✅ ¡Censo completado! Datos y formatos en la pestaña 'Historial'.")
-            st.balloons()
-else:
-    st.error("No se pudo cargar el censo. Verifica la conexión o el enlace CSV.")
+                prog = st.progress(0)
+                for i, row in df_pacientes.iterrows():
+                    msg.text(f"Sincronizando: {row.iloc[4]}")
+                    motor_vigilancia(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, reg_map, i)
+                    prog.progress((i+1)/len(df_pacientes))
+                    time.sleep(5)
+                msg.success("¡Vigilancia diaria actualizada!")
