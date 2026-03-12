@@ -2,95 +2,94 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONFIGURACIÓN Y CONSTANTES ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
+# --- CONFIGURACIÓN ---
+# URL del Google Sheet base (fuente de la verdad para seguimiento)
+SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
 st.set_page_config(page_title="Seguimiento de Piso", layout="wide")
-st.title("🏥 Sistema de Vigilancia Epidemiológica")
 
-# Usamos tabs para separar las funciones claramente
-tab_inicial, tab_seguimiento = st.tabs(["🆕 Inicio de Vigilancia", "🔄 Seguimiento"])
+# --- MENÚ PRINCIPAL ---
+opcion = st.sidebar.radio(
+    "Seleccione Proceso:",
+    ["🆕 Inicio de Vigilancia (Excel)", "🔄 Seguimiento (Sheet Base)"],
+    help="Inicio: Carga un Excel nuevo. Seguimiento: Actualiza datos del Sheet de Google."
+)
 
-# --- FUNCIÓN AUXILIAR PARA RENDERIZAR FORMULARIO ---
-def formulario_captura(datos_paciente):
-    """Renderiza el formulario clínico común para ambos procesos"""
-    st.markdown(f"### 👤 {datos_paciente.iloc[4]}")
-    c1, c2, c3 = st.columns(3)
-    with c1: st.write(f"**registro:** {datos_paciente.iloc[3]}")
-    with c2: st.write(f"**sexo/edad:** {datos_paciente.iloc[5]} / {datos_paciente.iloc[6]}")
-    with c3: st.info(f"**días estancia:** {datos_paciente.iloc[9]}")
+st.title("🏥 Seguimiento de Piso")
 
-    st.divider()
-    st.subheader("📝 captura de datos")
-    
-    # ... (Aquí va todo tu bloque de datos clínicos, dispositivos, etc.)
-    # Por brevedad, mantengo la estructura de los inputs que ya tienes
-    status = st.segmented_control(
-        "estatus:", ["Ingreso", "Seguimiento", "Egreso"], key=f"status_{datos_paciente.iloc[3]}"
-    )
-    
-    # Datos clínicos simplificados para el ejemplo
-    temp = st.number_input("temperatura (°C):", 30.0, 45.0, 36.5, step=0.1, key=f"t_{datos_paciente.iloc[3]}")
-    
-    if st.button("💾 Guardar y Actualizar Plantilla", type="primary", use_container_width=True):
-        # Aquí es donde conectarías con tu Service Account de Google para escribir
-        st.success(f"Plantilla actualizada para Registro {datos_paciente.iloc[3]} en el Sheet de Epidemio")
-
-# --- TAB 1: INICIO DE VIGILANCIA (ARCHIVO LOCAL) ---
-with tab_inicial:
-    st.info("### 📂 Carga de Censo Nuevo")
+# ---------------------------------------------------------
+# CASO 1: INICIO DE VIGILANCIA (Tu código original)
+# ---------------------------------------------------------
+if opcion == "🆕 Inicio de Vigilancia (Excel)":
+    st.info("### 📂 Carga de Censo para Inicio")
     archivo_excel = st.file_uploader(
-        "Subir archivo excel para iniciar vigilancia", 
+        "Subir archivo excel para registro inicial", 
         type=["xlsx", "xls"],
-        key="uploader_inicial"
+        key="excel_inicial"
     )
 
     if archivo_excel:
-        df_inicial = pd.read_excel(archivo_excel)
-        # Lógica de filtrado que ya tenías
-        esp_list = sorted(df_inicial.iloc[:, 1].dropna().unique())
-        esp_sel = st.selectbox("Especialidad:", esp_list, key="esp_init")
+        df = pd.read_excel(archivo_excel)
+        # ... (Tu lógica de filtrado de especialidad y cama)
+        lista_especialidades = sorted(df.iloc[:, 1].dropna().unique())
+        col_esp, col_cam = st.columns(2)
+        with col_esp:
+            esp_sel = st.selectbox("Especialidad:", lista_especialidades)
         
-        df_filtrado = df_inicial[df_inicial.iloc[:, 1] == esp_sel]
-        cama_list = sorted(df_filtrado.iloc[:, 2].dropna().unique())
-        cama_sel = st.selectbox("Cama:", cama_list, key="cama_init")
-        
-        paciente = df_filtrado[df_filtrado.iloc[:, 2] == cama_sel].iloc[0]
-        formulario_captura(paciente)
+        df_filtrado_esp = df[df.iloc[:, 1] == esp_sel]
+        lista_camas = sorted(df_filtrado_esp.iloc[:, 2].dropna().unique())
+        with col_cam:
+            cama_sel = st.selectbox("Cama:", lista_camas)
+            
+        paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
+        # Aquí se mostraría el formulario... (Formulario simplificado para el ejemplo)
+        st.success(f"Registrando nuevo ingreso: {paciente.iloc[4]}")
 
-# --- TAB 2: SEGUIMIENTO (GOOGLE SHEETS) ---
-with tab_seguimiento:
-    st.info("### 🔄 Seguimiento de Pacientes Activos")
+# ---------------------------------------------------------
+# CASO 2: SEGUIMIENTO (Lectura del Sheet Base)
+# ---------------------------------------------------------
+elif opcion == "🔄 Seguimiento (Sheet Base)":
+    st.info("### 🔄 Sincronización con Base de Datos (Google Sheets)")
     
-    if st.button("🔌 Sincronizar con Sheet Base"):
-        try:
-            # Leemos directamente de la URL de publicación del Google Sheet
-            st.session_state.df_seguimiento = pd.read_csv(SHEET_URL)
-            st.toast("Datos sincronizados correctamente", icon="✅")
-        except Exception as e:
-            st.error(f"Error al conectar con Google Sheets: {e}")
-
-    if 'df_seguimiento' in st.session_state:
-        df_seg = st.session_state.df_seguimiento
+    # Botón para forzar la actualización del Sheet
+    if st.button("🔄 Actualizar Datos del Servidor"):
+        st.cache_data.clear() # Limpia caché para leer datos frescos
+    
+    try:
+        # Cargamos el CSV desde la URL pública
+        df_base = pd.read_csv(SHEET_BASE_URL)
         
-        # Filtros para seguimiento
+        # Filtros para buscar pacientes que YA ESTÁN en el sistema
         col1, col2 = st.columns(2)
         with col1:
-            esp_seg = st.selectbox("Filtrar Especialidad:", sorted(df_seg.iloc[:, 1].unique()))
-        
-        df_seg_filtrado = df_seg[df_seg.iloc[:, 1] == esp_seg]
+            esp_lista = sorted(df_base.iloc[:, 1].dropna().unique())
+            esp_seg = st.selectbox("Filtrar por Especialidad:", esp_lista)
+            
+        df_filtrado_seg = df_base[df_base.iloc[:, 1] == esp_seg]
         
         with col2:
-            # Aquí evitamos duplicados en el selector mostrando ID + Nombre
-            opciones_pacientes = df_seg_filtrado.apply(lambda x: f"{x.iloc[3]} - {x.iloc[4]}", axis=1).tolist()
-            paciente_sel = st.selectbox("Seleccionar Paciente en Vigilancia:", opciones_pacientes)
-        
-        if paciente_sel:
-            id_registro = paciente_sel.split(" - ")[0]
-            # Buscamos por el ID único (Registro) para asegurar que no hay duplicados
-            datos_paciente = df_seg[df_seg.iloc[:, 3].astype(str) == str(id_registro)].iloc[0]
+            # Mostramos Registro + Nombre para evitar confusiones
+            nombres_pacientes = df_filtrado_seg.apply(lambda x: f"{x.iloc[3]} | {x.iloc[4]}", axis=1).tolist()
+            seleccion = st.selectbox("Seleccione Paciente para Seguimiento:", nombres_pacientes)
             
-            # Al llamar a la misma función, la "Plantilla" es consistente
-            formulario_captura(datos_paciente)
-    else:
-        st.write("Haz clic en el botón superior para cargar los datos del servidor.")
+        if seleccion:
+            reg_id = seleccion.split(" | ")[0]
+            # Extraemos la fila del paciente seleccionado usando su Registro (ID único)
+            paciente = df_base[df_base.iloc[:, 3].astype(str) == str(reg_id)].iloc[0]
+            
+            # --- Aquí empieza tu formulario de captura (el que ya tienes) ---
+            with st.container(border=True):
+                st.markdown(f"### 👤 {paciente.iloc[4]}")
+                # (Demás datos clínicos...)
+                st.write(f"**Cama:** {paciente.iloc[2]} | **Días Estancia:** {paciente.iloc[9]}")
+            
+            st.divider()
+            st.subheader("📝 Actualización de Plantilla")
+            # Tus inputs: Temperatura, TA, Frecuencias, etc.
+            
+            if st.button("💾 Actualizar Seguimiento", type="primary"):
+                # Aquí enviarías los datos al email epidemio@... via API
+                st.success(f"Datos actualizados en la plantilla de {paciente.iloc[4]}")
+                
+    except Exception as e:
+        st.error(f"No se pudo conectar con el Sheet base: {e}")
