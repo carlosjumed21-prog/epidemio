@@ -9,10 +9,7 @@ st.header("🏥 Hoja Diaria Piso")
 # --- 1. CONFIGURACIÓN DE CONEXIÓN ---
 def conectar_google_sheets():
     try:
-        # Extraemos las credenciales desde los secrets
         creds_dict = dict(st.secrets["connections"]["gsheets"])
-        
-        # Limpieza crucial de la llave privada para evitar errores de formato
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             
@@ -20,13 +17,12 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # Abrimos el archivo por su ID y seleccionamos la primera pestaña
-        # ID: 116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc
-        spreadsheet = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
-        return spreadsheet.get_worksheet(0) # Retorna la primera pestaña
+        # ID de la hoja de salida
+        SHEET_ID = "116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc"
+        spreadsheet = client.open_by_key(SHEET_ID)
+        return spreadsheet.get_worksheet(0) 
     except Exception as e:
         st.error(f"⚠️ Error de conexión: {e}")
-        st.info("Asegúrate de haber compartido el Sheet con el correo de la cuenta de servicio como 'Editor'.")
         return None
 
 # --- 2. LECTURA DEL CENSO (ORIGEN) ---
@@ -42,63 +38,59 @@ def cargar_censo_publico():
 
 df_pacientes = cargar_censo_publico()
 
-# --- 3. INTERFAZ Y LÓGICA DE VACIADO ---
+# --- 3. INTERFAZ Y LÓGICA ---
 if df_pacientes is not None:
-    # Encabezado con métricas
-    st.metric("Total de Pacientes en Censo", len(df_pacientes))
+    st.metric("Pacientes en Censo", len(df_pacientes))
     
-    with st.expander("Ver tabla completa de pacientes"):
+    with st.expander("Ver tabla de origen"):
         st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
 
     st.divider()
 
     with st.form("registro_kardex"):
-        st.subheader("✍️ Transferencia a Plantilla Estándar")
+        st.subheader("✍️ Vaciado a Hoja Diaria")
         
         # Selección por nombre (Columna E / Índice 4)
         nombres = df_pacientes.iloc[:, 4].dropna().unique().tolist()
-        paciente_sel = st.selectbox("Selecciona al Paciente para vaciar datos:", nombres)
+        paciente_sel = st.selectbox("Selecciona al Paciente:", nombres)
         
-        btn_transferir = st.form_submit_button("🚀 Iniciar Vaciado Automático")
+        btn_transferir = st.form_submit_button("🚀 Iniciar Vaciado")
 
         if btn_transferir:
             hoja = conectar_google_sheets()
             
             if hoja:
                 try:
-                    # Extraer datos de la fila del paciente seleccionado
-                    fila_p = df_pacientes[df_pacientes.iloc[:, 4] == paciente_sel].iloc[0]
+                    # Fila del paciente seleccionado
+                    f = df_pacientes[df_pacientes.iloc[:, 4] == paciente_sel].iloc[0]
                     
-                    # Procesar Fecha (Columna A / Índice 0) -> Formato dd/mm/aaaa
-                    fecha_str = str(fila_p.iloc[0])
-                    dt_obj = datetime.strptime(fecha_str, "%d/%m/%Y")
-                    dia_num = dt_obj.day
-                    mes_num = dt_obj.month
+                    # Procesar Fecha (Col A / Índice 0)
+                    dt = datetime.strptime(str(f.iloc[0]), "%d/%m/%Y")
+                    dia_num = dt.day
                     
                     dic_meses = {
                         1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
                         7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
                     }
                     
-                    # --- OPERACIONES DE ACTUALIZACIÓN EN EL SHEET ---
-                    # Usamos update_acell para celdas fijas
-                    hoja.update_acell('A4', str(fila_p.iloc[4])) # Paciente (E)
-                    hoja.update_acell('B3', str(fila_p.iloc[2])) # Cama (C)
-                    hoja.update_acell('B7', str(fila_p.iloc[6])) # Edad (G)
-                    hoja.update_acell('B8', str(fila_p.iloc[3])) # Registro (D)
-                    hoja.update_acell('B9', str(fila_p.iloc[8])) # F. Ingreso (I)
-                    hoja.update_acell('B2', dic_meses[mes_num])  # Mes en texto
+                    # --- ACTUALIZACIÓN DE CELDAS SEGÚN NUEVO MAPEO ---
+                    hoja.update_acell('B2', dic_meses[dt.month])   # Mes
+                    hoja.update_acell('B3', str(f.iloc[1]))        # Especialidad (Col B)
+                    hoja.update_acell('B4', str(f.iloc[2]))        # Cama (Col C)
+                    hoja.update_acell('A5', str(f.iloc[4]))        # Paciente (Col E)
+                    hoja.update_acell('B8', str(f.iloc[6]))        # Edad (Col G)
+                    hoja.update_acell('B9', str(f.iloc[3]))        # Registro (Col D)
+                    hoja.update_acell('B10', str(f.iloc[8]))       # Fecha Ingreso (Col I)
 
-                    # Lógica de la "X": Fila 3, Columna calculada
-                    # Día 1 -> Col D (4), por tanto: dia + 3
-                    hoja.update_cell(3, (dia_num + 3), "X")
+                    # Lógica de la "X": Fila 4, Columna D (4) a AH (34)
+                    # Día 1 + 3 = Columna 4 (D)
+                    columna_x = dia_num + 3
+                    hoja.update_cell(4, columna_x, "X")
                     
-                    st.success(f"✅ ¡Datos de {paciente_sel} transferidos con éxito!")
+                    st.success(f"✅ ¡Datos de {paciente_sel} transferidos a la plantilla!")
                     st.balloons()
                 
                 except Exception as err:
-                    st.error(f"❌ Error durante el mapeo de datos: {err}")
-            else:
-                st.error("No se pudo establecer la conexión con la plantilla de salida.")
+                    st.error(f"❌ Error en el proceso de mapeo: {err}")
 else:
-    st.warning("⚠️ No se pudieron cargar datos del censo de origen. Revisa el link de publicación.")
+    st.warning("No se pudo cargar el censo de origen.")
