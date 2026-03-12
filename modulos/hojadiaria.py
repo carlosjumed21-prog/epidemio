@@ -7,9 +7,10 @@ import time
 
 st.header("🏥 Hoja Diaria - Historial con Formato")
 
-# --- 1. CONEXIÓN ---
+# --- 1. CONEXIÓN SEGURA Y DINÁMICA ---
 def conectar_google_sheets():
     try:
+        # Extraemos las credenciales desde los secrets de Streamlit
         creds_dict = dict(st.secrets["connections"]["gsheets"])
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
@@ -18,106 +19,120 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
+        # ID de tu Google Sheet de salida
         ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
         
-        hoja_plantilla = ss.get_worksheet(0) # Hoja 1
+        # Obtenemos la primera pestaña (donde está tu plantilla original)
+        hoja_plantilla = ss.get_worksheet(0)
+        nombre_p_origen = hoja_plantilla.title # Detecta si es 'Hoja 1', 'Sheet1', etc.
+        
+        # Intentamos obtener la pestaña de Historial, si no existe, la creamos
         try:
             hoja_historial = ss.worksheet("Historial")
         except:
-            hoja_historial = ss.add_worksheet(title="Historial", rows="1000", cols="35")
+            hoja_historial = ss.add_worksheet(title="Historial", rows="2000", cols="35")
             
-        return ss, hoja_plantilla, hoja_historial
+        return ss, nombre_p_origen, hoja_historial
     except Exception as e:
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. LECTURA ---
+# --- 2. LECTURA DEL CENSO DE ORIGEN ---
 URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
-def cargar_censo():
+def cargar_datos_censo():
     try:
+        # Cargamos el CSV publicado del censo
         return pd.read_csv(URL_ORIGEN)
-    except:
+    except Exception as e:
         return None
 
-df_pacientes = cargar_censo()
+df_pacientes = cargar_datos_censo()
 
-# --- 3. FUNCIÓN DE PROCESAMIENTO (SINTAXIS CORREGIDA) ---
-def procesar_a_historial(ss, h_plantilla, h_historial, fila_datos, index_paciente):
+# --- 3. FUNCIÓN DE PROCESAMIENTO (MAPEO Y CLONACIÓN) ---
+def procesar_paciente_al_historial(ss, nombre_plantilla, h_historial, fila_datos, index):
     try:
-        dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
-        columna_x = dt.day + 3
+        # Procesamiento de la fecha para la columna de la "X"
+        fecha_str = str(fila_datos.iloc[0])
+        dt = datetime.strptime(fecha_str, "%d/%m/%Y")
+        columna_x = dt.day + 3 # Día 1 = Columna D (4)
         
-        # Bloque de 8 filas. Paciente 0 -> fila 1, Paciente 1 -> fila 9...
-        fila_destino = (index_paciente * 8) + 1
-        rango_destino = f"A{fila_destino}:AI{fila_destino + 7}"
+        # Cálculo de posición: bloques de 8 filas (A3:AI10)
+        # Paciente 1 inicia en fila 1, Paciente 2 en fila 9...
+        fila_dest = (index * 8) + 1
+        rango_dest = f"A{fila_dest}:AI{fila_dest + 7}"
         
-        # --- COPIADO DE FORMATO (Sintaxis limpia para versiones nuevas) ---
-        # Referenciamos el nombre de la hoja de origen correctamente
-        nombre_origen = h_plantilla.title
-        rango_origen = f"'{nombre_origen}'!A3:AI10"
-        
-        # Clonamos la plantilla al historial
-        h_historial.copy_range(rango_origen, rango_destino)
+        # PASO A: Copiar Plantilla con Formato desde Hoja 1 a Historial
+        rango_orig = f"'{nombre_plantilla}'!A3:AI10"
+        h_historial.copy_range(rango_orig, rango_dest)
 
-        # PASO 2: Llenado de datos (Batch Update)
-        # Usamos el nombre de la hoja 'Historial' para asegurar el destino
-        batch = [
-            {'range': f'Historial!B{fila_destino + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad (B3)
-            {'range': f'Historial!B{fila_destino + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama (B4)
-            {'range': f'Historial!A{fila_destino + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente (A5)
-            {'range': f'Historial!B{fila_destino + 5}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad (B8)
-            {'range': f'Historial!B{fila_destino + 6}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro (B9)
-            {'range': f'Historial!B{fila_destino + 7}', 'values': [[str(fila_datos.iloc[8])]]}  # Ingreso (B10)
+        # PASO B: Llenado de datos usando Batch Update (Una sola petición por paciente)
+        # Mapeo según tus instrucciones: B3, B4, A5, B8, B9, B10 del bloque
+        batch_data = [
+            {'range': f'Historial!B{fila_dest + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
+            {'range': f'Historial!B{fila_dest + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
+            {'range': f'Historial!A{fila_dest + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
+            {'range': f'Historial!B{fila_dest + 5}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
+            {'range': f'Historial!B{fila_dest + 6}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
+            {'range': f'Historial!B{fila_dest + 7}', 'values': [[str(fila_datos.iloc[8])]]}  # F. Ingreso
         ]
-        ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': batch})
+        ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': batch_data})
 
-        # PASO 3: Nueva X (Original fila 4 -> fila_destino + 1)
-        h_historial.update_cell(fila_destino + 1, columna_x, "X")
+        # PASO C: Nueva "X" en la fila del día (Fila 4 original -> fila_dest + 1)
+        h_historial.update_cell(fila_dest + 1, columna_x, "X")
         
         return True
     except Exception as e:
         if "429" in str(e):
-            time.sleep(15)
+            st.warning(f"⏳ Google limitó la velocidad. Esperando para reintentar con {fila_datos.iloc[4]}...")
+            time.sleep(20) # Pausa larga si se agota la cuota
             return False
-        st.error(f"Error en {fila_datos.iloc[4]}: {e}")
+        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
         return False
 
-# --- 4. INTERFAZ ---
+# --- 4. INTERFAZ DE USUARIO ---
 if df_pacientes is not None:
-    st.link_button("📂 Ver Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    # Botón directo para supervisar cambios
+    st.link_button("📂 Abrir Hoja de Salida (Kardex)", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
     
-    st.metric("Pacientes detectados", len(df_pacientes))
+    st.metric("Total de Pacientes en Censo", len(df_pacientes))
     
+    with st.expander("🔍 Ver listado de pacientes detectados"):
+        st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
+
     st.divider()
-    limpiar_antes = st.checkbox("Limpiar Historial antes de procesar", value=True)
 
-    if st.button("📥 INICIAR VACIADO MASIVO", type="primary"):
-        ss_obj, h_plant, h_hist = conectar_google_sheets()
-        if h_plant and h_hist:
-            
-            if limpiar_antes:
+    # Opción de limpieza
+    limpiar = st.checkbox("Limpiar pestaña de Historial antes de iniciar vaciado", value=True)
+
+    if st.button("📥 INICIAR VACIADO MASIVO A HISTORIAL", type="primary"):
+        ss_obj, nombre_p, h_hist = conectar_google_sheets()
+        
+        if ss_obj and h_hist:
+            if limpiar:
                 h_hist.clear()
-                st.info("Historial reseteado.")
+                st.info(f"Hoja de historial preparada. Usando molde de: {nombre_p}")
 
-            progreso = st.progress(0)
-            status = st.empty()
+            bar_progreso = st.progress(0)
+            status_txt = st.empty()
+            total_p = len(df_pacientes)
             
             for i, row in df_pacientes.iterrows():
-                nombre = row.iloc[4]
-                status.text(f"Procesando ({i+1}/{len(df_pacientes)}): {nombre}")
+                nombre_actual = row.iloc[4]
+                status_txt.text(f"Procesando ({i+1}/{total_p}): {nombre_actual}")
                 
-                # Ejecución
-                if not procesar_a_historial(ss_obj, h_plant, h_hist, row, i):
-                    # Pequeña espera extra si falla
-                    time.sleep(10)
-                    procesar_a_historial(ss_obj, h_plant, h_hist, row, i)
+                # Intentamos procesar. Si falla por cuota, el bucle espera.
+                exito = procesar_paciente_al_historial(ss_obj, nombre_p, h_hist, row, i)
                 
-                progreso.progress((i + 1) / len(df_pacientes))
-                # Pausa de 7 segundos para proteger la cuota de formato de Google
-                time.sleep(7) 
+                if not exito:
+                    # Reintento único tras pausa
+                    procesar_paciente_al_historial(ss_obj, nombre_p, h_hist, row, i)
+                
+                bar_progreso.progress((i + 1) / total_p)
+                # Pausa de seguridad vital (8 seg) para copiar formatos sin error 429
+                time.sleep(8) 
             
-            status.success("✅ ¡Proceso completado con formato en la hoja Historial!")
+            status_txt.success("✅ ¡Censo procesado exitosamente en la pestaña Historial!")
             st.balloons()
 else:
-    st.error("No se pudo cargar el censo.")
+    st.error("No se pudo cargar la vista previa del censo. Revisa la URL pública.")
