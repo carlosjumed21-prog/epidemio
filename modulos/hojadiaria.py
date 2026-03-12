@@ -1,38 +1,44 @@
 import streamlit as st
+import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
-# --- 1. CONFIGURACIÓN GLOBAL ---
-st.set_page_config(
-    page_title="EpidemioManager - CMN 20 de Noviembre", 
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- ELIMINA TODO LO QUE SEA SIDEBAR O NAVIGATION AQUÍ ---
+# El sidebar ya lo dibujó main.py automáticamente
 
-# --- 2. BARRA LATERAL (SIDEBAR) ---
-st.sidebar.header("⚙️ Configuración")
+st.header("🏥 Censo Diario Piso")
+st.markdown("---")
 
-archivo_subido = st.sidebar.file_uploader(
-    "Subir Censo HTML", 
-    type=["html", "htm"],
-    help="Arrastra aquí el archivo generado por el sistema del hospital."
-)
+# Link de lectura pública (Vista previa)
+URL_VISTA_PREVIA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
-if archivo_subido:
-    st.session_state['archivo_compartido'] = archivo_subido
-    st.sidebar.success("✅ Censo cargado")
+@st.cache_data(ttl=300)
+def cargar_vista_previa():
+    try:
+        return pd.read_csv(URL_VISTA_PREVIA)
+    except Exception as e:
+        st.error(f"Error al cargar la vista previa: {e}")
+        return None
+
+# Recuperar el archivo subido desde el estado de la sesión si lo necesitas
+if 'archivo_compartido' in st.session_state:
+    archivo = st.session_state['archivo_compartido']
+    # Aquí puedes procesar el HTML si es necesario para esta pestaña
 else:
-    st.sidebar.info("👋 Por favor, sube un censo.")
+    st.info("ℹ️ Puedes subir un censo en la barra lateral para procesar más datos.")
 
-st.sidebar.divider()
+df_pacientes = cargar_vista_previa()
 
-# --- 3. NAVEGACIÓN ---
-# Aquí vinculamos el nombre visible con el nombre del archivo físico
-pg = st.navigation([
-    st.Page("modulos/censo_diario.py", title="Censo Epidemiológico", icon="📋"),
-    st.Page("modulos/insumos.py", title="Censo de Insumos", icon="📦"),
-    st.Page("modulos/aislamientos.py", title="Aislamientos", icon="🦠"),
-    st.Page("modulos/hojadiaria.py", title="Censo Diario Piso", icon="🏥"), # <--- Cambiado a hojadiaria.py
-])
-
-# --- 4. EJECUCIÓN ---
-pg.run()
+if df_pacientes is not None:
+    st.subheader("📋 Vista Previa de Pacientes")
+    st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
+    
+    st.divider()
+    
+    with st.form("form_vaciado"):
+        st.subheader("✍️ Registro de Seguimiento")
+        paciente = st.selectbox("Seleccionar Paciente", df_pacientes.iloc[:, 1].unique())
+        comentarios = st.text_area("Notas")
+        
+        if st.form_submit_button("Guardar en Plantilla"):
+            st.success(f"Registrando datos para {paciente}...")
+            # Aquí irá tu lógica de vaciado con el JSON
