@@ -20,7 +20,7 @@ def conectar_google_sheets():
         
         ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
         
-        hoja_plantilla = ss.get_worksheet(0)
+        hoja_plantilla = ss.get_worksheet(0) # Hoja 1
         try:
             hoja_historial = ss.worksheet("Historial")
         except:
@@ -42,34 +42,26 @@ def cargar_censo():
 
 df_pacientes = cargar_censo()
 
-# --- 3. FUNCIÓN DE PROCESAMIENTO (CON COPIADO DE FORMATO REAL) ---
+# --- 3. FUNCIÓN DE PROCESAMIENTO (SINTAXIS CORREGIDA) ---
 def procesar_a_historial(ss, h_plantilla, h_historial, fila_datos, index_paciente):
     try:
         dt = datetime.strptime(str(fila_datos.iloc[0]), "%d/%m/%Y")
         columna_x = dt.day + 3
         
-        # Cada bloque mide 8 filas (A3:AI10)
+        # Bloque de 8 filas. Paciente 0 -> fila 1, Paciente 1 -> fila 9...
         fila_destino = (index_paciente * 8) + 1
+        rango_destino = f"A{fila_destino}:AI{fila_destino + 7}"
         
-        # --- PASO CRUCIAL: COPIAR RANGO CON FORMATO ENTRE HOJAS ---
-        # Usamos el método copy_range directamente desde el objeto Spreadsheet
-        # Origen: Hoja 1, Rango A3:AI10 (Filas 3 a 10)
-        # Destino: Hoja 2, Rango correspondiente
-        ss.values_append(
-            f"Historial!A{fila_destino}",
-            params={'valueInputOption': 'RAW'},
-            body={'values': [[''] * 35] * 8} # Crea el espacio
-        )
+        # --- COPIADO DE FORMATO (Sintaxis limpia para versiones nuevas) ---
+        # Referenciamos el nombre de la hoja de origen correctamente
+        nombre_origen = h_plantilla.title
+        rango_origen = f"'{nombre_origen}'!A3:AI10"
         
-        # Esta función clona el formato de la plantilla a la posición en el historial
-        h_historial.copy_range(
-            f"'{h_plantilla.title}'!A3:AI10", 
-            f"A{fila_destino}:AI{fila_destino + 7}",
-            copy_format=True,
-            strategy="DEFAULT"
-        )
+        # Clonamos la plantilla al historial
+        h_historial.copy_range(rango_origen, rango_destino)
 
-        # PASO 2: Llenar datos (Batch Update)
+        # PASO 2: Llenado de datos (Batch Update)
+        # Usamos el nombre de la hoja 'Historial' para asegurar el destino
         batch = [
             {'range': f'Historial!B{fila_destino + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad (B3)
             {'range': f'Historial!B{fila_destino + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama (B4)
@@ -80,7 +72,7 @@ def procesar_a_historial(ss, h_plantilla, h_historial, fila_datos, index_pacient
         ]
         ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': batch})
 
-        # PASO 3: Nueva X
+        # PASO 3: Nueva X (Original fila 4 -> fila_destino + 1)
         h_historial.update_cell(fila_destino + 1, columna_x, "X")
         
         return True
@@ -93,35 +85,39 @@ def procesar_a_historial(ss, h_plantilla, h_historial, fila_datos, index_pacient
 
 # --- 4. INTERFAZ ---
 if df_pacientes is not None:
-    st.link_button("📂 Abrir Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    st.link_button("📂 Ver Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
     
-    st.metric("Pacientes en Censo", len(df_pacientes))
+    st.metric("Pacientes detectados", len(df_pacientes))
     
     st.divider()
-    limpiar_antes = st.checkbox("Limpiar Hoja de Historial antes de procesar", value=True)
+    limpiar_antes = st.checkbox("Limpiar Historial antes de procesar", value=True)
 
-    if st.button("📥 INICIAR VACIADO MASIVO A HISTORIAL", type="primary"):
+    if st.button("📥 INICIAR VACIADO MASIVO", type="primary"):
         ss_obj, h_plant, h_hist = conectar_google_sheets()
         if h_plant and h_hist:
             
             if limpiar_antes:
                 h_hist.clear()
-                st.info("Historial limpio.")
+                st.info("Historial reseteado.")
 
             progreso = st.progress(0)
             status = st.empty()
             
             for i, row in df_pacientes.iterrows():
                 nombre = row.iloc[4]
-                status.text(f"Copiando con formato ({i+1}/{len(df_pacientes)}): {nombre}")
+                status.text(f"Procesando ({i+1}/{len(df_pacientes)}): {nombre}")
                 
+                # Ejecución
                 if not procesar_a_historial(ss_obj, h_plant, h_hist, row, i):
+                    # Pequeña espera extra si falla
                     time.sleep(10)
                     procesar_a_historial(ss_obj, h_plant, h_hist, row, i)
                 
                 progreso.progress((i + 1) / len(df_pacientes))
-                # Pausa necesaria para que Google procese el formato pesado
+                # Pausa de 7 segundos para proteger la cuota de formato de Google
                 time.sleep(7) 
             
-            status.success("✅ ¡Censo completado con formato original en la Hoja 2!")
+            status.success("✅ ¡Proceso completado con formato en la hoja Historial!")
             st.balloons()
+else:
+    st.error("No se pudo cargar el censo.")
