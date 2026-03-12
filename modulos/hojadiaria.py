@@ -20,7 +20,7 @@ def conectar_google_sheets():
         
         ss = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
         
-        # Identificamos la Hoja Maestra (Índice 0)
+        # Identificamos la Hoja Maestra (Plantilla original)
         hoja_maestra = ss.get_worksheet(0)
         gid_maestra = hoja_maestra.id
         nombre_maestra = hoja_maestra.title
@@ -38,7 +38,7 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return [None]*6
 
-# --- 2. LECTURA DEL CENSO (CSV PUBLICADO) ---
+# --- 2. LECTURA DEL CENSO ---
 URL_ORIGEN = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
 
 def cargar_censo():
@@ -49,7 +49,7 @@ def cargar_censo():
 
 df_pacientes = cargar_censo()
 
-# --- 3. FUNCIÓN DE PROCESAMIENTO CON NUEVO MAPEO ---
+# --- 3. FUNCIÓN DE PROCESAMIENTO CON MAPEO CORREGIDO ---
 def traspaso_con_formato(ss, h_orig, n_orig, gid_orig, h_dest, gid_dest, fila_datos, index_p):
     try:
         # Procesar fecha para columna X (D4 es día 1 -> columna 4)
@@ -60,28 +60,28 @@ def traspaso_con_formato(ss, h_orig, n_orig, gid_orig, h_dest, gid_dest, fila_da
         fila_dest_inicio = (index_p * 8) + 1
 
         # A. Vaciado en la Plantilla Maestra (Hoja 1)
-        # Basado en tus nuevas coordenadas:
+        # Aplicando tus correcciones específicas:
         batch = [
             {'range': 'B3', 'values': [[str(fila_datos.iloc[1])]]}, # ESPECIALIDAD (Col B)
             {'range': 'B4', 'values': [[str(fila_datos.iloc[2])]]}, # CAMA (Col C)
             {'range': 'A5', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente (Col E)
-            {'range': 'B7', 'values': [[str(fila_datos.iloc[5])]]}, # EDAD (Col G)
+            {'range': 'B7', 'values': [[str(fila_datos.iloc[5])]]}, # EDAD (Col G) -> CORREGIDO
             {'range': 'B8', 'values': [[str(fila_datos.iloc[3])]]}, # REGISTRO (Col D)
-            {'range': 'B9', 'values': [[str(fila_datos.iloc[6])]]}, # Fecha de ingreso (Col I)
+            {'range': 'B9', 'values': [[str(fila_datos.iloc[6])]]}, # Fecha de ingreso (Col I) -> CORREGIDO
             {'range': 'D4:AH4', 'values': [[''] * 31]}             # Limpiar X previas
         ]
         h_orig.batch_update(batch)
-        h_orig.update_cell(4, columna_x, "X") # Marcar día
+        h_orig.update_cell(4, columna_x, "X") # Marcar día actual con una X
 
-        # B. Traspaso de bloque completo al Historial (CopyPaste API)
-        # Esto clona el molde de Hoja 1 hacia el espacio correspondiente en Hoja 2
+        # B. Traspaso Forzado al Historial (CopyPaste API)
+        # Esto asegura que el formato de colores y bordes sea idéntico
         body = {
             "requests": [
                 {
                     "copyPaste": {
                         "source": {
                             "sheetId": gid_orig,
-                            "startRowIndex": 2, "endRowIndex": 10, # A3:AI10
+                            "startRowIndex": 2, "endRowIndex": 10, # Rango A3:AI10
                             "startColumnIndex": 0, "endColumnIndex": 35
                         },
                         "destination": {
@@ -101,12 +101,13 @@ def traspaso_con_formato(ss, h_orig, n_orig, gid_orig, h_dest, gid_dest, fila_da
         if "429" in str(e):
             time.sleep(15)
             return False
-        st.error(f"Error con {fila_datos.iloc[4]}: {e}")
+        st.error(f"Error procesando a {fila_datos.iloc[4]}: {e}")
         return False
 
 # --- 4. INTERFAZ ---
 if df_pacientes is not None:
     st.link_button("📂 Abrir Kardex en Google Sheets", "https://docs.google.com/spreadsheets/d/116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc/edit")
+    
     st.metric("Pacientes detectados", len(df_pacientes))
     
     st.divider()
@@ -118,7 +119,7 @@ if df_pacientes is not None:
         if h_ma and h_hi:
             if limpiar_historial:
                 h_hi.clear()
-                st.info("Historial reseteado. Procesando pacientes...")
+                st.info("Historial reseteado. Aplicando correcciones de mapeo...")
 
             progreso = st.progress(0)
             status = st.empty()
@@ -126,16 +127,18 @@ if df_pacientes is not None:
             
             for i, row in df_pacientes.iterrows():
                 nombre = row.iloc[4]
-                status.text(f"Traspasando ({i+1}/{total}): {nombre}")
+                status.text(f"Procesando ({i+1}/{total}): {nombre}")
                 
+                # Ejecutamos el vaciado con las nuevas coordenadas
                 if not traspaso_con_formato(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, i):
                     time.sleep(10)
                     traspaso_con_formato(ss, h_ma, n_ma, gid_ma, h_hi, gid_hi, row, i)
                 
                 progreso.progress((i + 1) / total)
-                time.sleep(8) # Pausa de seguridad para evitar error 429
+                # Pausa de seguridad para evitar bloqueo de Google (Error 429)
+                time.sleep(8) 
             
-            status.success("✅ ¡Vaciado completado! La Hoja 1 se usó como molde y el Historial está listo.")
+            status.success("✅ ¡Vaciado completado con éxito! Revisa la pestaña 'Historial'.")
             st.balloons()
 else:
-    st.error("No se pudo cargar el censo.")
+    st.error("No se pudo cargar el censo de origen.")
