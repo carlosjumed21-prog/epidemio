@@ -5,9 +5,9 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import time
 
-st.title("🏥 Vigilancia Epidemiológica Activa")
+st.title("🏥 Centro de Mando: Vigilancia Activa")
 
-# --- 1. CONEXIÓN A GOOGLE SHEETS ---
+# --- 1. CONFIGURACIÓN DE CONEXIÓN ---
 def conectar_google_sheets():
     try:
         creds_dict = dict(st.secrets["connections"]["gsheets"])
@@ -26,14 +26,14 @@ def conectar_google_sheets():
             
         return ss, h_maestra, h_historial
     except Exception as e:
-        st.error(f"Error de conexión a Sheets: {e}")
+        st.error(f"Error de conexión: {e}")
         return None, None, None
 
-# --- 2. LÓGICA DE PROCESAMIENTO ---
-def procesar_vigilancia(ss, h_maestra, h_historial, fila_datos, reg_map):
-    # Mapeo: A=0, B=1, C=2, D=3, E=4, G=6, I=8
+# --- 2. MOTOR DE PROCESAMIENTO ---
+def motor_vigilancia(ss, h_maestra, h_historial, fila_datos, reg_map):
+    # Mapeo estricto Carlos: A=0, B=1, C=2, D=3, E=4, G=6, I=8
     fecha_str = str(fila_datos.iloc[0])
-    registro = str(fila_datos.iloc[3])
+    registro = str(fila_datos.iloc[3]).strip()
     
     try:
         dia = int(fecha_str.split('/')[0])
@@ -45,10 +45,10 @@ def procesar_vigilancia(ss, h_maestra, h_historial, fila_datos, reg_map):
         fila_base = reg_map[registro]
         accion = "Actualizado"
     else:
-        vals_hist = h_historial.get_all_values()
-        fila_base = len(vals_hist) + 1
+        vals = h_historial.get_all_values()
+        fila_base = len(vals) + 1
         
-        # Clonar Plantilla con la API de Google
+        # Clonar Plantilla (CopyPaste Request)
         body = {
             "requests": [{
                 "copyPaste": {
@@ -60,95 +60,74 @@ def procesar_vigilancia(ss, h_maestra, h_historial, fila_datos, reg_map):
         }
         ss.batch_update(body)
         
-        # Datos fijos para el nuevo paciente
-        updates = [
-            {'range': f'Historial!B{fila_base + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad B3
-            {'range': f'Historial!B{fila_base + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama B4
-            {'range': f'Historial!A{fila_base + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente A5
-            {'range': f'Historial!B{fila_base + 4}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad B7
-            {'range': f'Historial!B{fila_base + 5}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro B8
-            {'range': f'Historial!B{fila_base + 6}', 'values': [[str(fila_datos.iloc[8])]]}  # Ingreso B9
+        # Datos fijos (B3, B4, A5, B7, B8, B9)
+        datos = [
+            {'range': f'Historial!B{fila_base + 0}', 'values': [[str(fila_datos.iloc[1])]]}, # Especialidad
+            {'range': f'Historial!B{fila_base + 1}', 'values': [[str(fila_datos.iloc[2])]]}, # Cama
+            {'range': f'Historial!A{fila_base + 2}', 'values': [[str(fila_datos.iloc[4])]]}, # Paciente
+            {'range': f'Historial!B{fila_base + 4}', 'values': [[str(fila_datos.iloc[6])]]}, # Edad
+            {'range': f'Historial!B{fila_base + 5}', 'values': [[str(fila_datos.iloc[3])]]}, # Registro
+            {'range': f'Historial!B{fila_base + 6}', 'values': [[str(fila_datos.iloc[8])]]}  # Ingreso
         ]
-        ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': updates})
+        ss.batch_update({'valueInputOption': 'USER_ENTERED', 'data': datos})
         accion = "Nuevo"
 
+    # Siempre marcar la X
     h_historial.update_cell(fila_base + 1, col_x, "X")
     return accion
 
-# --- 3. CARGA DE ARCHIVO PARA VISUALIZACIÓN ---
-archivo_excel = st.file_uploader("📂 Subir Censo para Vigilancia", type=["xlsx", "xls", "csv"])
+# --- 3. INTERFAZ DE CONTROL ---
 
-if archivo_excel:
+# Botón de Refresh principal
+if st.button("🔄 REFRESH: Sincronizar Censo desde la Nube", use_container_width=True):
+    URL_CENSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRg5CRZNjHdQWnLwREm0ZIO9KXhGy0irjxkxiJ6DocPsxcjcH1Q_j2eP05-hrmCjKwdD0MK6hAqz7d8/pub?gid=0&single=true&output=csv"
     try:
-        # Cargar datos
-        if archivo_excel.name.endswith('.csv'):
-            df = pd.read_csv(archivo_excel)
-        else:
-            df = pd.read_excel(archivo_excel)
-        
-        st.metric("👥 Pacientes en Censo", len(df))
-        
-        # --- BOTONES DE ACCIÓN PRINCIPAL ---
-        st.subheader("🚀 Acciones de Vigilancia")
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            if st.button("🚩 Inicio de Vigilancia", use_container_width=True, help="Limpia el historial y crea la base desde cero"):
-                ss, h_ma, h_hi = conectar_google_sheets()
-                if ss:
-                    h_hi.clear()
-                    st.info("Iniciando vigilancia...")
-                    progreso = st.progress(0)
-                    for i, row in df.iterrows():
-                        procesar_vigilancia(ss, h_ma, h_hi, row, {}, i)
-                        progreso.progress((i+1)/len(df))
-                        time.sleep(6)
-                    st.success("Vigilancia iniciada correctamente.")
+        df = pd.read_csv(URL_CENSO)
+        st.session_state['df_censo'] = df
+        st.success(f"Censo actualizado: {len(df)} pacientes encontrados.")
+    except:
+        st.error("No se pudo conectar con el Censo. Verifica que el archivo esté publicado como CSV.")
 
-        with c2:
-            if st.button("🔄 Vigilancia Diaria", type="primary", use_container_width=True, help="Sincroniza sin duplicar pacientes"):
-                ss, h_ma, h_hi = conectar_google_sheets()
-                if ss:
-                    status = st.empty()
-                    status.info("Escaneando registros en historial...")
-                    data_hist = h_hi.get_all_values()
-                    reg_map = {}
-                    for r in range(5, len(data_hist), 8):
-                        rv = str(data_hist[r][1]).strip()
-                        if rv: reg_map[rv] = r - 5 + 1
-                    
-                    progreso = st.progress(0)
-                    for i, row in df.iterrows():
-                        status.text(f"Analizando: {row.iloc[4]}")
-                        procesar_vigilancia(ss, h_ma, h_hi, row, reg_map)
-                        progreso.progress((i+1)/len(df))
-                        time.sleep(6)
-                    status.success("Vigilancia diaria terminada.")
+# Solo si hay datos cargados, mostramos las opciones de decisión
+if 'df_censo' in st.session_state:
+    df = st.session_state['df_censo']
+    
+    with st.expander("👁️ Ver pacientes detectados para procesar"):
+        st.dataframe(df.iloc[:, [3,4,2,1]], use_container_width=True, hide_index=True)
 
-        st.divider()
+    st.subheader("🛠️ ¿Qué acción realizar con este censo?")
+    col1, col2 = st.columns(2)
 
-        # --- SECCIÓN DE CONSULTA INDIVIDUAL (Tu código original) ---
-        st.subheader("🔍 Consulta Individual de Paciente")
-        lista_especialidades = sorted(df.iloc[:, 1].dropna().unique())
-        col_esp, col_cam = st.columns(2)
-        with col_esp:
-            esp_sel = st.selectbox("Especialidad:", lista_especialidades)
-        
-        df_filtrado_esp = df[df.iloc[:, 1] == esp_sel]
-        lista_camas = sorted(df_filtrado_esp.iloc[:, 2].dropna().unique())
-        with col_cam:
-            cama_sel = st.selectbox("Cama:", lista_camas)
+    with col1:
+        if st.button("🚩 INICIO DE VIGILANCIA", help="Borra historial y crea todo de nuevo", use_container_width=True):
+            ss, h_ma, h_hi = conectar_google_sheets()
+            if ss:
+                h_hi.clear()
+                st.warning("Historial reseteado. Generando nuevas plantillas...")
+                prog = st.progress(0)
+                for i, row in df.iterrows():
+                    motor_vigilancia(ss, h_ma, h_hi, row, {})
+                    prog.progress((i+1)/len(df))
+                    time.sleep(4) # Pausa para evitar error 429
+                st.success("¡Vigilancia inicial completa!")
 
-        paciente = df_filtrado_esp[df_filtrado_esp.iloc[:, 2] == cama_sel].iloc[0]
-
-        with st.container(border=True):
-            st.markdown(f"### 👤 {paciente.iloc[4]}")
-            c1, c2, c3 = st.columns(3)
-            with c1: st.write(f"**Registro:** {paciente.iloc[3]}")
-            with c2: st.write(f"**Sexo/Edad:** {paciente.iloc[5]} / {paciente.iloc[6]}")
-            with c3: st.info(f"**Ingreso:** {paciente.iloc[8]}")
-
-    except Exception as e:
-        st.error(f"Error al procesar el archivo: {e}")
-else:
-    st.warning("⚠️ Sube el archivo Excel o CSV para habilitar las funciones de vigilancia.")
+    with col2:
+        if st.button("🔄 VIGILANCIA DIARIA", type="primary", help="Actualiza existentes y añade nuevos", use_container_width=True):
+            ss, h_ma, h_hi = conectar_google_sheets()
+            if ss:
+                msg = st.empty()
+                msg.info("Buscando duplicados en el historial...")
+                # Mapeo de registros en B8 (filas 6, 14, 22...)
+                data_h = h_hi.get_all_values()
+                reg_map = {}
+                for r in range(5, len(data_h), 8):
+                    reg_id = str(data_h[r][1]).strip()
+                    if reg_id: reg_map[reg_id] = r - 5 + 1
+                
+                prog = st.progress(0)
+                for i, row in df.iterrows():
+                    msg.text(f"Sincronizando: {row.iloc[4]}")
+                    motor_vigilancia(ss, h_ma, h_hi, row, reg_map)
+                    prog.progress((i+1)/len(df))
+                    time.sleep(4)
+                msg.success("Sincronización de seguimiento terminada.")
