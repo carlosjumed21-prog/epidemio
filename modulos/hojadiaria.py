@@ -14,16 +14,16 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # ID de tu Sheet Maestro (1yKg...)
+        # ID de tu Spreadsheet (donde están Hoja 2, Plantilla e Historial)
         ss = client.open_by_key("1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM")
         
-        h_maestra = ss.get_worksheet(0) # Plantilla original (pestaña 1)
+        h_maestra = ss.get_worksheet(0) # Pestaña de Plantilla (Hoja 1 original)
         
         try:
-            h_hoja2 = ss.worksheet("Hoja 2")
-            h_historial = ss.worksheet("Historial")
+            h_hoja2 = ss.worksheet("Hoja 2") # Origen de datos filtrados
+            h_historial = ss.worksheet("Historial") # Destino de plantillas
         except:
-            st.error("❌ Revisa que existan las pestañas 'Hoja 2' e 'Historial'.")
+            st.error("⚠️ No se encontró la 'Hoja 2' o 'Historial'. Ejecuta el filtrado primero.")
             return None, None, None, None
             
         return ss, h_maestra, h_hoja2, h_historial
@@ -31,106 +31,107 @@ def conectar_google_sheets():
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None, None
 
-# --- 2. FUNCIÓN DE ACTUALIZACIÓN DE CELDAS ---
+# --- 2. FUNCIÓN DE ACTUALIZACIÓN ---
 def actualizar_bloque_paciente(h_hi, fila_base, fila_datos, col_x):
-    """Actualiza datos y pone la 'X' en la columna del día correspondiente"""
-    try:
-        lista_celdas = [
-            gspread.Cell(row=fila_base, col=2, value=str(fila_datos.iloc[1])),     # Especialidad
-            gspread.Cell(row=fila_base + 1, col=2, value=str(fila_datos.iloc[2])), # Cama
-            gspread.Cell(row=fila_base + 2, col=1, value=str(fila_datos.iloc[4])), # Nombre Paciente
-            gspread.Cell(row=fila_base + 4, col=2, value=str(fila_datos.iloc[6])), # Edad
-            gspread.Cell(row=fila_base + 5, col=2, value=str(fila_datos.iloc[3])), # Registro/RFC
-            gspread.Cell(row=fila_base + 6, col=2, value=str(fila_datos.iloc[8])), # Fecha Ingreso
-            gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  # Tachado 'X'
-        ]
-        h_hi.update_cells(lista_celdas, value_input_option='USER_ENTERED')
-    except Exception as e:
-        st.warning(f"No se pudo actualizar el bloque en fila {fila_base}: {e}")
+    """Actualiza datos clínicos y marca la X acorde al día del mes"""
+    lista_celdas = [
+        gspread.Cell(row=fila_base, col=2, value=str(fila_datos.iloc[1])),     # B: Especialidad
+        gspread.Cell(row=fila_base + 1, col=2, value=str(fila_datos.iloc[2])), # B: Cama
+        gspread.Cell(row=fila_base + 2, col=1, value=str(fila_datos.iloc[4])), # A: Paciente
+        gspread.Cell(row=fila_base + 4, col=2, value=str(fila_datos.iloc[6])), # B: Edad
+        gspread.Cell(row=fila_base + 5, col=2, value=str(fila_datos.iloc[3])), # B: Registro
+        gspread.Cell(row=fila_base + 6, col=2, value=str(fila_datos.iloc[8])), # B: F. Ingreso
+        gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  # Marcado X
+    ]
+    h_hi.update_cells(lista_celdas, value_input_option='USER_ENTERED')
 
 # --- 3. INTERFAZ ---
-st.title("🏥 Generación de Vigilancia Epidemiológica")
+st.title("🏥 Vigilancia Epidemiológica - Control de Duplicados")
+st.info("Fuente de datos activa: **Hoja 2** (Censo Filtrado)")
 
-if st.button("🔄 1. REFRESH: Cargar desde Hoja 2", use_container_width=True):
-    ss, h_ma, h_h2, h_hi = conectar_google_sheets()
-    if ss:
-        # Forzamos leer la Hoja 2 como DF
-        df = pd.DataFrame(h_h2.get_all_records())
-        st.session_state['df_vig'] = df
-        st.success(f"✅ Datos cargados de Hoja 2: {len(df)} pacientes.")
+# Botón REFRESH: Ahora lee internamente de la Hoja 2
+if st.button("🔄 1. REFRESH: Cargar Censo desde Hoja 2", use_container_width=True):
+    try:
+        ss, h_ma, h_h2, h_hi = conectar_google_sheets()
+        if ss:
+            # Obtener todos los registros de la Hoja 2
+            datos = h_h2.get_all_records()
+            df = pd.DataFrame(datos)
+            st.session_state['df_vig'] = df
+            st.success(f"Censo cargado desde Hoja 2: {len(df)} pacientes.")
+    except Exception as e:
+        st.error(f"Error al cargar datos internos: {e}")
 
 if 'df_vig' in st.session_state:
     df = st.session_state['df_vig']
+    st.metric("📊 Pacientes en Censo", len(df))
     
     col_inic, col_diaria = st.columns(2)
 
     with col_inic:
-        if st.button("🚩 INICIO (RECREAR HISTORIAL)", use_container_width=True):
+        if st.button("🚩 INICIO (LIMPIEZA TOTAL)", use_container_width=True):
             ss, h_ma, h_h2, h_hi = conectar_google_sheets()
             if ss:
                 h_hi.clear()
-                f_nueva = 1
+                st.warning("Historial borrado. Recreando desde Hoja 2...")
                 prog = st.progress(0)
+                f_nueva = 1
                 for i, row in df.iterrows():
-                    # Copiar Plantilla
+                    # Clonar plantilla
                     ss.batch_update({"requests": [{"copyPaste": {
                         "source": {"sheetId": h_ma.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
                         "destination": {"sheetId": h_hi.id, "startRowIndex": f_nueva - 1, "endRowIndex": f_nueva + 7, "startColumnIndex": 0, "endColumnIndex": 35},
                         "pasteType": "PASTE_NORMAL"
                     }}]})
-                    
-                    # Lógica del día para tachar: Columna A (index 0)
-                    try:
-                        # Extraemos el día (ej: '17/03/2026' -> 17)
-                        fecha_str = str(row.iloc[0])
-                        dia_num = int(fecha_str.split('/')[0])
-                        col_tachado = dia_num + 3 # Ajuste a tu formato (Día 1 es columna 4)
-                        
-                        actualizar_bloque_paciente(h_hi, f_nueva, row, col_tachado)
-                    except: pass
-                    
+                    # Calcular día para la X (Columna A)
+                    dia = int(str(row.iloc[0]).split('/')[0])
+                    actualizar_bloque_paciente(h_hi, f_nueva, row, dia + 3)
                     f_nueva += 8
                     prog.progress((i+1)/len(df))
-                    time.sleep(1.2)
-                st.success("✅ Historial recreado.")
+                    time.sleep(1.5)
+                st.success("✅ Historial recreado con éxito.")
 
     with col_diaria:
-        if st.button("🔄 VIGILANCIA DIARIA (SEGUIMIENTO)", type="primary", use_container_width=True):
+        if st.button("🔄 VIGILANCIA DIARIA (SIN DUPLICADOS)", type="primary", use_container_width=True):
             ss, h_ma, h_h2, h_hi = conectar_google_sheets()
             if ss:
                 status = st.empty()
-                col_b = h_hi.col_values(2) # Columna de Registros en Historial
+                status.info("🔍 Mapeando Historial...")
+                
+                col_b = h_hi.col_values(2) 
                 reg_map = {}
                 
-                # Mapear dónde está cada paciente (bloques de 8)
                 for i in range(5, len(col_b), 8):
                     val = str(col_b[i]).strip()
                     if val and val not in ["", "Registro"]:
                         reg_map[val] = (i + 1) - 5
 
+                ingresos = 0
+                seguimientos = 0
                 f_disponible = len(col_b) + 1
+                prog = st.progress(0)
+                
                 for idx, row in df.iterrows():
                     reg_id = str(row.iloc[3]).strip()
-                    
-                    # Obtener día para tachar
-                    try:
-                        dia_num = int(str(row.iloc[0]).split('/')[0])
-                        col_tachado = dia_num + 3
-                    except: col_tachado = 4 # Default día 1 si falla
-                    
-                    status.text(f"Procesando: {row.iloc[4]}")
+                    dia = int(str(row.iloc[0]).split('/')[0])
+                    status.text(f"Analizando: {row.iloc[4]}")
 
                     if reg_id in reg_map:
-                        actualizar_bloque_paciente(h_hi, reg_map[reg_id], row, col_tachado)
+                        actualizar_bloque_paciente(h_hi, reg_map[reg_id], row, dia + 3)
+                        seguimientos += 1
                     else:
-                        # Paciente Nuevo
                         ss.batch_update({"requests": [{"copyPaste": {
                             "source": {"sheetId": h_ma.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
                             "destination": {"sheetId": h_hi.id, "startRowIndex": f_disponible - 1, "endRowIndex": f_disponible + 7, "startColumnIndex": 0, "endColumnIndex": 35},
                             "pasteType": "PASTE_NORMAL"
                         }}]})
-                        actualizar_bloque_paciente(h_hi, f_disponible, row, col_tachado)
+                        actualizar_bloque_paciente(h_hi, f_disponible, row, dia + 3)
+                        reg_map[reg_id] = f_disponible
                         f_disponible += 8
+                        ingresos += 1
                     
-                    time.sleep(1.2)
-                st.success("✅ Sincronización completa.")
+                    prog.progress((idx+1)/len(df))
+                    time.sleep(1.5)
+
+                status.empty()
+                st.success(f"✅ Sincronización terminada. Nuevos: {ingresos}, Seguimientos: {seguimientos}")
