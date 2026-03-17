@@ -2,70 +2,63 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
-st.title("🔍 Filtrado de Pacientes (Consolidación de Censo)")
+st.title("🔍 Máquina Virtual: Protección de Historial")
 
 URL_SABANA = "https://docs.google.com/spreadsheets/d/1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- CONFIGURACIÓN DE COLUMNAS ---
-# Columna A = Fecha (Indice 0)
-# Columna D = Registro/Expediente (Indice 3)
-# Columna E = Nombre (Indice 4)
+# Usaremos la Columna D (index 3) como el Registro/Expediente único
+COL_ID_INDEX = 3 
 
-id_filtro = st.radio(
-    "Selecciona el criterio para evitar duplicados:",
-    ["RFC / Registro", "Nombre del Paciente"],
-    horizontal=True
-)
-
-# Mapeo de columna según elección
-col_index = 3 if id_filtro == "RFC / Registro" else 4
-
-if st.button("🚀 Actualizar Historial (Sin Duplicados)", type="primary", use_container_width=True):
+if st.button("🚀 Sincronizar Censo (Sin tocar datos previos)", type="primary", use_container_width=True):
     try:
-        with st.spinner("Procesando datos..."):
-            # 1. Leer hojas (TTL=0 para datos frescos)
+        with st.spinner("Leyendo bases de datos..."):
+            # 1. Leer Hoja 1 (Actual) y Hoja 2 (Historial)
             df_actual = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 1", ttl=0).astype(str)
-            
             try:
                 df_previo = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 2", ttl=0).astype(str)
             except:
                 df_previo = pd.DataFrame(columns=df_actual.columns)
 
         if df_actual.empty:
-            st.warning("⚠️ La Hoja 1 está vacía.")
+            st.warning("⚠️ La Hoja 1 está vacía. No hay nada que procesar.")
         else:
-            # 2. LÓGICA DE FILTRADO PURO
-            # Ponemos el Censo PREVIO arriba y el ACTUAL abajo
-            df_consolidado = pd.concat([df_previo, df_actual], ignore_index=True)
-            
-            # Limpieza de nulos para que no afecten el filtro
-            df_consolidado = df_consolidado.replace(["nan", "None", "NaT", "<NA>"], "")
+            # 2. LIMPIEZA CRÍTICA: Quitar espacios en blanco que arruinan el filtro
+            # Esto asegura que "123 " sea igual a "123"
+            col_name = df_actual.columns[COL_ID_INDEX]
+            df_actual[col_name] = df_actual[col_name].str.strip()
+            df_previo[col_name] = df_previo[col_name].str.strip()
 
-            # 3. EVITAR DUPLICADOS
-            # Al usar 'keep=first', pandas mantiene la PRIMERA aparición que encuentra.
-            # Como pusimos el previo arriba, mantendrá la fila antigua (con su fecha original).
-            # El identificador es la columna seleccionada (Registro o Nombre)
-            col_id_name = df_consolidado.columns[col_index]
-            df_limpio = df_consolidado.drop_duplicates(subset=[col_id_name], keep='first')
+            # 3. FILTRADO: ¿Quiénes de la Hoja 1 NO están en la Hoja 2?
+            # Solo vamos a "invitar" al historial a los pacientes nuevos
+            registros_en_historial = df_previo[col_name].unique()
+            pacientes_nuevos = df_actual[~df_actual[col_id_name].isin(registros_en_historial)]
 
-            # 4. ORDENAR POR FECHA (Columna A)
-            # Para que el censo final siempre esté en orden cronológico ascendente
-            df_limpio['temp_fecha'] = pd.to_datetime(df_limpio.iloc[:, 0], dayfirst=True, errors='coerce')
-            df_limpio = df_limpio.sort_values(by='temp_fecha', ascending=True)
+            if pacientes_nuevos.empty:
+                st.info("ℹ️ No hay pacientes nuevos en el censo de hoy. Todos ya están en el historial.")
+                df_final = df_previo
+            else:
+                # 4. CONSOLIDACIÓN: Historial + Solo los nuevos
+                df_final = pd.concat([df_previo, pacientes_nuevos], ignore_index=True)
+                st.success(f"✨ Se detectaron e integraron {len(pacientes_nuevos)} pacientes nuevos.")
+
+            # 5. ORDENAR Y LIMPIAR
+            # Ordenar por fecha (Columna A) ascendente para mantener el orden cronológico
+            df_final['temp_f'] = pd.to_datetime(df_final.iloc[:, 0], dayfirst=True, errors='coerce')
+            df_final = df_final.sort_values(by='temp_f', ascending=True).drop(columns=['temp_f'])
             
-            # Quitar columna temporal y asegurar que el orden de columnas es idéntico al original
-            df_limpio = df_limpio[df_actual.columns.tolist()]
+            # Asegurar orden original de columnas
+            df_final = df_final[df_actual.columns.tolist()]
+            df_final = df_final.replace(["nan", "None", "<NA>"], "")
 
             with st.spinner("Guardando en Hoja 2..."):
-                # 5. Sobreescribir Hoja 2
-                conn.update(spreadsheet=URL_SABANA, worksheet="Hoja 2", data=df_limpio)
+                conn.update(spreadsheet=URL_SABANA, worksheet="Hoja 2", data=df_final)
 
-            st.success(f"✅ ¡Filtrado exitoso! Se mantienen los datos originales de {len(df_limpio)} pacientes.")
-            st.dataframe(df_limpio, use_container_width=True)
+            st.write("### 📋 Historial Actualizado (Hoja 2)")
+            st.dataframe(df_final, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
 
 st.divider()
-st.info("💡 **Lógica aplicada:** Si el paciente ya existe en la Hoja 2, se ignora la nueva fila de la Hoja 1 para no duplicar ni cambiar la fecha original.")
+st.caption("Esta versión garantiza que la información que ya está en la Hoja 2 sea inamovible.")
