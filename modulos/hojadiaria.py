@@ -1,130 +1,77 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
-import time
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
 
-# --- 1. CONEXIÓN ---
-def conectar_google_sheets():
-    try:
-        creds_dict = dict(st.secrets["connections"]["gsheets"])
-        if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
+# --- FUNCIÓN PARA GENERAR PDF ---
+def generar_pdf_vigilancia(df):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    
+    # Configuraciones de diseño
+    margin_x = 50
+    margin_y = 50
+    card_width = (width - (margin_x * 2)) 
+    card_height = (height - (margin_y * 2)) / 4  # 4 plantillas por hoja
+    
+    y_position = height - margin_y
+    count = 0
+
+    for idx, row in df.iterrows():
+        if count > 0 and count % 4 == 0:
+            c.showPage() # Nueva página cada 4 pacientes
+            y_position = height - margin_y
         
-        ss_origen = client.open_by_key("1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM")
-        ss_salida = client.open_by_key("116OTUoft_0Vf6Pf_jdTwDeLUP341i6bBqqfzfRl2zHc")
+        # Dibujar recuadro de la plantilla
+        c.setStrokeColor(colors.black)
+        c.rect(margin_x, y_position - card_height + 10, card_width, card_height - 10)
         
-        h_datos_limpios = ss_origen.get_worksheet(1) # Hoja 2 (Origen)
-        h_plantilla = ss_salida.get_worksheet(0)     # Hoja 1 (Plantilla)
-        h_historial = ss_salida.get_worksheet(1)     # Hoja 2 (Historial)
-            
-        return ss_salida, h_plantilla, h_datos_limpios, h_historial
-    except Exception as e:
-        st.error(f"⚠️ Error de conexión: {e}")
-        return None, None, None, None
+        # Escribir Datos (Ajustado a tu mapeo de columnas)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(margin_x + 10, y_position - 25, f"PACIENTE: {str(row.iloc[4])}")
+        
+        c.setFont("Helvetica", 10)
+        c.drawString(margin_x + 10, y_position - 45, f"REGISTRO: {str(row.iloc[3])}")
+        c.drawString(margin_x + 200, y_position - 45, f"CAMA: {str(row.iloc[2])}")
+        
+        c.drawString(margin_x + 10, y_position - 65, f"ESPECIALIDAD: {str(row.iloc[1])}")
+        c.drawString(margin_x + 200, y_position - 65, f"EDAD: {str(row.iloc[6])}")
+        
+        c.drawString(margin_x + 10, y_position - 85, f"FECHA INGRESO: {str(row.iloc[8])}")
+        
+        # Línea divisoria para notas o tachado visual
+        c.setDash(1, 2)
+        c.line(margin_x + 10, y_position - 100, margin_x + card_width - 10, y_position - 100)
+        c.setDash()
+        
+        y_position -= card_height
+        count += 1
+        
+    c.save()
+    buffer.seek(0)
+    return buffer
 
-# --- 2. FUNCIÓN DE ACTUALIZACIÓN OPTIMIZADA ---
-def actualizar_bloque_paciente(h_hi, fila_base, fila_datos, col_x):
-    """Actualiza datos reduciendo el estrés de la API"""
-    try:
-        # Preparamos las celdas
-        lista_celdas = [
-            gspread.Cell(row=fila_base, col=2, value=str(fila_datos.iloc[1])),     
-            gspread.Cell(row=fila_base + 1, col=2, value=str(fila_datos.iloc[2])), 
-            gspread.Cell(row=fila_base + 2, col=1, value=str(fila_datos.iloc[4])), 
-            gspread.Cell(row=fila_base + 4, col=2, value=str(fila_datos.iloc[6])), 
-            gspread.Cell(row=fila_base + 5, col=2, value=str(fila_datos.iloc[3])), 
-            gspread.Cell(row=fila_base + 6, col=2, value=str(fila_datos.iloc[8])), 
-            gspread.Cell(row=fila_base + 1, col=col_x, value="X")                  
-        ]
-        # Una sola llamada de escritura por bloque
-        h_hi.update_cells(lista_celdas, value_input_option='USER_ENTERED')
-    except Exception as e:
-        if "429" in str(e):
-            st.error("⏳ Google está saturado. Esperando 10 segundos adicionales...")
-            time.sleep(10)
-        else:
-            st.warning(f"Error en bloque: {e}")
-
-# --- 3. INTERFAZ ---
-st.title("🏥 Vigilancia Epidemiológica - Modo Seguro")
-
-if st.button("🔄 1. REFRESH", use_container_width=True):
-    res = conectar_google_sheets()
-    if res[0]:
-        ss_sal, h_pla, h_dat, h_his = res
-        df = pd.DataFrame(h_dat.get_all_records())
-        st.session_state['df_vig'] = df
-        st.success(f"✅ {len(df)} pacientes cargados.")
+# --- AGREGAR A TU INTERFAZ EXISTENTE ---
+# (Debajo de los botones de Inicio y Vigilancia Diaria)
 
 if 'df_vig' in st.session_state:
-    df = st.session_state['df_vig']
+    st.divider()
+    st.subheader("🖨️ Exportar para Entrega de Guardia")
     
-    c1, c2 = st.columns(2)
-
-    with c1:
-        if st.button("🚩 INICIO (RECREAR TODO)", use_container_width=True):
-            res = conectar_google_sheets()
-            if res[0]:
-                ss_sal, h_pla, h_dat, h_his = res
-                h_his.clear()
-                f_nueva = 1
-                prog = st.progress(0)
-                for i, row in df.iterrows():
-                    ss_sal.batch_update({"requests": [{"copyPaste": {
-                        "source": {"sheetId": h_pla.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
-                        "destination": {"sheetId": h_his.id, "startRowIndex": f_nueva - 1, "endRowIndex": f_nueva + 7, "startColumnIndex": 0, "endColumnIndex": 35},
-                        "pasteType": "PASTE_NORMAL"
-                    }}]})
-                    
-                    try:
-                        dia = int(str(row.iloc[0]).split('/')[0])
-                        actualizar_bloque_paciente(h_his, f_nueva, row, dia + 3)
-                    except: pass
-                    
-                    f_nueva += 8
-                    prog.progress((i+1)/len(df))
-                    # PAUSA DE SEGURIDAD AUMENTADA
-                    time.sleep(2.5) 
-                st.success("✅ Historial recreado.")
-
-    with c2:
-        if st.button("🔄 VIGILANCIA DIARIA", type="primary", use_container_width=True):
-            res = conectar_google_sheets()
-            if res[0]:
-                ss_sal, h_pla, h_dat, h_his = res
-                status = st.empty()
-                col_b = h_his.col_values(2) 
-                reg_map = {}
-                
-                for i in range(5, len(col_b), 8):
-                    val = str(col_b[i]).strip()
-                    if val and val not in ["", "Registro"]:
-                        reg_map[val] = (i + 1) - 5
-
-                f_disp = len(col_b) + 1
-                for idx, row in df.iterrows():
-                    reg_id = str(row.iloc[3]).strip()
-                    try:
-                        dia = int(str(row.iloc[0]).split('/')[0])
-                        col_tachado = dia + 3
-                    except: col_tachado = 4
-                    
-                    status.text(f"Procesando: {row.iloc[4]}")
-
-                    if reg_id in reg_map:
-                        actualizar_bloque_paciente(h_his, reg_map[reg_id], row, col_tachado)
-                    else:
-                        ss_sal.batch_update({"requests": [{"copyPaste": {
-                            "source": {"sheetId": h_pla.id, "startRowIndex": 2, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 35},
-                            "destination": {"sheetId": h_his.id, "startRowIndex": f_disp - 1, "endRowIndex": f_disp + 7, "startColumnIndex": 0, "endColumnIndex": 35},
-                            "pasteType": "PASTE_NORMAL"
-                        }}]})
-                        actualizar_bloque_paciente(h_his, f_disp, row, col_tachado)
-                        f_disp += 8
-                    # PAUSA DE SEGURIDAD AUMENTADA
-                    time.sleep(2.5) 
-                st.success("✅ Sincronización terminada.")
+    df_pdf = st.session_state['df_vig']
+    
+    if not df_pdf.empty:
+        pdf_file = generar_pdf_vigilancia(df_pdf)
+        
+        st.download_button(
+            label="📄 Descargar PDF (4 plantillas por hoja)",
+            data=pdf_file,
+            file_name="vigilancia_diaria.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    else:
+        st.warning("No hay datos cargados para generar el PDF.")
