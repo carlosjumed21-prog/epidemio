@@ -2,57 +2,70 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Filtrado de Pacientes", layout="wide")
+st.title("🔍 Filtrado de Pacientes (Máquina Virtual)")
 
-st.title("🔍 Máquina Virtual de Filtrado")
-st.markdown("""
-Esta herramienta compara el **Censo Actual (Hoja 1)** con el **Censo Antiguo (Hoja 2)** para actualizar la lista sin repetir pacientes, respetando siempre la fecha más reciente.
-""")
+# 1. Definición del enlace directo a tu archivo
+# Usamos el ID de la URL que proporcionaste
+URL_SABANA = "https://docs.google.com/spreadsheets/d/1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM/edit?usp=sharing"
 
-# Conexión a Google Sheets
+# 2. Establecer la conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-if st.button("🔄 Ejecutar Filtrado y Actualizar Hoja 2", type="primary"):
+st.markdown("""
+Esta herramienta realiza un proceso de **Upsert** (Update/Insert):
+1. Lee los pacientes nuevos en la **Hoja 1**.
+2. Los compara con el histórico de la **Hoja 2**.
+3. Si el paciente ya existe (mismo RFC), actualiza los datos con la fecha más reciente.
+4. Si es nuevo, lo agrega al final.
+""")
+
+if st.button("🚀 Iniciar Proceso de Filtrado", type="primary", use_container_width=True):
     try:
-        # 1. Cargar datos de ambas hojas
-        # Nota: Asegúrate que los nombres "Hoja 1" y "Hoja 2" coincidan exactamente en tu Sheet
-        df_actual = conn.read(worksheet="Hoja 1", ttl=0)
-        df_antiguo = conn.read(worksheet="Hoja 2", ttl=0)
+        with st.spinner("Conectando con Google Sheets..."):
+            # Leer ambas hojas de forma explícita usando la URL
+            # ttl=0 asegura que traiga los datos más recientes que acabas de pegar
+            df_actual = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 1", ttl=0)
+            df_previo = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 2", ttl=0)
 
         if df_actual.empty:
-            st.warning("⚠️ La Hoja 1 está vacía. No hay nada que filtrar.")
+            st.warning("⚠️ La Hoja 1 está vacía. Por favor, coloca los datos del censo diario ahí.")
         else:
-            # 2. Combinar ambos censos
-            # Concatenamos Hoja 1 y Hoja 2
-            df_combinado = pd.concat([df_actual, df_antiguo], ignore_index=True)
-
-            # 3. Limpieza y Lógica de Fecha (Columna A)
-            # Convertimos la Columna A a fecha para poder ordenar correctamente
-            # Usamos iloc[:, 0] para referirnos a la Columna A independientemente del nombre
-            df_combinado.iloc[:, 0] = pd.to_datetime(df_combinado.iloc[:, 0], dayfirst=True, errors='coerce')
-
-            # Ordenamos: la fecha más reciente arriba
-            df_combinado = df_combinado.sort_values(by=df_combinado.columns[0], ascending=False)
-
-            # 4. Eliminar Duplicados por RFC/ID (Columna D - index 3)
-            # Mantenemos el primero (el más reciente por el ordenamiento previo)
-            df_final = df_combinado.drop_duplicates(subset=[df_combinado.columns[3]], keep='first')
-
-            # 5. Guardar resultados en Hoja 2
-            conn.update(worksheet="Hoja 2", data=df_final)
-
-            st.success(f"✅ ¡Filtrado completado! La Hoja 2 ahora tiene {len(df_final)} pacientes únicos.")
+            # --- LÓGICA DE FILTRADO ---
             
-            # Mostrar métricas rápidas
-            c1, c2 = st.columns(2)
-            c1.metric("Pacientes Nuevos/Actualizados", len(df_actual))
-            c2.metric("Total en Historial (Hoja 2)", len(df_final))
+            # Combinar ambos listados
+            df_total = pd.concat([df_actual, df_previo], ignore_index=True)
 
-            st.write("### Vista previa del censo actualizado:")
-            st.dataframe(df_final)
+            # Convertir Columna A (Fecha) a formato fecha para poder ordenar
+            # iloc[:, 0] selecciona la primera columna (Fecha)
+            df_total.iloc[:, 0] = pd.to_datetime(df_total.iloc[:, 0], dayfirst=True, errors='coerce')
+
+            # Ordenar por fecha: la más actual queda arriba
+            df_total = df_total.sort_values(by=df_total.columns[0], ascending=False)
+
+            # ELIMINAR DUPLICADOS
+            # Buscamos duplicados en la Columna D (index 3), que es el RFC/ID
+            # 'keep=first' garantiza que nos quedamos con el registro con fecha más reciente
+            df_limpio = df_total.drop_duplicates(subset=[df_total.columns[3]], keep='first')
+
+            # --- ACTUALIZACIÓN ---
+            with st.spinner("Actualizando Hoja 2 (Histórico Limpio)..."):
+                # Escribimos el resultado final depurado en la Hoja 2
+                conn.update(spreadsheet=URL_SABANA, worksheet="Hoja 2", data=df_limpio)
+
+            st.success("✅ Proceso completado exitosamente.")
+            
+            # Métricas de control
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Procesados hoy", len(df_actual))
+            c2.metric("Base previa", len(df_previo))
+            c3.metric("Total Únicos final", len(df_limpio))
+
+            st.write("### 📋 Vista previa de los datos filtrados")
+            st.dataframe(df_limpio, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error al procesar el filtrado: {e}")
+        st.info("Asegúrate de que las hojas se llamen exactamente 'Hoja 1' y 'Hoja 2' en tu archivo de Sheets.")
 
 st.divider()
-st.info("💡 **Consejo:** Una vez que la Hoja 2 esté actualizada, puedes ir a 'Hoja Diaria Piso' para generar tus plantillas de vigilancia.")
+st.caption("EpidemioManager v2.0 - Gestión de Datos Epidemiológicos")
