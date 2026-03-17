@@ -11,7 +11,7 @@ st.set_page_config(
 # --- 2. BARRA LATERAL (SIDEBAR) ---
 st.sidebar.header("⚙️ Configuración")
 
-# Selector de archivos para el Censo HTML
+# Selector de archivos para el Censo HTML (Mantengo tu lógica original)
 archivo_subido = st.sidebar.file_uploader(
     "Subir Censo HTML", 
     type=["html", "htm"],
@@ -27,12 +27,23 @@ else:
 st.sidebar.divider()
 
 # --- 3. NAVEGACIÓN Y ESTRUCTURA DE PÁGINAS ---
+# He organizado el orden para que el "Filtrado" esté antes de la "Hoja Diaria"
 pg = st.navigation([
     st.Page(
         "modulos/censo_diario.py", 
         title="Censo Epidemiológico", 
         icon="📋", 
         default=True
+    ),
+    st.Page(
+        "modulos/filtrado_pacientes.py", 
+        title="Filtrado de Pacientes", 
+        icon="🔍"
+    ),
+    st.Page(
+        "modulos/hojadiaria.py", 
+        title="Hoja Diaria Piso", 
+        icon="📝" 
     ),
     st.Page(
         "modulos/insumos.py", 
@@ -44,17 +55,10 @@ pg = st.navigation([
         title="Aislamientos", 
         icon="🦠"
     ),
-    # Tu pestaña original
     st.Page(
         "modulos/piso.py", 
         title="Seguimiento de Piso", 
         icon="🏥"
-    ),
-    # La nueva pestaña agregada
-    st.Page(
-        "modulos/hojadiaria.py", 
-        title="Hoja Diaria Piso", 
-        icon="📝" 
     ),
 ])
 
