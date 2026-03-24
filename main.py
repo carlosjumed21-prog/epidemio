@@ -60,6 +60,11 @@ pg = st.navigation([
         title="Seguimiento de Piso", 
         icon="🏥"
     ),
+    st.Page(
+        "modulos/vigilancia_piso.py", 
+        title="Vigilancia Activa de Piso", 
+        icon="🛡️" 
+    ),
 ])
 
 # --- 4. EJECUCIÓN ---
