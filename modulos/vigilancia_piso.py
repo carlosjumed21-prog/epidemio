@@ -14,13 +14,11 @@ def conectar_piso_activo():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # Origen: Datos Limpios
         ss_origen = client.open_by_key("1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM")
-        # Salida: Vigilancia Activa de Piso
         ss_salida = client.open_by_key("1GWFWY1PyfUERC9S0QYvOsugpvrIPQiRS7vyCval9ZTc")
         
-        h_datos_limpios = ss_origen.get_worksheet(1) # Hoja 2 del origen
-        h_plantilla = ss_salida.get_worksheet(0)     # Hoja 1 (Plantilla Maestra)
+        h_datos_limpios = ss_origen.get_worksheet(1) 
+        h_plantilla = ss_salida.get_worksheet(0)     
             
         return ss_salida, h_plantilla, h_datos_limpios
     except Exception as e:
@@ -30,13 +28,10 @@ def conectar_piso_activo():
 # --- 2. FUNCIÓN DE MAPEO Y FORMATO ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
     try:
-        # Extraer día para la "X"
         fecha_str = str(fila_datos.iloc[0])
         dia = int(fecha_str.split('/')[0])
-        col_dia = dia + 2  # Día 1 en Col C(3)
+        col_dia = dia + 2  
 
-        # Mapeo de celdas según tu esquema
-        # Nota: fila_base aquí es 1 porque es una hoja nueva
         lista_celdas = [
             gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3: Nombre
             gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3: Expediente
@@ -44,14 +39,12 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
             gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
             gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo
             gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
-            gspread.Cell(row=9, col=col_dia, value="X")                 # C9-AG9: Marca
+            gspread.Cell(row=9, col=col_dia, value="X")                 
         ]
         
-        # Actualizar valores
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # Aplicar alineación a la izquierda en las celdas de datos
-        # Rangos: B3, O3, AC3, C4, AA5, B6
+        # Formato: Alineación a la izquierda
         fmt = {"horizontalAlignment": "LEFT"}
         h_nueva.batch_format([
             {"range": "B3", "format": fmt},
@@ -61,59 +54,78 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
             {"range": "AA5", "format": fmt},
             {"range": "B6", "format": fmt}
         ])
-
     except Exception as e:
         st.error(f"Error en mapeo/formato: {e}")
 
 # --- 3. INTERFAZ ---
-st.title("🛡️ Vigilancia Activa: Multi-Hoja")
+st.title("🛡️ Vigilancia Activa: Selección por Tabla")
 
-if st.button("🔍 Cargar lista de pacientes del Censo"):
+if st.button("🔍 Cargar pacientes del Censo"):
     res = conectar_piso_activo()
     if res[0]:
         _, _, h_dat = res
-        df_full = pd.DataFrame(h_dat.get_all_records())
-        st.session_state['df_piso_disponible'] = df_full
-        st.success("Lista cargada.")
+        data = h_dat.get_all_records()
+        df_full = pd.DataFrame(data)
+        # Añadimos columna de selección al inicio
+        df_full.insert(0, "Seleccionar", False)
+        st.session_state['df_piso_tabla'] = df_full
+        st.success("Censo cargado correctamente.")
 
-if 'df_piso_disponible' in st.session_state:
-    df = st.session_state['df_piso_disponible']
-    df['display_name'] = df.apply(lambda x: f"{x.iloc[4]} | {x.iloc[3]}", axis=1)
+if 'df_piso_tabla' in st.session_state:
+    st.subheader("Lista de Pacientes Detectados")
+    st.write("Marca la casilla de los pacientes que deseas procesar:")
+
+    # Editor de datos para selección por casilla
+    # Mostramos solo columnas relevantes para que no se vea amontonado
+    df_visual = st.session_state['df_piso_tabla']
     
-    seleccionados = st.multiselect("Selecciona pacientes:", options=df['display_name'].tolist())
+    # Configuramos el editor para que solo la columna "Seleccionar" sea editable
+    df_seleccion = st.data_editor(
+        df_visual,
+        column_config={
+            "Seleccionar": st.column_config.CheckboxColumn(
+                "¿Procesar?",
+                help="Marca para generar su hoja de vigilancia",
+                default=False,
+            )
+        },
+        disabled=[col for col in df_visual.columns if col != "Seleccionar"],
+        hide_index=True,
+        use_container_width=True
+    )
 
-    if st.button("🚀 Crear Hojas Individuales", type="primary"):
-        if not seleccionados:
-            st.warning("Selecciona al menos uno.")
+    if st.button("🚀 Generar Hojas para Seleccionados", type="primary"):
+        # Filtramos los que el usuario marcó con True
+        pacientes_elegidos = df_seleccion[df_seleccion["Seleccionar"] == True]
+        
+        if pacientes_elegidos.empty:
+            st.warning("⚠️ No has seleccionado ningún paciente.")
         else:
             res = conectar_piso_activo()
             if res[0]:
-                ss_sal, h_pla, h_dat = res
-                df_procesar = df[df['display_name'].isin(seleccionados)]
+                ss_sal, h_pla, _ = res
                 
                 prog = st.progress(0)
                 status = st.empty()
 
-                for idx, (i, row) in enumerate(df_procesar.iterrows()):
-                    nombre_paciente = str(row.iloc[4])[:20] # Truncar nombre para la pestaña
-                    status.text(f"Creando pestaña para: {nombre_paciente}")
+                for idx, (original_idx, row) in enumerate(pacientes_elegidos.iterrows()):
+                    # Quitamos la columna 'Seleccionar' para no confundir al mapeo iloc original
+                    datos_paciente = row.drop("Seleccionar")
+                    nombre = str(datos_paciente.iloc[4])[:25]
                     
-                    # 1. Crear nueva hoja duplicando la plantilla
+                    status.text(f"Creando pestaña {idx+1}/{len(pacientes_elegidos)}: {nombre}")
+                    
                     try:
-                        # Duplicamos la hoja 1 (plantilla) con el nombre del paciente
                         nueva_hoja = ss_sal.duplicate_sheet(
                             source_sheet_id=h_pla.id,
-                            new_sheet_name=f"Paciente_{nombre_paciente}_{idx}",
+                            new_sheet_name=f"Vig_{nombre}_{int(time.time()) % 1000}",
                             insert_sheet_index=idx + 1
                         )
-                        
-                        # 2. Llenar Datos y dar formato
-                        actualizar_hoja_paciente(nueva_hoja, row)
-                        
+                        actualizar_hoja_paciente(nueva_hoja, datos_paciente)
                     except Exception as e:
-                        st.error(f"No se pudo crear la hoja para {nombre_paciente}: {e}")
+                        st.error(f"Error con {nombre}: {e}")
                     
-                    prog.progress((idx + 1) / len(df_procesar))
-                    time.sleep(3) # Pausa obligatoria (duplicar hojas es pesado para la API)
+                    prog.progress((idx + 1) / len(pacientes_elegidos))
+                    time.sleep(3) 
                 
-                st.success("✅ Todas las pestañas han sido creadas.")
+                st.success(f"✅ Se generaron {len(pacientes_elegidos)} pestañas nuevas.")
