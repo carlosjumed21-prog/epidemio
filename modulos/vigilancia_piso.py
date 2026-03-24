@@ -15,28 +15,28 @@ def conectar_piso_activo():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
+        # Archivos de Google Sheets
         ss_origen = client.open_by_key("1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM")
         ss_salida = client.open_by_key("1GWFWY1PyfUERC9S0QYvOsugpvrIPQiRS7vyCval9ZTc")
         
-        h_datos_limpios = ss_origen.get_worksheet(1) 
-        h_plantilla = ss_salida.get_worksheet(0)     
+        h_datos_limpios = ss_origen.get_worksheet(1) # Hoja 2 Origen
+        h_plantilla = ss_salida.get_worksheet(0)     # Hoja 1 Plantilla
             
         return ss_salida, h_plantilla, h_datos_limpios
     except Exception as e:
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. FUNCIÓN DE MAPEO CORREGIDA ---
+# --- 2. FUNCIÓN DE MAPEO CORREGIDA (SEXO EN FILA 3) ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
     try:
-        # 1. Lógica de Fecha (Columna 0 del Censo)
+        # A. Día para el calendario (Columna A del censo)
         fecha_str = str(fila_datos.iloc[0])
         dia = int(fecha_str.split('/')[0])
-        col_dia = dia + 2  # C9...
+        col_dia = dia + 2  # Inicia en Col C (3)
 
-        # 2. Lógica de Sexo (Búsqueda robusta)
-        # Intentamos obtener el valor por nombre de columna 'SEXO'
-        # Si falla, usamos el índice 5 (Columna F)
+        # B. Lógica de Sexo (Columna 6 del censo -> Etiqueta 'SEXO')
+        # Buscamos 'M' para marcar W3 (Col 23) o 'F' para Y3 (Col 25)
         try:
             sexo_raw = str(fila_datos['SEXO']).strip().upper()
         except:
@@ -44,11 +44,11 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         col_sexo = None
         if sexo_raw == 'M':
-            col_sexo = 23  # Columna W
+            col_sexo = 23  # Celda W3
         elif sexo_raw == 'F':
-            col_sexo = 25  # Columna Y
+            col_sexo = 25  # Celda Y3
 
-        # 3. Lista de celdas a actualizar
+        # C. Construcción del bloque de celdas
         lista_celdas = [
             gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3: Nombre
             gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3: Expediente
@@ -56,66 +56,61 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
             gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
             gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo Texto
             gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
-            gspread.Cell(row=9, col=col_dia, value="X")                 # Día del mes
+            gspread.Cell(row=9, col=col_dia, value="X")                 # Calendario
         ]
 
-        # 4. Insertar la X de sexo solo si se detectó M o F
+        # D. Marca de Sexo en FILA 3 (W3 o Y3)
         if col_sexo:
-            lista_celdas.append(gspread.Cell(row=5, col=col_sexo, value="X"))
+            lista_celdas.append(gspread.Cell(row=3, col=col_sexo, value="X"))
         else:
-            # Mensaje de depuración en caso de que falle
-            st.warning(f"⚠️ No se reconoció el sexo para {fila_datos.iloc[4]}. Valor leído: '{sexo_raw}'")
+            st.warning(f"⚠️ Sexo no identificado para {fila_datos.iloc[4]}. Valor: '{sexo_raw}'")
 
-        # 5. Envío de datos a Google
+        # E. Envío masivo a Google
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # 6. Formato: Alineación a la izquierda
-        fmt = {"horizontalAlignment": "LEFT"}
+        # F. Formato: Alineación IZQUIERDA en las áreas de datos
+        fmt_left = {"horizontalAlignment": "LEFT"}
         h_nueva.batch_format([
-            {"range": "B3:B6", "format": fmt},
-            {"range": "O3", "format": fmt},
-            {"range": "AC3", "format": fmt},
-            {"range": "C4", "format": fmt},
-            {"range": "AA5", "format": fmt}
+            {"range": "B3:AC6", "format": fmt_left}, # Cubre todo el bloque superior
+            {"range": "C4", "format": fmt_left},
+            {"range": "B6", "format": fmt_left}
         ])
 
     except Exception as e:
-        st.error(f"Error en el proceso de datos: {e}")
+        st.error(f"Error procesando celdas: {e}")
 
-# --- 3. INTERFAZ ---
-st.title("🛡️ Vigilancia Activa de Piso")
+# --- 3. INTERFAZ STREAMLIT ---
+st.title("🛡️ Vigilancia Activa: Generador de Hojas")
 
-if st.button("🔍 Cargar Pacientes del Censo"):
+if st.button("🔍 Cargar Censo de Origen"):
     res = conectar_piso_activo()
     if res[0]:
         _, _, h_dat = res
-        # Obtenemos registros y limpiamos nombres de columnas (quitar espacios y poner en MAYUS)
-        df_raw = pd.DataFrame(h_dat.get_all_records())
-        df_raw.columns = [str(col).strip().upper() for col in df_raw.columns]
-        
-        df_raw.insert(0, "SELECCIONAR", False)
-        st.session_state['df_piso_activo'] = df_raw
-        st.success("Censo cargado.")
+        df = pd.DataFrame(h_dat.get_all_records())
+        # Normalizar nombres de columnas
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        df.insert(0, "SELECCIONAR", False)
+        st.session_state['df_vig_activa'] = df
+        st.success("Censo cargado correctamente.")
 
-if 'df_piso_activo' in st.session_state:
-    df_visual = st.session_state['df_piso_activo']
+if 'df_vig_activa' in st.session_state:
+    df_visual = st.session_state['df_vig_activa']
     
-    # Editor de tabla para selección
-    df_seleccion = st.data_editor(
+    st.info("Marca los pacientes que requieren hoja de seguimiento hoy:")
+    
+    df_sel = st.data_editor(
         df_visual,
-        column_config={
-            "SELECCIONAR": st.column_config.CheckboxColumn("¿Procesar?", default=False)
-        },
-        disabled=[col for col in df_visual.columns if col != "SELECCIONAR"],
+        column_config={"SELECCIONAR": st.column_config.CheckboxColumn("¿Crear?", default=False)},
+        disabled=[c for c in df_visual.columns if c != "SELECCIONAR"],
         hide_index=True,
         use_container_width=True
     )
 
-    if st.button("🚀 Generar Hojas Individuales", type="primary"):
-        elegidos = df_seleccion[df_seleccion["SELECCIONAR"] == True]
+    if st.button("🚀 Crear Pestañas en Google Sheets", type="primary"):
+        elegidos = df_sel[df_sel["SELECCIONAR"] == True]
         
         if elegidos.empty:
-            st.warning("Selecciona al menos un paciente.")
+            st.warning("No hay pacientes seleccionados.")
         else:
             res = conectar_piso_activo()
             if res[0]:
@@ -124,23 +119,23 @@ if 'df_piso_activo' in st.session_state:
                 status = st.empty()
 
                 for idx, (i, row) in enumerate(elegidos.iterrows()):
-                    # Quitamos la columna de control para no mover los índices
-                    datos = row.drop("SELECCIONAR")
-                    nombre = str(datos.iloc[4])[:20].strip()
+                    paciente = row.drop("SELECCIONAR")
+                    nombre_tab = str(paciente.iloc[4])[:20].strip()
                     
-                    status.text(f"Creando pestaña: {nombre}")
+                    status.text(f"Trabajando en: {nombre_tab}")
                     
                     try:
+                        # Duplicar Hoja 1 como nueva pestaña
                         nueva = ss_sal.duplicate_sheet(
                             source_sheet_id=h_pla.id,
-                            new_sheet_name=f"Vig_{nombre}_{idx+1}",
+                            new_sheet_name=f"Vig_{nombre_tab}_{idx+1}",
                             insert_sheet_index=idx + 1
                         )
-                        actualizar_hoja_paciente(nueva, datos)
+                        actualizar_hoja_paciente(nueva, paciente)
                     except Exception as e:
-                        st.error(f"Error en {nombre}: {e}")
+                        st.error(f"Error en {nombre_tab}: {e}")
                     
                     prog.progress((idx + 1) / len(elegidos))
-                    time.sleep(3.5) # Pausa obligatoria para evitar bloqueo de Google
+                    time.sleep(3.5) # Pausa anti-bloqueo
                 
-                st.success("✅ Proceso completado.")
+                st.success("✅ Proceso de generación finalizado.")
