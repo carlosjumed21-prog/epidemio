@@ -4,7 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import time
 
-# --- 1. CONFIGURACIÓN DE CONEXIÓN ---
+# --- 1. CONEXIÓN ---
 def conectar_piso_activo():
     try:
         creds_dict = dict(st.secrets["connections"]["gsheets"])
@@ -15,9 +15,7 @@ def conectar_piso_activo():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # Origen: Archivo con los datos limpios (Censo)
         ss_origen = client.open_by_key("1yKgI1CxWGxIFSRNaG8WoTTmZ__mEkkfhNqcL-2T_ePM")
-        # Salida: Archivo de Vigilancia Activa de Piso
         ss_salida = client.open_by_key("1GWFWY1PyfUERC9S0QYvOsugpvrIPQiRS7vyCval9ZTc")
         
         h_datos_limpios = ss_origen.get_worksheet(1) # Hoja 2 del origen
@@ -30,42 +28,39 @@ def conectar_piso_activo():
 
 # --- 2. FUNCIÓN DE MAPEO, SEXO Y FORMATO ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
-    """
-    Mapeo de datos:
-    B3: Nombre (E), O3: Expediente (D), AC3: Edad (C)
-    C4: Servicio/Cama (G), AA5: Sexo Texto (B), B6: Dx (I)
-    Sexo: M -> W5 (col 23), F -> Y5 (col 25)
-    Día: C9-AG9 (según fecha en A)
-    """
     try:
-        # Extraer día para la "X" en el calendario
+        # Fecha y Día (Columna A = iloc[0])
         fecha_str = str(fila_datos.iloc[0])
         dia = int(fecha_str.split('/')[0])
-        col_dia = dia + 2  # Día 1 cae en Columna C (3)
+        col_dia = dia + 2  
 
-        # Lógica de Sexo (Columna F en origen es iloc[5])
+        # --- LÓGICA DE SEXO (Columna 6 / F / iloc[5]) ---
         sexo_val = str(fila_datos.iloc[5]).strip().upper()
-        col_sexo = 23 if sexo_val == 'M' else (25 if sexo_val == 'F' else None)
+        col_sexo = None
+        if sexo_val == 'M':
+            col_sexo = 23  # Celda W
+        elif sexo_val == 'F':
+            col_sexo = 25  # Celda Y
 
-        # Preparar lista de celdas para actualización masiva
+        # Preparar lista de celdas
         lista_celdas = [
-            gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3
-            gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3
-            gspread.Cell(row=3, col=29, value=str(fila_datos.iloc[2])), # AC3
-            gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4
-            gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5
-            gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6
-            gspread.Cell(row=9, col=col_dia, value="X")                 # Marca Día
+            gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3: Nombre
+            gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3: Expediente
+            gspread.Cell(row=3, col=29, value=str(fila_datos.iloc[2])), # AC3: Edad
+            gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
+            gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo (Texto)
+            gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
+            gspread.Cell(row=9, col=col_dia, value="X")                 # Calendario
         ]
 
-        # Agregar marca de sexo si aplica
+        # Agregar la X de sexo si se identificó M o F
         if col_sexo:
             lista_celdas.append(gspread.Cell(row=5, col=col_sexo, value="X"))
 
-        # Escribir en la hoja
+        # Actualización masiva de valores
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # Aplicar alineación a la IZQUIERDA en celdas clave
+        # Formato: Alineación a la IZQUIERDA
         fmt_left = {"horizontalAlignment": "LEFT"}
         h_nueva.batch_format([
             {"range": "B3", "format": fmt_left},
@@ -77,29 +72,24 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
         ])
 
     except Exception as e:
-        st.error(f"Error procesando datos del paciente: {e}")
+        st.error(f"Error en el mapeo: {e}")
 
-# --- 3. INTERFAZ DE USUARIO (STREAMLIT) ---
-st.title("🛡️ Vigilancia Activa: Generador de Pestañas")
-st.markdown("Selecciona los pacientes del censo para generar sus hojas individuales de seguimiento.")
+# --- 3. INTERFAZ ---
+st.title("🛡️ Vigilancia Activa: Selección por Tabla")
 
-# Botón de Carga
-if st.button("🔍 Obtener Pacientes del Censo", use_container_width=True):
+if st.button("🔍 Cargar pacientes del Censo"):
     res = conectar_piso_activo()
     if res[0]:
         _, _, h_dat = res
         df_full = pd.DataFrame(h_dat.get_all_records())
-        # Insertar columna de selección al inicio
         df_full.insert(0, "Seleccionar", False)
-        st.session_state['df_piso_activo'] = df_full
+        st.session_state['df_piso_tabla'] = df_full
         st.success("Censo cargado.")
 
-# Vista Previa y Selección
-if 'df_piso_activo' in st.session_state:
-    st.subheader("Paso 1: Marcar Pacientes")
+if 'df_piso_tabla' in st.session_state:
+    st.subheader("Selecciona los pacientes a procesar")
     
-    # Editor de tabla interactiva
-    df_visual = st.session_state['df_piso_activo']
+    df_visual = st.session_state['df_piso_tabla']
     df_seleccion = st.data_editor(
         df_visual,
         column_config={
@@ -110,44 +100,36 @@ if 'df_piso_activo' in st.session_state:
         use_container_width=True
     )
 
-    st.subheader("Paso 2: Ejecutar")
-    if st.button("🚀 Generar Hojas en Google Sheets", type="primary", use_container_width=True):
-        pacientes_a_procesar = df_seleccion[df_seleccion["Seleccionar"] == True]
+    if st.button("🚀 Generar Hojas Individuales", type="primary"):
+        pacientes_elegidos = df_seleccion[df_seleccion["Seleccionar"] == True]
         
-        if pacientes_a_procesar.empty:
-            st.warning("⚠️ No has seleccionado ningún paciente de la lista.")
+        if pacientes_elegidos.empty:
+            st.warning("⚠️ No has seleccionado ningún paciente.")
         else:
             res = conectar_piso_activo()
             if res[0]:
                 ss_sal, h_pla, _ = res
-                
                 prog = st.progress(0)
                 status = st.empty()
 
-                for idx, (original_idx, row) in enumerate(pacientes_a_procesar.iterrows()):
-                    # Limpiar datos para el mapeo (quitar columna Seleccionar)
+                for idx, (original_idx, row) in enumerate(pacientes_elegidos.iterrows()):
                     datos_paciente = row.drop("Seleccionar")
-                    nombre_corto = str(datos_paciente.iloc[4])[:20].strip()
+                    nombre = str(datos_paciente.iloc[4])[:20].strip()
                     
-                    status.text(f"Generando pestaña {idx+1}/{len(pacientes_a_procesar)}: {nombre_corto}")
+                    status.text(f"Creando pestaña {idx+1}/{len(pacientes_elegidos)}: {nombre}")
                     
                     try:
-                        # Duplicar la plantilla (Hoja 1) como una nueva pestaña
-                        # El nombre incluye un ID único (timestamp) para evitar duplicados
+                        # Duplicamos la plantilla en una hoja nueva
                         nueva_hoja = ss_sal.duplicate_sheet(
                             source_sheet_id=h_pla.id,
-                            new_sheet_name=f"Vig_{nombre_corto}_{int(time.time()) % 1000}",
+                            new_sheet_name=f"Vig_{nombre}_{int(time.time()) % 1000}",
                             insert_sheet_index=idx + 1
                         )
-                        
-                        # Inyectar datos y aplicar formato
                         actualizar_hoja_paciente(nueva_hoja, datos_paciente)
-                        
                     except Exception as e:
-                        st.error(f"Error al crear hoja para {nombre_corto}: {e}")
+                        st.error(f"Error con {nombre}: {e}")
                     
-                    # Progreso y pausa de seguridad para la API
-                    prog.progress((idx + 1) / len(pacientes_a_procesar))
-                    time.sleep(3.5) 
+                    prog.progress((idx + 1) / len(pacientes_elegidos))
+                    time.sleep(3.5) # Pausa para no saturar la API
                 
-                st.success(f"✅ Proceso terminado. Se crearon {len(pacientes_a_procesar)} pestañas.")
+                st.success("✅ Proceso terminado.")
