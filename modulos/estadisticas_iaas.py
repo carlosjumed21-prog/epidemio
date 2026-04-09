@@ -4,6 +4,9 @@ import io
 import plotly.express as px
 
 # --- 1. CONFIGURACIÓN DE MESES ---
+MESES_ORDEN = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+               'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
 MESES_MAP = {
     'ene': 'enero', 'feb': 'febrero', 'mar': 'marzo', 'abr': 'abril',
     'may': 'mayo', 'jun': 'junio', 'jul': 'julio', 'ago': 'agosto',
@@ -15,15 +18,13 @@ def color_negativo_rojo(val):
         return 'color: red; font-weight: bold'
     return 'color: black'
 
-st.title("📊 Sistema de Vigilancia IAAS - CMN 20 de Noviembre")
-st.markdown("---")
+st.title("📊 Análisis de Tiempos IAAS - CMN 20 de Noviembre")
 
 archivo_iaas = st.file_uploader("📂 Sube tu archivo Excel", type=["xlsx"])
 
 if archivo_iaas:
     if 'df_base' not in st.session_state:
         df_raw = pd.read_excel(archivo_iaas)
-        # Delimitar a 121 filas reales (basado en A-H)
         df_limpio = df_raw.dropna(how='all', subset=df_raw.columns[:8]).reset_index(drop=True)
         st.session_state['df_base'] = df_limpio
 
@@ -34,7 +35,7 @@ if archivo_iaas:
             for i in idx_f:
                 df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS I, J, K, L ---
+            # --- CÁLCULOS ---
             df.insert(8, "Detección", (df.iloc[:, 0] - df.iloc[:, 1]).dt.days + 1)
             df.insert(9, "Cultivo", (df.iloc[:, 1] - df.iloc[:, 3]).dt.days + 1)
             df.insert(10, "Entrega", (df.iloc[:, 4] - df.iloc[:, 0]).dt.days + 1)
@@ -45,128 +46,117 @@ if archivo_iaas:
                 for abr, nombre in MESES_MAP.items():
                     if abr in v: return nombre
                 return "Otro"
-            df['Mes_Invisible'] = df.iloc[:, 7].apply(get_mes)
+            df['Mes_Nombre'] = df.iloc[:, 7].apply(get_mes)
 
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados correctamente.")
+            st.success("✅ Datos procesados con éxito.")
             
         except Exception as e:
-            st.error(f"❌ Error en cálculos: {e}")
+            st.error(f"❌ Error: {e}")
 
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
         cols_tiempos = ["Detección", "Cultivo", "Entrega", "Captura"]
 
         # --- FILTROS ---
-        st.subheader("🔍 Filtros de Análisis")
+        st.subheader("🔍 Filtros de Visualización")
         c1, c2 = st.columns(2)
         with c1:
             sujetos_reales = sorted([s for s in df_p.iloc[:, 5].unique() if pd.notna(s)])
-            # Forzamos a que los sujetos sean tratados como etiquetas de texto
             opciones_sujeto = ["Todos"] + [str(int(s)) if isinstance(s, float) else str(s) for s in sujetos_reales]
-            s_sel = st.selectbox("Seleccionar Sujeto (Col F)", opciones_sujeto)
+            s_sel = st.selectbox("Sujeto (Col F)", opciones_sujeto)
         with c2:
-            mes_sel = st.selectbox("Periodo", ["Anual"] + list(MESES_MAP.values()))
+            mes_sel = st.selectbox("Periodo", ["Anual"] + MESES_ORDEN)
 
-        # Aplicar Filtros
+        # Aplicar Máscara de Datos
         mask = pd.Series([True] * len(df_p))
         if s_sel != "Todos":
             mask = mask & (df_p.iloc[:, 5].astype(str) == s_sel)
         if mes_sel != "Anual":
-            mask = mask & (df_p['Mes_Invisible'] == mes_sel)
+            mask = mask & (df_p['Mes_Nombre'] == mes_sel)
         
         df_f = df_p[mask]
 
-        # --- SECCIÓN DE GRÁFICAS ---
+        # --- LÓGICA DE GRÁFICAS ---
         st.divider()
-        st.subheader(f"📈 Comparativa de Tiempos: {s_sel}")
-
         if not df_f.empty:
+            # Limpiar negativos para la gráfica
             df_plot = df_f.copy()
-            # Para la gráfica, los negativos se muestran como 0 para no distorsionar el eje
             for c in cols_tiempos:
                 df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
+            # CASO A: TODOS LOS SUJETOS
             if s_sel == "Todos":
-                df_plot[df_plot.columns[5]] = df_plot[df_plot.columns[5]].astype(str)
-                comp_df = df_plot.groupby(df_plot.columns[5])[cols_tiempos].mean().reset_index()
+                st.subheader("📈 Comparativa: Días por Sujeto")
+                df_plot[df_p.columns[5]] = df_plot[df_p.columns[5]].astype(str)
+                comp_df = df_plot.groupby(df_p.columns[5])[cols_tiempos].mean().reset_index()
                 
-                fig = px.bar(comp_df, 
-                             x=df_plot.columns[5], 
-                             y=cols_tiempos, 
-                             title="Promedio de Días por Sujeto (Comparativo)",
-                             labels={df_plot.columns[5]: 'Sujeto ID', 'value': 'Días', 'variable': 'Etapa'},
-                             barmode='group',
-                             text_auto='.1f',
-                             color_discrete_sequence=px.colors.qualitative.Safe)
-                
+                fig = px.bar(comp_df, x=df_p.columns[5], y=cols_tiempos, 
+                             barmode='group', text_auto='.1f',
+                             labels={df_p.columns[5]: 'Sujetos', 'value': 'Días', 'variable': 'Etapa'},
+                             title="Desempeño Global por Sujeto",
+                             color_discrete_sequence=px.colors.qualitative.Vivid)
                 fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_sujeto[1:])
+
+            # CASO B: UN SUJETO / ANUAL (Evolución por Meses)
+            elif s_sel != "Todos" and mes_sel == "Anual":
+                st.subheader(f"📈 Evolución Mensual: Sujeto {s_sel}")
+                # Agrupar por mes
+                evol_df = df_plot.groupby('Mes_Nombre')[cols_tiempos].mean().reindex(MESES_ORDEN).reset_index()
+                
+                fig = px.bar(evol_df, x='Mes_Nombre', y=cols_tiempos, 
+                             barmode='group', text_auto='.1f',
+                             labels={'Mes_Nombre': 'Meses del Año', 'value': 'Días', 'variable': 'Etapa'},
+                             title=f"Tiempos Promedio de {s_sel} a lo largo del año",
+                             color_discrete_sequence=px.colors.qualitative.Safe)
+
+            # CASO C: UN SUJETO / MES ESPECÍFICO
             else:
-                ind_df = df_plot[cols_tiempos].mean().reset_index()
-                ind_df.columns = ['Etapa', 'Promedio Días']
-                fig = px.bar(ind_df, x='Etapa', y='Promedio Días', 
-                             title=f"Tiempos Promedio - Sujeto {s_sel}",
-                             color='Etapa', text_auto='.2f',
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
+                st.subheader(f"📊 Resumen: Sujeto {s_sel} - {mes_sel}")
+                res_df = df_plot[cols_tiempos].mean().reset_index()
+                res_df.columns = ['Etapa', 'Días']
+                fig = px.bar(res_df, x='Etapa', y='Días', color='Etapa', text_auto='.2f',
+                             title=f"Promedio de Tiempos en {mes_sel}")
 
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No hay registros para este filtro.")
 
-        # --- BOTONES Y ALERTAS ---
-        tiene_rojos = (df_f[cols_tiempos] < 0).any().any()
-        if tiene_rojos:
-            st.warning("⚠️ **Nota:** Los días promedios son aproximados por fechas distantes.")
+        else:
+            st.warning("No hay datos para mostrar con los filtros seleccionados.")
+
+        # --- ALERTAS Y BOTONES ---
+        if (df_f[cols_tiempos] < 0).any().any():
+            st.warning("⚠️ **Nota:** Existen fechas distantes; promedios calculados solo con valores válidos.")
 
         st.write("### Indicadores Rápidos")
         m1, m2, m3, m4 = st.columns(4)
-        def render_m(cont, label, col_name):
+        def r_m(cont, label, col_n):
             if cont.button(label):
                 if not df_f.empty:
-                    val = df_f[col_name][df_f[col_name] >= 0].mean()
+                    val = df_f[col_n][df_f[col_n] >= 0].mean()
                     cont.metric("Días", f"{val:.2f}")
-                else: cont.warning("N/A")
+                else: cont.write("N/A")
+        
+        r_m(m1, "Detección", "Detección"); r_m(m2, "Cultivo", "Cultivo")
+        r_m(m3, "Entrega", "Entrega"); r_m(m4, "Captura", "Captura")
 
-        render_m(m1, "Detección", "Detección")
-        render_m(m2, "Cultivo", "Cultivo")
-        render_m(m3, "Entrega", "Entrega")
-        render_m(m4, "Captura", "Captura")
-
-        # --- EXPORTACIÓN ---
+        # --- EXCEL Y VISTA PREVIA ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
             df_export = df_p.iloc[:, :12].copy()
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
             workbook, worksheet = writer.book, writer.sheets['Reporte']
-            
-            # max_r es el número de filas de datos
             max_r, max_c = df_export.shape
-            
-            worksheet.add_table(0, 0, max_r - 1, max_c - 1, {
-                'columns': [{'header': c} for c in df_export.columns],
-                'style': 'Table Style Medium 9'
-            })
-            
-            # Fila de Totales PROMEDIO (Corregido max_row a max_r)
+            worksheet.add_table(0, 0, max_r, max_c - 1, {'style': 'Table Style Medium 9', 'total_row': True})
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
-            worksheet.write(max_r, 7, "PROMEDIO TOTAL", fmt_v)
             for i, col_let in zip(range(8, 12), ['I', 'J', 'K', 'L']):
-                # Ajustamos la fórmula para usar max_r
                 formula = f"=AVERAGEIF({col_let}2:{col_let}{max_r + 1}, \">=0\")"
-                worksheet.write_formula(max_r, i, formula, fmt_v)
-            
-            # Formato rojo para negativos
-            fmt_rojo = workbook.add_format({'font_color': 'red', 'bold': True})
-            worksheet.conditional_format(1, 8, max_r, 11, {
-                'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_rojo
-            })
-            
+                worksheet.write_formula(max_r + 1, i, formula, fmt_v)
             worksheet.set_column(0, 11, 20)
+        
+        st.download_button("📥 Descargar Reporte Final", output.getvalue(), "Reporte_IAAS_Final.xlsx")
 
-        st.download_button("📥 Descargar Reporte Final (A-L)", output.getvalue(), "Reporte_IAAS_Final.xlsx")
-
-        with st.expander("👀 Ver Tabla de Datos (121 registros)"):
+        with st.expander("👀 Ver Tabla de Datos"):
             df_vis = df_p.iloc[:, :12].copy()
             for i in [0, 1, 3, 4, 6]:
                 df_vis.iloc[:, i] = df_vis.iloc[:, i].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
