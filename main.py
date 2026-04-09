@@ -65,6 +65,11 @@ pg = st.navigation([
         title="Vigilancia Activa de Piso", 
         icon="🛡️" 
     ),
+    st.Page(
+        "modulos/estadisticas_iaas.py", # <--- Nueva página
+        title="Estadísticas IAAS", 
+        icon="📊"
+    ),
 ])
 
 # --- 4. EJECUCIÓN ---
