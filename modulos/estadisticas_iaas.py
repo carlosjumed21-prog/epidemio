@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import plotly.express as px
 
 # --- 1. CONFIGURACIÓN DE MESES ---
 MESES_MAP = {
@@ -10,12 +11,11 @@ MESES_MAP = {
 }
 
 def color_negativo_rojo(val):
-    """Estilo para la vista previa web"""
     if isinstance(val, (int, float)) and val < 0:
         return 'color: red; font-weight: bold'
     return 'color: black'
 
-st.title("📊 Estadísticas IAAS - CMN 20 de Noviembre")
+st.title("📊 Sistema de Vigilancia IAAS - Análisis de Tiempos")
 st.markdown("---")
 
 archivo_iaas = st.file_uploader("📂 Sube tu archivo Excel", type=["xlsx"])
@@ -23,26 +23,22 @@ archivo_iaas = st.file_uploader("📂 Sube tu archivo Excel", type=["xlsx"])
 if archivo_iaas:
     if 'df_base' not in st.session_state:
         df_raw = pd.read_excel(archivo_iaas)
-        # Delimitar estrictamente a filas con datos en A-H (las 121 reales)
         df_limpio = df_raw.dropna(how='all', subset=df_raw.columns[:8]).reset_index(drop=True)
         st.session_state['df_base'] = df_limpio
 
-    if st.button("🚀 Generar Reporte"):
+    if st.button("🚀 Procesar y Graficar"):
         try:
             df = st.session_state['df_base'].iloc[:, :8].copy()
-            
-            # Convertir fechas (A, B, D, E, G)
             idx_f = [0, 1, 3, 4, 6]
             for i in idx_f:
                 df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS (Columnas I, J, K, L) ---
-            df.insert(8, "Tiempo promedio de detección en días", (df.iloc[:, 0] - df.iloc[:, 1]).dt.days + 1)
-            df.insert(9, "Tiempo promedio de toma de cultivo en días", (df.iloc[:, 1] - df.iloc[:, 3]).dt.days + 1)
-            df.insert(10, "Tiempo promedio de entrega en días", (df.iloc[:, 4] - df.iloc[:, 0]).dt.days + 1)
-            df.insert(11, "Tiempo promedio de captura en días", (df.iloc[:, 6] - df.iloc[:, 4]).dt.days + 1)
+            # --- CÁLCULOS I, J, K, L ---
+            df.insert(8, "Detección", (df.iloc[:, 0] - df.iloc[:, 1]).dt.days + 1)
+            df.insert(9, "Cultivo", (df.iloc[:, 1] - df.iloc[:, 3]).dt.days + 1)
+            df.insert(10, "Entrega", (df.iloc[:, 4] - df.iloc[:, 0]).dt.days + 1)
+            df.insert(11, "Captura", (df.iloc[:, 6] - df.iloc[:, 4]).dt.days + 1)
 
-            # Mes invisible para filtros internos
             def get_mes(v):
                 v = str(v).lower()
                 for abr, nombre in MESES_MAP.items():
@@ -51,100 +47,115 @@ if archivo_iaas:
             df['Mes_Invisible'] = df.iloc[:, 7].apply(get_mes)
 
             st.session_state['df_procesado'] = df
-            st.success(f"✅ Procesado: {len(df)} registros detectados.")
+            st.success("✅ Datos listos para visualización.")
             
         except Exception as e:
-            st.error(f"❌ Error en cálculos: {e}")
+            st.error(f"❌ Error: {e}")
 
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
+        cols_tiempos = ["Detección", "Cultivo", "Entrega", "Captura"]
 
-        # --- 1. EXCEL DE SALIDA (A-L + Totales) ---
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
-            df_export = df_p.iloc[:, :12].copy()
-            df_export.to_excel(writer, index=False, sheet_name='Reporte_IAAS')
-            
-            workbook  = writer.book
-            worksheet = writer.sheets['Reporte_IAAS']
-            (max_row, max_col) = df_export.shape
-            
-            # Formatos Excel
-            fmt_rojo = workbook.add_format({'font_color': 'red', 'bold': True})
-            fmt_total_lbl = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'border': 1, 'align': 'center'})
-            fmt_total_val = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'border': 1, 'num_format': '0.00'})
-
-            # Crear Tabla de Excel
-            worksheet.add_table(0, 0, max_row - 1, max_col - 1, {
-                'columns': [{'header': c} for c in df_export.columns],
-                'style': 'Table Style Medium 9'
-            })
-
-            # Fila de Totales (Promedio que ignora negativos)
-            worksheet.merge_range(max_row, 0, max_row, 7, "PROMEDIO TOTAL (Excluye inconsistencias)", fmt_total_lbl)
-            for i, col_let in zip(range(8, 12), ['I', 'J', 'K', 'L']):
-                rango = f"{col_let}2:{col_let}{max_row}"
-                # AVERAGEIF en Excel ignora los menores a 0
-                worksheet.write_formula(max_row, i, f"=AVERAGEIF({rango}, \">=0\")", fmt_total_val)
-
-            # Formato condicional Rojo para negativos
-            worksheet.conditional_format(1, 8, max_row-1, 11, {
-                'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_rojo
-            })
-            worksheet.set_column(0, 11, 20)
-
-        st.download_button("📥 Descargar Reporte Final (A-L)", output.getvalue(), "Reporte_IAAS_Totales.xlsx")
-
-        # --- 2. VISTA PREVIA (Aquí es donde ocurría el TypeError) ---
-        st.subheader(f"👀 Vista Previa ({len(df_p)} filas)")
-        
-        # Solución al TypeError: Convertimos a string ANTES de usar .dt.strftime
-        df_visual = df_p.iloc[:, :12].copy()
-        idx_fechas = [0, 1, 3, 4, 6]
-        
-        for i in idx_fechas:
-            col_name = df_visual.columns[i]
-            # Convertimos la columna a tipo "objeto/texto" para que acepte el formato
-            df_visual[col_name] = df_visual[col_name].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
-
-        st.dataframe(
-            df_visual.style.map(color_negativo_rojo, subset=df_visual.columns[8:12]), 
-            use_container_width=True
-        )
-
-        # --- 3. FILTROS Y NOTACIÓN DE ADVERTENCIA ---
-        st.divider()
+        # --- FILTROS ---
+        st.subheader("🔍 Filtros Dinámicos")
         c1, c2 = st.columns(2)
         with c1:
-            sujetos = sorted([s for s in df_p.iloc[:, 5].unique() if pd.notna(s)])
-            s_sel = st.selectbox("Persona (Col F)", sujetos)
+            # Agregamos la opción "Todos" al inicio de la lista de sujetos
+            lista_sujetos = sorted([s for s in df_p.iloc[:, 5].unique() if pd.notna(s)])
+            opciones_sujeto = ["Todos"] + [str(s) for s in lista_sujetos]
+            s_sel = st.selectbox("Sujeto (Col F)", opciones_sujeto)
         with c2:
-            m_sel = st.selectbox("Mes", ["Anual"] + list(MESES_MAP.values()))
+            m_sel = st.selectbox("Periodo", ["Anual"] + list(MESES_MAP.values()))
 
-        mask = (df_p.iloc[:, 5] == s_sel)
+        # Aplicar Filtros a la máscara
+        mask = pd.Series([True] * len(df_p))
+        if s_sel != "Todos":
+            mask = mask & (df_p.iloc[:, 5].astype(str) == s_sel)
         if m_sel != "Anual":
             mask = mask & (df_p['Mes_Invisible'] == m_sel)
+        
         df_f = df_p[mask]
 
-        # Alerta si el sujeto tiene datos negativos (rojos)
-        tiene_rojos = (df_f.iloc[:, 8:12] < 0).any().any()
-        
-        st.write(f"### Análisis: Sujeto {s_sel}")
+        # --- SECCIÓN DE GRÁFICAS ---
+        st.divider()
+        st.subheader(f"📈 Visualización del Proceso: {s_sel}")
+
+        if not df_f.empty:
+            # Preparar datos para la gráfica (Solo valores >= 0)
+            df_plot = df_f.copy()
+            for c in cols_tiempos:
+                df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
+
+            if s_sel == "Todos":
+                # Gráfica comparativa entre sujetos
+                # Agrupamos por sujeto (Columna F = index 5)
+                comp_df = df_plot.groupby(df_plot.columns[5])[cols_tiempos].mean().reset_index()
+                fig = px.bar(comp_df, x=df_plot.columns[5], y=cols_tiempos, 
+                             title="Promedio de Días por Sujeto y Etapa",
+                             labels={'value': 'Días', 'variable': 'Etapa del Proceso'},
+                             barmode='group', color_discrete_sequence=px.colors.qualitative.Pastel)
+            else:
+                # Gráfica individual (Promedio del sujeto seleccionado)
+                ind_df = df_plot[cols_tiempos].mean().reset_index()
+                ind_df.columns = ['Etapa', 'Días']
+                fig = px.bar(ind_df, x='Etapa', y='Días', 
+                             title=f"Distribución de Tiempos - Sujeto {s_sel}",
+                             color='Etapa', text_auto='.2f')
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No hay datos disponibles para los filtros seleccionados.")
+
+        # --- BOTONES DE MÉTRICAS Y ALERTAS ---
+        tiene_rojos = (df_f[cols_tiempos] < 0).any().any()
         if tiene_rojos:
             st.warning("⚠️ **Nota:** Los días promedios son aproximados por fechas distantes.")
 
+        st.write("### Indicadores Rápidos (Promedio)")
         m1, m2, m3, m4 = st.columns(4)
-        def metric_btn(cont, label, col_idx):
+        def render_m(cont, label, col_name):
             if cont.button(label):
                 if not df_f.empty:
-                    # Promedio real ignorando negativos para no sesgar
-                    validos = df_f.iloc[:, col_idx][df_f.iloc[:, col_idx] >= 0]
-                    val = validos.mean() if not validos.empty else 0
-                    cont.metric("Días", f"{val:.2f}")
+                    val = df_f[col_name][df_f[col_name] >= 0].mean()
+                    cont.metric("Promedio", f"{val:.2f} d")
                 else: cont.warning("N/A")
 
-        metric_btn(m1, "Detección", 8); metric_btn(m2, "Cultivo", 9)
-        metric_btn(m3, "Entrega", 10); metric_btn(m4, "Captura", 11)
+        render_m(m1, "Detección", "Detección")
+        render_m(m2, "Cultivo", "Cultivo")
+        render_m(m3, "Entrega", "Entrega")
+        render_m(m4, "Captura", "Captura")
+
+        # --- DESCARGA Y VISTA PREVIA ---
+        st.divider()
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
+            df_export = df_p.iloc[:, :12].copy()
+            df_export.to_excel(writer, index=False, sheet_name='Reporte')
+            workbook, worksheet = writer.book, writer.sheets['Reporte']
+            
+            # Tabla de Excel con fila de totales
+            max_r, max_c = df_export.shape
+            worksheet.add_table(0, 0, max_r, max_c - 1, {
+                'columns': [{'header': c} for c in df_export.columns],
+                'style': 'Table Style Medium 9',
+                'total_row': True
+            })
+            
+            # Fórmulas de promedio en el Excel (ignorando negativos)
+            fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00'})
+            for i, col_let in zip(range(8, 12), ['I', 'J', 'K', 'L']):
+                formula = f"=AVERAGEIF([{df_export.columns[i]}], \">=0\")"
+                worksheet.write_formula(max_r + 1, i, formula, fmt_v)
+            
+            worksheet.set_column(0, 11, 20)
+
+        st.download_button("📥 Descargar Reporte Completo", output.getvalue(), "Reporte_IAAS.xlsx")
+
+        with st.expander("👀 Ver Tabla de Datos Completa"):
+            df_vis = df_p.iloc[:, :12].copy()
+            for i in [0, 1, 3, 4, 6]:
+                df_vis.iloc[:, i] = df_vis.iloc[:, i].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
+            st.dataframe(df_vis.style.map(color_negativo_rojo, subset=df_vis.columns[8:12]), use_container_width=True)
 
 else:
-    st.warning("👋 Sube el archivo para iniciar.")
+    st.info("👋 Sube tu archivo Excel para generar las gráficas y estadísticas.")
