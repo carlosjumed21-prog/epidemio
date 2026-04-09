@@ -37,6 +37,7 @@ if archivo_iaas:
         df_base = df_raw.iloc[:, :8].copy()
         df_base.columns = ETIQUETAS_FINALES[:8]
         df_base["MODIFICACION"] = pd.to_numeric(df_base["MODIFICACION"], errors='coerce')
+        # Limpieza estricta de filas vacías
         st.session_state['df_base'] = df_base.dropna(how='all', subset=["Fecha de deteccion"]).reset_index(drop=True)
 
     if st.button("🚀 Procesar Datos Base"):
@@ -49,17 +50,14 @@ if archivo_iaas:
 
             # --- CÁLCULOS I-M ---
             df["Detección"] = (df["Fecha de deteccion"] - df["Fecha de Inicio"]).dt.days + 1
-            
-            # REGLA SOLICITADA: Cultivo = D - B
             df["Cultivo"] = (df["Fecha de toma del cultivo"] - df["Fecha de Inicio"]).dt.days
-            
             df["Entrega"] = (df["FECHA DE ENTREGA"] - df["Fecha de deteccion"]).dt.days + 1
             df["Captura"] = (df["Fecha de captura en RHOVE"] - df["FECHA DE ENTREGA"]).dt.days + 1
             df["Proceso"] = (df["FECHA DE ENTREGA"] - df["Fecha de Inicio"]).dt.days + 1
 
             df['Mes_Nombre'] = df["MES 1"].dt.month.map(MES_NUM_MAP)
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados. Columnas numéricas ajustadas.")
+            st.success("✅ Datos procesados correctamente.")
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
@@ -78,12 +76,9 @@ if archivo_iaas:
         with c2:
             st.write("Seleccionar Meses:")
             check_t = st.checkbox("Seleccionar todo el año", value=True)
-            if check_t:
-                meses_sel = MESES_ORDEN
-                st.multiselect("Meses", MESES_ORDEN, default=MESES_ORDEN, disabled=True, key="ms_dis")
-            else:
-                meses_sel = st.multiselect("Meses", MESES_ORDEN, default=[], key="ms_en")
+            meses_sel = MESES_ORDEN if check_t else st.multiselect("Meses", MESES_ORDEN, default=[])
 
+        # Filtrado Dinámico
         mask = pd.Series([True] * len(df_p))
         if s_sel != "Todos":
             mask = mask & (df_p["MODIFICACION"].fillna(-1).astype(int).astype(str) == s_sel)
@@ -102,7 +97,6 @@ if archivo_iaas:
                 comp_df = df_plot.groupby("MODIFICACION")[etiquetas_grafica].mean().reset_index()
                 comp_df = comp_df.sort_values(by="MODIFICACION")
                 comp_df["MODIFICACION"] = comp_df["MODIFICACION"].astype(int).astype(str)
-                
                 fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_grafica, barmode='group',
                              title="📊 Comparativa Anual por Sujeto",
                              labels={'MODIFICACION': 'ID Sujeto', 'value': 'Días', 'variable': 'Etapa'},
@@ -117,9 +111,7 @@ if archivo_iaas:
 
             st.plotly_chart(fig, use_container_width=True)
 
-            if (df_f[ETIQUETAS_FINALES[8:]] < 0).any().any():
-                st.error("⚠️ Nota: Los días promedios son aproximados por registros inconsistentes (rojos).")
-
+            # Indicadores
             st.write(f"### Indicadores de Desempeño: Sujeto {s_sel}")
             metrics_cols = st.columns(5)
             for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
@@ -128,41 +120,57 @@ if archivo_iaas:
         else:
             st.warning("⚠️ No hay datos para los filtros seleccionados.")
 
-        # --- EXCEL DE SALIDA ---
+        # --- EXCEL DE SALIDA (CORRECCIÓN DE POSICIÓN DE PROMEDIOS) ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
+            # Exportar datos reales
             df_export = df_p[ETIQUETAS_FINALES].copy()
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
+            
             workbook, worksheet = writer.book, writer.sheets['Reporte']
-            max_r = len(df_export)
+            max_r = len(df_export) # Número de filas de datos (sin contar encabezado)
+            
+            # 1. Definir la Tabla de Excel (Rango A1 a M[N])
             column_settings = [{'header': col} for col in ETIQUETAS_FINALES]
             worksheet.add_table(0, 0, max_r, 12, {'columns': column_settings, 'style': 'Table Style Medium 9'})
+            
+            # 2. Formatos
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             fmt_r = workbook.add_format({'font_color': 'red', 'bold': True})
+
+            # 3. Columnas auxiliares (N, O, P, Q, R) para ignorar rojos en SUBTOTAL
+            # Estas celdas se llenan desde la fila 2 (index 1) hasta max_r + 1
+            letras_base = ['I', 'J', 'K', 'L', 'M']
             for r_idx in range(1, max_r + 1):
-                for i, col_let in enumerate(['I', 'J', 'K', 'L', 'M']):
-                    worksheet.write_formula(r_idx, 13 + i, f"=IF({col_let}{r_idx+1}>=0, {col_let}{r_idx+1}, \"\")")
+                for i, col_let in enumerate(letras_base):
+                    # Fórmula: SI(Valor >= 0, Valor, "")
+                    formula = f"=IF({col_let}{r_idx+1}>=0, {col_let}{r_idx+1}, \"\")"
+                    worksheet.write_formula(r_idx, 13 + i, formula)
+
+            # 4. Ocultar auxiliares y escribir Fila de Promedio Filtrado
             worksheet.set_column(13, 17, None, None, {'hidden': True})
-            worksheet.write(max_r + 1, 7, "PROM. FILTRADO", fmt_v)
-            for i, col_aux in zip(range(8, 13), ['N', 'O', 'P', 'Q', 'R']):
-                worksheet.write_formula(max_r + 1, i, f"=SUBTOTAL(101, {col_aux}2:{col_aux}{max_r + 1})", fmt_v)
+            
+            # La fila del promedio es max_r + 1 (justo debajo de la tabla)
+            fila_promedio = max_r + 1
+            worksheet.write(fila_promedio, 7, "PROM. FILTRADO", fmt_v)
+            
+            letras_aux = ['N', 'O', 'P', 'Q', 'R']
+            for i, col_aux in zip(range(8, 13), letras_aux):
+                # SUBTOTAL(101, ...) hace el promedio de solo lo visible en Excel
+                formula_sub = f"=SUBTOTAL(101, {col_aux}2:{col_aux}{max_r + 1})"
+                worksheet.write_formula(fila_promedio, i, formula_sub, fmt_v)
+
+            # 5. Formato condicional para rojos
             worksheet.conditional_format(1, 8, max_r, 12, {'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_r})
             worksheet.set_column(0, 12, 22)
 
-        st.download_button("📥 Descargar Reporte Final (A-M)", output.getvalue(), "Reporte_IAAS_Final.xlsx")
+        st.download_button("📥 Descargar Reporte IAAS Final", output.getvalue(), "Reporte_IAAS_Final.xlsx")
 
-        # --- VISTA PREVIA CORREGIDA (Sin decimales en columnas numéricas) ---
         with st.expander("👀 Ver Tabla de Datos"):
             df_vis = df_p[ETIQUETAS_FINALES].copy()
-            # Formatear fechas
             for col in ETIQUETAS_FINALES[:8]:
                 if "Fecha" in col or "FECHA" in col or "MES" in col:
                     df_vis[col] = df_vis[col].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
-            
-            # Usar estilizador para quitar decimales (.format(precision=0))
-            st.dataframe(
-                df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_FINALES[8:])
-                .format(precision=0, subset=ETIQUETAS_FINALES[8:]), 
-                use_container_width=True
-            )
+            st.dataframe(df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_FINALES[8:])
+                         .format(precision=0, subset=ETIQUETAS_FINALES[8:]), use_container_width=True)
