@@ -13,13 +13,13 @@ MES_NUM_MAP = {
     9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
 }
 
-# Etiquetas oficiales solicitadas por Carlos
-ETIQUETAS_A_H = [
+# TUS 13 ETIQUETAS OFICIALES
+ETIQUETAS_FINALES = [
     "Fecha de deteccion", "Fecha de Inicio", "Fecha de Termino", 
     "Fecha de toma del cultivo", "FECHA DE ENTREGA", "MODIFICACION", 
-    "Fecha de captura en RHOVE", "MES 1"
+    "Fecha de captura en RHOVE", "MES 1", "Detección", 
+    "Cultivo", "Entrega", "Captura", "Proceso"
 ]
-ETIQUETAS_I_M = ["Detección", "Cultivo", "Entrega", "Captura", "Proceso"]
 
 def color_negativo_rojo(val):
     if isinstance(val, (int, float)) and val < 0:
@@ -33,47 +33,46 @@ archivo_iaas = st.file_uploader("📂 1. Sube tu archivo Excel", type=["xlsx"])
 
 if archivo_iaas:
     if 'df_base' not in st.session_state:
+        # Cargamos ignorando los encabezados que traiga el archivo para evitar basura
         df_raw = pd.read_excel(archivo_iaas)
-        # Tomamos solo las primeras 8 columnas y les ponemos los nombres correctos de inmediato
+        # Tomamos las primeras 8 columnas (A-H)
         df_base = df_raw.iloc[:, :8].copy()
-        df_base.columns = ETIQUETAS_A_H
+        # Forzamos los nombres de las primeras 8
+        df_base.columns = ETIQUETAS_FINALES[:8]
         st.session_state['df_base'] = df_base.dropna(how='all').reset_index(drop=True)
 
     # 2. PROCESAMIENTO
-    if st.button("🚀 2. Procesar Datos con Etiquetas Oficiales"):
+    if st.button("🚀 2. Procesar Datos y Aplicar Etiquetas"):
         try:
             df = st.session_state['df_base'].copy()
             
-            # Convertir fechas (A, B, D, E, G y H)
-            columnas_fecha = ["Fecha de deteccion", "Fecha de Inicio", "Fecha de toma del cultivo", 
-                              "FECHA DE ENTREGA", "Fecha de captura en RHOVE", "MES 1"]
+            # Convertir fechas para cálculos
+            # A (0), B (1), D (3), E (4), G (6), H (7)
+            cols_f = ["Fecha de deteccion", "Fecha de Inicio", "Fecha de toma del cultivo", 
+                      "FECHA DE ENTREGA", "Fecha de captura en RHOVE", "MES 1"]
             
-            for col in columnas_fecha:
+            for col in cols_f:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
             # --- CÁLCULOS (I, J, K, L, M) ---
-            # Detección: A - B + 1
             df["Detección"] = (df["Fecha de deteccion"] - df["Fecha de Inicio"]).dt.days + 1
-            # Cultivo: B - D + 1
             df["Cultivo"] = (df["Fecha de Inicio"] - df["Fecha de toma del cultivo"]).dt.days + 1
-            # Entrega: E - A + 1
             df["Entrega"] = (df["FECHA DE ENTREGA"] - df["Fecha de deteccion"]).dt.days + 1
-            # Captura: G - E + 1
             df["Captura"] = (df["Fecha de captura en RHOVE"] - df["FECHA DE ENTREGA"]).dt.days + 1
-            # Proceso: E - B + 1
             df["Proceso"] = (df["FECHA DE ENTREGA"] - df["Fecha de Inicio"]).dt.days + 1
 
-            # Extraer Mes de "MES 1"
+            # Extraer Mes para filtros
             df['Mes_Nombre'] = df["MES 1"].dt.month.map(MES_NUM_MAP)
             
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados con éxito.")
+            st.success("✅ Datos procesados con las 13 etiquetas oficiales.")
         except Exception as e:
-            st.error(f"❌ Error en las etiquetas o fechas: {e}")
+            st.error(f"❌ Error al procesar: {e}")
 
     # 3. FILTROS Y GRÁFICAS
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
+        etiquetas_stats = ["Detección", "Cultivo", "Entrega", "Captura"]
 
         st.divider()
         st.subheader("🔍 3. Filtros y Gráficas")
@@ -99,55 +98,64 @@ if archivo_iaas:
             df_f = df_p[mask]
 
             if not df_f.empty:
-                # --- GRÁFICA ---
                 df_plot = df_f.copy()
-                for c in ETIQUETAS_I_M[:4]: # Usamos las primeras 4 para la gráfica principal
+                for c in etiquetas_stats:
                     df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
                 if s_sel == "Todos":
                     df_plot["MODIFICACION"] = df_plot["MODIFICACION"].astype(str)
-                    comp_df = df_plot.groupby("MODIFICACION")[ETIQUETAS_I_M[:4]].mean().reset_index()
-                    fig = px.bar(comp_df, x="MODIFICACION", y=ETIQUETAS_I_M[:4], barmode='group',
-                                 title="Comparativa de Tiempos por Sujeto (MODIFICACION)",
+                    comp_df = df_plot.groupby("MODIFICACION")[etiquetas_stats].mean().reset_index()
+                    fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_stats, barmode='group',
+                                 title="Comparativa Global por Sujeto",
                                  labels={'value': 'Días', 'variable': 'Etapa'},
-                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Pastel)
+                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
                     fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_s[1:])
                 else:
-                    evol_df = df_plot.groupby('Mes_Nombre')[ETIQUETAS_I_M[:4]].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
-                    fig = px.bar(evol_df, x='Mes_Nombre', y=ETIQUETAS_I_M[:4], barmode='group',
+                    evol_df = df_plot.groupby('Mes_Nombre')[etiquetas_stats].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
+                    fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_stats, barmode='group',
                                  title=f"Evolución Mensual: Sujeto {s_sel}",
                                  labels={'Mes_Nombre': 'Meses', 'value': 'Días'},
-                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
+                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Pastel)
 
                 st.plotly_chart(fig, use_container_width=True)
 
-                # --- INDICADORES ---
-                if (df_f[ETIQUETAS_I_M] < 0).any().any():
-                    st.error("⚠️ **Nota:** Los días promedios son aproximados por registros inconsistentes (rojos).")
+                if (df_f[ETIQUETAS_FINALES[8:]] < 0).any().any():
+                    st.error("⚠️ Nota: Se detectaron registros inconsistentes (rojos).")
 
                 st.write(f"### Promedios: {s_sel}")
                 metrics_cols = st.columns(5)
-                for i, etiqueta in enumerate(ETIQUETAS_I_M):
+                for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
                     val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
                     metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
             else:
                 st.warning("No hay datos para esta selección.")
 
-        # --- EXCEL DINÁMICO (A-M) ---
+        # --- EXCEL DE SALIDA (AQUÍ CORREGIMOS LAS ETIQUETAS) ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
-            df_export = df_p[ETIQUETAS_A_H + ETIQUETAS_I_M].copy()
+            # Aseguramos que el DF de exportación tenga las 13 columnas en orden
+            df_export = df_p[ETIQUETAS_FINALES].copy()
+            # Devolvemos MES 1 a formato fecha para el Excel
+            df_export["MES 1"] = pd.to_datetime(df_export["MES 1"])
+            
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
             
             workbook, worksheet = writer.book, writer.sheets['Reporte']
             max_r = len(df_export)
 
-            worksheet.add_table(0, 0, max_r, 12, {'style': 'Table Style Medium 9'})
+            # FORZAMOS LAS ETIQUETAS EN LA TABLA DE EXCEL
+            column_settings = [{'header': col} for col in ETIQUETAS_FINALES]
+            
+            worksheet.add_table(0, 0, max_r, 12, {
+                'columns': column_settings,
+                'style': 'Table Style Medium 9'
+            })
+            
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             fmt_r = workbook.add_format({'font_color': 'red', 'bold': True})
 
-            # Auxiliares ocultas (N-R) para SUBTOTAL dinámico
+            # Auxiliares ocultas para promedios dinámicos (N-R)
             letras_calc = ['I', 'J', 'K', 'L', 'M']
             for r_idx in range(1, max_r + 1):
                 for i, col_let in enumerate(letras_calc):
@@ -161,11 +169,12 @@ if archivo_iaas:
             worksheet.conditional_format(1, 8, max_r, 12, {'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_r})
             worksheet.set_column(0, 12, 22)
 
-        st.download_button("📥 Descargar Reporte Final (A-M)", output.getvalue(), "Reporte_IAAS_Dinamico.xlsx")
+        st.download_button("📥 Descargar Reporte Final (A-M)", output.getvalue(), "Reporte_IAAS_Final.xlsx")
 
         with st.expander("👀 Ver Tabla de Datos"):
-            df_vis = df_p[ETIQUETAS_A_H + ETIQUETAS_I_M].copy()
-            for col in ETIQUETAS_A_H:
+            # Mostramos la tabla tal cual se exportará
+            df_vis = df_p[ETIQUETAS_FINALES].copy()
+            for col in ETIQUETAS_FINALES[:8]:
                 if "Fecha" in col or "FECHA" in col or "MES" in col:
                     df_vis[col] = df_vis[col].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
-            st.dataframe(df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_I_M), use_container_width=True)
+            st.dataframe(df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_FINALES[8:]), use_container_width=True)
