@@ -39,6 +39,7 @@ if archivo_iaas:
         df_base["MODIFICACION"] = pd.to_numeric(df_base["MODIFICACION"], errors='coerce')
         st.session_state['df_base'] = df_base.dropna(how='all', subset=["Fecha de deteccion"]).reset_index(drop=True)
 
+    # 2. PROCESAMIENTO ÚNICO
     if st.button("🚀 Procesar Datos Base"):
         try:
             df = st.session_state['df_base'].copy()
@@ -47,22 +48,25 @@ if archivo_iaas:
             for col in cols_f:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS I-M ---
+            # --- CÁLCULOS I-M (ACTUALIZADO) ---
             df["Detección"] = (df["Fecha de deteccion"] - df["Fecha de Inicio"]).dt.days + 1
-            df["Cultivo"] = (df["Fecha de Inicio"] - df["Fecha de toma del cultivo"]).dt.days + 1
+            
+            # NUEVA CONDICIÓN SOLICITADA: Cultivo = D - B
+            df["Cultivo"] = (df["Fecha de toma del cultivo"] - df["Fecha de Inicio"]).dt.days
+            
             df["Entrega"] = (df["FECHA DE ENTREGA"] - df["Fecha de deteccion"]).dt.days + 1
             df["Captura"] = (df["Fecha de captura en RHOVE"] - df["FECHA DE ENTREGA"]).dt.days + 1
             df["Proceso"] = (df["FECHA DE ENTREGA"] - df["Fecha de Inicio"]).dt.days + 1
 
             df['Mes_Nombre'] = df["MES 1"].dt.month.map(MES_NUM_MAP)
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados con éxito.")
+            st.success("✅ Datos procesados con la nueva regla de Cultivo (D - B).")
         except Exception as e:
-            st.error(f"❌ Error: {e}")
+            st.error(f"❌ Error en el procesamiento: {e}")
 
+    # --- 3. PANEL AUTOMÁTICO ---
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
-        # Definimos las 5 etiquetas para las gráficas (incluyendo Proceso)
         etiquetas_grafica = ["Detección", "Cultivo", "Entrega", "Captura", "Proceso"]
 
         st.subheader("🔍 Filtros Dinámicos")
@@ -95,42 +99,43 @@ if archivo_iaas:
             st.divider()
             
             df_plot = df_f.copy()
+            # Limpiar negativos para gráfica (se muestran en 0)
             for c in etiquetas_grafica:
                 df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
             if s_sel == "Todos":
-                # GRÁFICA COMPARATIVA GLOBAL (Incluye Proceso)
                 comp_df = df_plot.groupby("MODIFICACION")[etiquetas_grafica].mean().reset_index()
                 comp_df = comp_df.sort_values(by="MODIFICACION")
                 comp_df["MODIFICACION"] = comp_df["MODIFICACION"].astype(int).astype(str)
                 
                 fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_grafica, barmode='group',
-                             title="📊 Comparativa Anual por Sujeto (Incluye Proceso Total)",
+                             title="📊 Comparativa Anual por Sujeto",
                              labels={'MODIFICACION': 'ID Sujeto', 'value': 'Días', 'variable': 'Etapa'},
                              text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Bold)
                 fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_s[1:])
             else:
-                # GRÁFICA EVOLUCIÓN INDIVIDUAL (Incluye Proceso)
                 evol_df = df_plot.groupby('Mes_Nombre')[etiquetas_grafica].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
                 fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_grafica, barmode='group',
-                             title=f"📈 Evolución Mensual: Sujeto {s_sel} (Incluye Proceso Total)",
+                             title=f"📈 Evolución Mensual: Sujeto {s_sel}",
                              labels={'Mes_Nombre': 'Meses', 'value': 'Días', 'variable': 'Etapa'},
                              text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
 
             st.plotly_chart(fig, use_container_width=True)
 
+            # --- LEYENDA DE ADVERTENCIA ---
             if (df_f[ETIQUETAS_FINALES[8:]] < 0).any().any():
-                st.error("⚠️ Nota: Se detectaron registros inconsistentes (rojos).")
+                st.error("⚠️ Nota: Los días promedios son aproximados por registros inconsistentes (detectados en rojo).")
 
-            st.write(f"### Promedios: {s_sel}")
+            st.write(f"### Promedios (Solo valores válidos): {s_sel}")
             metrics_cols = st.columns(5)
             for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
+                # No se cuentan negativos para el promedio en la app
                 val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
                 metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
         else:
             st.warning("⚠️ No hay datos para los filtros seleccionados.")
 
-        # --- EXCEL DE SALIDA (A-M) ---
+        # --- EXCEL DE SALIDA DINÁMICO ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
@@ -145,15 +150,19 @@ if archivo_iaas:
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             fmt_r = workbook.add_format({'font_color': 'red', 'bold': True})
 
+            # Columnas auxiliares ocultas N-R para ignorar rojos en el promedio
             for r_idx in range(1, max_r + 1):
                 for i, col_let in enumerate(['I', 'J', 'K', 'L', 'M']):
+                    # SI el valor es >= 0, lo pone; si es negativo, pone vacío (no cuenta para promedio)
                     worksheet.write_formula(r_idx, 13 + i, f"=IF({col_let}{r_idx+1}>=0, {col_let}{r_idx+1}, \"\")")
 
             worksheet.set_column(13, 17, None, None, {'hidden': True})
             worksheet.write(max_r + 1, 7, "PROM. FILTRADO", fmt_v)
             for i, col_aux in zip(range(8, 13), ['N', 'O', 'P', 'Q', 'R']):
+                # SUBTOTAL 101: Promedio de solo lo visible tras filtrar en Excel
                 worksheet.write_formula(max_r + 1, i, f"=SUBTOTAL(101, {col_aux}2:{col_aux}{max_r + 1})", fmt_v)
 
+            # El formato condicional mantiene los negativos en rojo en el Excel
             worksheet.conditional_format(1, 8, max_r, 12, {'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_r})
             worksheet.set_column(0, 12, 22)
 
