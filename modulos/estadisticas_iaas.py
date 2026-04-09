@@ -25,21 +25,24 @@ def color_negativo_rojo(val):
         return 'color: red; font-weight: bold'
     return 'color: black'
 
+st.set_page_config(page_title="Vigilancia IAAS CMN 20", layout="wide")
 st.title("🏥 Vigilancia IAAS - CMN 20 de Noviembre")
 st.markdown("---")
 
 archivo_iaas = st.file_uploader("📂 1. Sube tu archivo Excel", type=["xlsx"])
 
 if archivo_iaas:
+    # Carga y asignación de etiquetas iniciales
     if 'df_base' not in st.session_state:
         df_raw = pd.read_excel(archivo_iaas)
         df_base = df_raw.iloc[:, :8].copy()
         df_base.columns = ETIQUETAS_FINALES[:8]
-        # Limpieza: Convertir MODIFICACION a número entero si es posible
+        # Limpieza de MODIFICACION (Sujetos) para que sean enteros
         df_base["MODIFICACION"] = pd.to_numeric(df_base["MODIFICACION"], errors='coerce')
         st.session_state['df_base'] = df_base.dropna(how='all', subset=["Fecha de deteccion"]).reset_index(drop=True)
 
-    if st.button("🚀 2. Procesar Datos"):
+    # 2. PROCESAMIENTO ÚNICO
+    if st.button("🚀 Procesar Datos Base"):
         try:
             df = st.session_state['df_base'].copy()
             cols_f = ["Fecha de deteccion", "Fecha de Inicio", "Fecha de toma del cultivo", 
@@ -56,20 +59,20 @@ if archivo_iaas:
 
             df['Mes_Nombre'] = df["MES 1"].dt.month.map(MES_NUM_MAP)
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados.")
+            st.success("✅ Datos procesados. El panel ahora es automático.")
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
+    # --- 3. PANEL AUTOMÁTICO ---
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
         etiquetas_stats = ["Detección", "Cultivo", "Entrega", "Captura"]
 
-        st.divider()
-        st.subheader("🔍 3. Filtros y Gráficas")
-        
+        st.subheader("🔍 Filtros Dinámicos")
         c1, c2 = st.columns([1, 2])
+        
         with c1:
-            # ORDEN ASCENDENTE REAL: Extraemos números únicos y ordenamos
+            # Sujetos ordenados numéricamente
             sujetos_lista = sorted([int(s) for s in df_p["MODIFICACION"].unique() if pd.notna(s)])
             opciones_s = ["Todos"] + [str(s) for s in sujetos_lista]
             s_sel = st.selectbox("Sujeto (MODIFICACION)", opciones_s)
@@ -77,56 +80,64 @@ if archivo_iaas:
         with c2:
             st.write("Seleccionar Meses:")
             check_t = st.checkbox("Seleccionar todo el año", value=True)
-            meses_sel = MESES_ORDEN if check_t else st.multiselect("Meses", MESES_ORDEN, default=[])
-
-        if st.button("📊 Generar / Actualizar Gráfica"):
-            # FILTRADO BLINDADO
-            mask = pd.Series([True] * len(df_p))
-            if s_sel != "Todos":
-                # Convertimos la columna a string para comparar con la opción del selectbox
-                mask = mask & (df_p["MODIFICACION"].fillna(-1).astype(int).astype(str) == s_sel)
-            if meses_sel:
-                mask = mask & (df_p['Mes_Nombre'].isin(meses_sel))
-            
-            df_f = df_p[mask].copy()
-
-            if not df_f.empty:
-                # Limpiar negativos para gráfica
-                for c in etiquetas_stats:
-                    df_f[c] = df_f[c].apply(lambda x: x if x >= 0 else 0)
-
-                if s_sel == "Todos":
-                    # --- GRÁFICA TODOS: EJE X = SUJETOS ---
-                    # Agrupamos por MODIFICACION (como número para que el eje X sepa el orden)
-                    comp_df = df_f.groupby("MODIFICACION")[etiquetas_stats].mean().reset_index()
-                    comp_df = comp_df.sort_values(by="MODIFICACION")
-                    comp_df["MODIFICACION"] = comp_df["MODIFICACION"].astype(int).astype(str)
-                    
-                    fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_stats, barmode='group',
-                                 title="Comparativa Anual por Sujeto",
-                                 labels={'MODIFICACION': 'ID Sujeto', 'value': 'Días', 'variable': 'Etapa'},
-                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_s[1:])
-                else:
-                    # --- GRÁFICA INDIVIDUAL: EJE X = MESES ---
-                    evol_df = df_f.groupby('Mes_Nombre')[etiquetas_stats].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
-                    fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_stats, barmode='group',
-                                 title=f"Evolución Mensual: Sujeto {s_sel}",
-                                 labels={'Mes_Nombre': 'Meses', 'value': 'Días', 'variable': 'Etapa'},
-                                 text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
-
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Indicadores y Métricas
-                st.write(f"### Promedios: {s_sel}")
-                metrics_cols = st.columns(5)
-                for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
-                    val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
-                    metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
+            if check_t:
+                meses_sel = MESES_ORDEN
+                st.multiselect("Meses", MESES_ORDEN, default=MESES_ORDEN, disabled=True, key="ms_dis")
             else:
-                st.warning("⚠️ No se encontraron datos para esta selección.")
+                meses_sel = st.multiselect("Meses", MESES_ORDEN, default=[], key="ms_en")
 
-        # --- EXCEL DE SALIDA (A-M) ---
+        # --- LÓGICA DE FILTRADO Y GRÁFICA AUTOMÁTICA ---
+        mask = pd.Series([True] * len(df_p))
+        if s_sel != "Todos":
+            mask = mask & (df_p["MODIFICACION"].fillna(-1).astype(int).astype(str) == s_sel)
+        if meses_sel:
+            mask = mask & (df_p['Mes_Nombre'].isin(meses_sel))
+        
+        df_f = df_p[mask].copy()
+
+        if not df_f.empty:
+            st.divider()
+            
+            # Limpiar negativos para gráfica
+            df_plot = df_f.copy()
+            for c in etiquetas_stats:
+                df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
+
+            if s_sel == "Todos":
+                # GRÁFICA TODOS: Orden 1, 2, 3...
+                comp_df = df_plot.groupby("MODIFICACION")[etiquetas_stats].mean().reset_index()
+                comp_df = comp_df.sort_values(by="MODIFICACION")
+                comp_df["MODIFICACION"] = comp_df["MODIFICACION"].astype(int).astype(str)
+                
+                fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_stats, barmode='group',
+                             title="📊 Comparativa Anual entre Sujetos",
+                             labels={'MODIFICACION': 'ID Sujeto', 'value': 'Días', 'variable': 'Etapa'},
+                             text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Bold)
+                fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_s[1:])
+            else:
+                # GRÁFICA INDIVIDUAL: Eje X = Meses
+                evol_df = df_plot.groupby('Mes_Nombre')[etiquetas_stats].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
+                fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_stats, barmode='group',
+                             title=f"📈 Evolución Mensual: Sujeto {s_sel}",
+                             labels={'Mes_Nombre': 'Meses', 'value': 'Días', 'variable': 'Etapa'},
+                             text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Advertencia de Rojos
+            if (df_f[ETIQUETAS_FINALES[8:]] < 0).any().any():
+                st.error("⚠️ Nota: Se detectaron registros inconsistentes (rojos).")
+
+            # Indicadores numéricos
+            st.write(f"### Promedios: {s_sel}")
+            metrics_cols = st.columns(5)
+            for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
+                val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
+                metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
+        else:
+            st.warning("⚠️ No hay datos para los filtros seleccionados.")
+
+        # --- EXCEL DE SALIDA ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
