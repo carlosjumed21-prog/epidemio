@@ -5,17 +5,17 @@ import io
 # --- MAPEO DE MESES ---
 MESES_MAP = {
     'ene': 'enero', 'feb': 'febrero', 'mar': 'marzo', 'abr': 'abril',
-    'may': 'mayo', 'jun': 'junio', 'jul': 'julio', 'ago': 'agosto',
+    'may': 'mayo', 'jun : 'junio', 'jul': 'julio', 'ago': 'agosto',
     'sep': 'septiembre', 'oct': 'octubre', 'nov': 'noviembre', 'dic': 'diciembre'
 }
 
 def color_negativo_rojo(val):
-    """Resaltar errores de lógica de fechas"""
+    """Estilo para la vista previa en Streamlit"""
     color = 'red' if isinstance(val, (int, float)) and val < 0 else 'black'
     return f'color: {color}'
 
-st.title("📊 Estadísticas IAAS - Precisión de Tiempos")
-st.info("Cálculo exacto basado en fechas dd/mm/aaaa (Respetando días calendario)")
+st.title("📊 Estadísticas IAAS - Reporte Final")
+st.info("Cálculo de tiempos promedio (Inclusivo +1) con validación de fechas dd/mm/aaaa.")
 
 archivo_iaas = st.file_uploader("Subir base de datos IAAS", type=["xlsx"])
 
@@ -25,113 +25,118 @@ if archivo_iaas:
     
     if st.button("🚀 Generar estadísticas"):
         try:
-            df = df_original.copy()
+            # 1. Limpieza inicial: Mantener solo columnas A hasta H (índices 0 a 7)
+            # Esto elimina automáticamente cualquier columna de la M en adelante que viniera en el original
+            df = df_original.iloc[:, :8].copy()
             
-            # 1. Convertir a datetime respetando el formato día/mes/año
-            # Posiciones: A=0, B=1, D=3, E=4, G=6
-            indices_fechas = [0, 1, 3, 4, 6]
-            for idx in indices_fechas:
-                df.iloc[:, idx] = pd.to_datetime(df.iloc[:, idx], format='%d/%m/%Y', errors='coerce')
+            # 2. Convertir a datetime (dd/mm/aaaa)
+            # A=0, B=1, D=3, E=4, G=6
+            idx_f = [0, 1, 3, 4, 6]
+            for i in idx_f:
+                df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], format='%d/%m/%Y', errors='coerce')
 
-            # 2. Cálculos e Inserción en Columnas I, J, K, L (Índices 8, 9, 10, 11)
-            # Calculamos los valores primero
+            # 3. Nuevos Cálculos corregidos
+            # I (8) = A - B + 1
+            # J (9) = B - D + 1
+            # K (10) = E - A + 1
+            # L (11) = G - E + 1
+            
             val_i = (df.iloc[:, 0] - df.iloc[:, 1]).dt.days + 1
             val_j = (df.iloc[:, 1] - df.iloc[:, 3]).dt.days + 1
-            val_k = (df.iloc[:, 3] - df.iloc[:, 4]).dt.days + 1
-            val_l = (df.iloc[:, 4] - df.iloc[:, 6]).dt.days + 1
+            val_k = (df.iloc[:, 4] - df.iloc[:, 0]).dt.days + 1
+            val_l = (df.iloc[:, 6] - df.iloc[:, 4]).dt.days + 1
 
-            # Insertamos en las posiciones exactas (I=8, J=9, K=10, L=11)
-            # Si las columnas ya existen por una corrida previa, las eliminamos para no duplicar
-            cols_nuevas = [
-                "Tiempo promedio de detección en días",
-                "Tiempo promedio de toma de cultivo en días",
-                "Tiempo promedio de entrega en días",
-                "Tiempo promedio de captura en días"
-            ]
-            for c in cols_nuevas:
-                if c in df.columns: df.drop(columns=[c], inplace=True)
+            # Insertar resultados en posiciones I, J, K, L
+            df.insert(8, "Tiempo promedio de detección en días", val_i)
+            df.insert(9, "Tiempo promedio de toma de cultivo en días", val_j)
+            df.insert(10, "Tiempo promedio de entrega en días", val_k)
+            df.insert(11, "Tiempo promedio de captura en días", val_l)
 
-            df.insert(8, cols_nuevas[0], val_i)
-            df.insert(9, cols_nuevas[1], val_j)
-            df.insert(10, cols_nuevas[2], val_k)
-            df.insert(11, cols_nuevas[3], val_l)
-
-            # 3. Procesar Meses para filtros (Columna H = index 7)
+            # 4. Meses para filtros (Columna H = index 7)
             def normalizar_mes(valor):
                 v = str(valor).lower()
                 for abr, nombre in MESES_MAP.items():
                     if abr in v: return nombre
                 return "Otro"
-            
             df['Mes_Filtro'] = df.iloc[:, 7].apply(normalizar_mes)
             
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados. Las columnas se han insertado en las posiciones I, J, K y L.")
+            st.success("✅ Estadísticas generadas. Columnas M+ eliminadas.")
 
         except Exception as e:
-            st.error(f"Error: {e}. Revisa que las fechas tengan el formato dd/mm/aaaa")
+            st.error(f"Error en procesamiento: {e}")
 
-    # --- RESULTADOS Y DESCARGA ---
+    # --- EXPORTACIÓN Y VISTA ---
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
-        
-        # 4. Configurar descarga con formato de fecha para Excel
+
+        # 5. Generar Excel con Formato Condicional (Rojo para negativos)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
-            df_p.to_excel(writer, index=False, sheet_name='Estadisticas')
-            # Ajustar ancho de columnas automáticamente para que se vea bien
-            worksheet = writer.sheets['Estadisticas']
-            for i, col in enumerate(df_p.columns):
-                worksheet.set_column(i, i, 20)
+            # Solo exportamos las columnas de la A a la L (índices 0 a 11)
+            # Excluimos 'Mes_Filtro' que es solo para la app
+            df_export = df_p.iloc[:, :12]
+            df_export.to_excel(writer, index=False, sheet_name='Reporte_IAAS')
+            
+            workbook  = writer.book
+            worksheet = writer.sheets['Reporte_IAAS']
+            
+            # Formato rojo para números negativos
+            format_rojo = workbook.add_format({'font_color': 'red'})
+            
+            # Aplicar a las columnas I, J, K, L (de la fila 1 hasta la 1000)
+            # Rango: de columna 8 a 11
+            worksheet.conditional_format(1, 8, 1000, 11, {
+                'type':     'cell',
+                'criteria': '<',
+                'value':    0,
+                'format':   format_rojo
+            })
+            
+            # Ajustar ancho
+            worksheet.set_column(0, 11, 18)
 
         st.download_button(
-            label="📥 Descargar Excel Corregido (Columnas I-L)",
+            label="📥 Descargar Reporte Excel (I-L)",
             data=output.getvalue(),
             file_name="Estadisticas_IAAS_Final.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        with st.expander("👀 Vista Previa (Validar posiciones I, J, K, L)"):
-            columnas_stats = [
-                "Tiempo promedio de detección en días", 
-                "Tiempo promedio de toma de cultivo en días", 
-                "Tiempo promedio de entrega en días", 
-                "Tiempo promedio de captura en días"
-            ]
-            st.dataframe(df_p.style.map(color_negativo_rojo, subset=columnas_stats))
+        with st.expander("👀 Vista previa de resultados"):
+            columnas_finales = df_p.columns[8:12]
+            st.dataframe(df_p.style.map(color_negativo_rojo, subset=columnas_finales))
 
         # --- FILTROS ---
-        st.subheader("🔍 Generar Reporte por Sujeto")
+        st.subheader("🔍 Filtros de Resultados")
         c1, c2 = st.columns(2)
         with c1:
-            sujeto_sel = st.selectbox("Persona (Columna F)", sorted(df_p.iloc[:, 5].unique()))
+            sujeto = st.selectbox("Sujeto (Col F)", sorted(df_p.iloc[:, 5].unique()))
         with c2:
-            mes_sel = st.selectbox("Mes de Análisis", ["Anual"] + list(MESES_MAP.values()))
+            mes = st.selectbox("Mes", ["Anual"] + list(MESES_MAP.values()))
 
-        mask = (df_p.iloc[:, 5] == sujeto_sel)
-        if mes_sel != "Anual":
-            mask = mask & (df_p['Mes_Filtro'] == mes_sel)
+        # Filtrar
+        mask = (df_p.iloc[:, 5] == sujeto)
+        if mes != "Anual":
+            mask = mask & (df_p['Mes_Filtro'] == mes)
         
-        df_filtrado = df_p[mask]
+        df_f = df_p[mask]
 
-        # --- BOTONES DE ESTADÍSTICAS ---
+        # --- BOTONES DE MÉTRICAS ---
         st.divider()
-        st.write(f"### Análisis de Tiempos: Sujeto {sujeto_sel}")
-        
-        b1, b2, b3, b4 = st.columns(4)
-        
-        def mostrar(col, container, titulo):
-            if not df_filtrado.empty:
-                avg = df_filtrado[col].mean()
-                container.metric(titulo, f"{avg:.2f} d")
-            else:
-                container.write("N/A")
+        st.write(f"### Promedios: Persona {sujeto} ({mes})")
+        col1, col2, col3, col4 = st.columns(4)
 
-        if b1.button("Detección"):
-            mostrar("Tiempo promedio de detección en días", b1, "Detección")
-        if b2.button("Cultivo"):
-            mostrar("Tiempo promedio de toma de cultivo en días", b2, "Cultivo")
-        if b3.button("Entrega"):
-            mostrar("Tiempo promedio de entrega en días", b3, "Entrega")
-        if b4.button("Captura"):
-            mostrar("Tiempo promedio de captura en días", b4, "Captura")
+        def metric_btn(container, label, col_idx):
+            col_name = df_p.columns[col_idx]
+            if container.button(label):
+                if not df_f.empty:
+                    val = df_f[col_name].mean()
+                    container.metric("Días", f"{val:.2f}")
+                else:
+                    container.write("Sin datos")
+
+        metric_btn(col1, "Detección", 8)
+        metric_btn(col2, "Cultivo", 9)
+        metric_btn(col3, "Entrega", 10)
+        metric_btn(col4, "Captura", 11)
