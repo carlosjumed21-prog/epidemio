@@ -39,7 +39,6 @@ if archivo_iaas:
         df_base["MODIFICACION"] = pd.to_numeric(df_base["MODIFICACION"], errors='coerce')
         st.session_state['df_base'] = df_base.dropna(how='all', subset=["Fecha de deteccion"]).reset_index(drop=True)
 
-    # 2. PROCESAMIENTO ÚNICO
     if st.button("🚀 Procesar Datos Base"):
         try:
             df = st.session_state['df_base'].copy()
@@ -48,10 +47,10 @@ if archivo_iaas:
             for col in cols_f:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS I-M (ACTUALIZADO) ---
+            # --- CÁLCULOS I-M ---
             df["Detección"] = (df["Fecha de deteccion"] - df["Fecha de Inicio"]).dt.days + 1
             
-            # NUEVA CONDICIÓN SOLICITADA: Cultivo = D - B
+            # REGLA SOLICITADA: Cultivo = D - B
             df["Cultivo"] = (df["Fecha de toma del cultivo"] - df["Fecha de Inicio"]).dt.days
             
             df["Entrega"] = (df["FECHA DE ENTREGA"] - df["Fecha de deteccion"]).dt.days + 1
@@ -60,11 +59,10 @@ if archivo_iaas:
 
             df['Mes_Nombre'] = df["MES 1"].dt.month.map(MES_NUM_MAP)
             st.session_state['df_procesado'] = df
-            st.success("✅ Datos procesados con la nueva regla de Cultivo (D - B).")
+            st.success("✅ Datos procesados. Columnas numéricas ajustadas.")
         except Exception as e:
-            st.error(f"❌ Error en el procesamiento: {e}")
+            st.error(f"❌ Error: {e}")
 
-    # --- 3. PANEL AUTOMÁTICO ---
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
         etiquetas_grafica = ["Detección", "Cultivo", "Entrega", "Captura", "Proceso"]
@@ -86,7 +84,6 @@ if archivo_iaas:
             else:
                 meses_sel = st.multiselect("Meses", MESES_ORDEN, default=[], key="ms_en")
 
-        # Filtrado Dinámico
         mask = pd.Series([True] * len(df_p))
         if s_sel != "Todos":
             mask = mask & (df_p["MODIFICACION"].fillna(-1).astype(int).astype(str) == s_sel)
@@ -97,9 +94,7 @@ if archivo_iaas:
 
         if not df_f.empty:
             st.divider()
-            
             df_plot = df_f.copy()
-            # Limpiar negativos para gráfica (se muestran en 0)
             for c in etiquetas_grafica:
                 df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
@@ -122,20 +117,18 @@ if archivo_iaas:
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- LEYENDA DE ADVERTENCIA ---
             if (df_f[ETIQUETAS_FINALES[8:]] < 0).any().any():
-                st.error("⚠️ Nota: Los días promedios son aproximados por registros inconsistentes (detectados en rojo).")
+                st.error("⚠️ Nota: Los días promedios son aproximados por registros inconsistentes (rojos).")
 
-            st.write(f"### Promedios (Solo valores válidos): {s_sel}")
+            st.write(f"### Indicadores de Desempeño: Sujeto {s_sel}")
             metrics_cols = st.columns(5)
             for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
-                # No se cuentan negativos para el promedio en la app
                 val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
                 metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
         else:
             st.warning("⚠️ No hay datos para los filtros seleccionados.")
 
-        # --- EXCEL DE SALIDA DINÁMICO ---
+        # --- EXCEL DE SALIDA ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
@@ -143,34 +136,33 @@ if archivo_iaas:
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
             workbook, worksheet = writer.book, writer.sheets['Reporte']
             max_r = len(df_export)
-            
             column_settings = [{'header': col} for col in ETIQUETAS_FINALES]
             worksheet.add_table(0, 0, max_r, 12, {'columns': column_settings, 'style': 'Table Style Medium 9'})
-            
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             fmt_r = workbook.add_format({'font_color': 'red', 'bold': True})
-
-            # Columnas auxiliares ocultas N-R para ignorar rojos en el promedio
             for r_idx in range(1, max_r + 1):
                 for i, col_let in enumerate(['I', 'J', 'K', 'L', 'M']):
-                    # SI el valor es >= 0, lo pone; si es negativo, pone vacío (no cuenta para promedio)
                     worksheet.write_formula(r_idx, 13 + i, f"=IF({col_let}{r_idx+1}>=0, {col_let}{r_idx+1}, \"\")")
-
             worksheet.set_column(13, 17, None, None, {'hidden': True})
             worksheet.write(max_r + 1, 7, "PROM. FILTRADO", fmt_v)
             for i, col_aux in zip(range(8, 13), ['N', 'O', 'P', 'Q', 'R']):
-                # SUBTOTAL 101: Promedio de solo lo visible tras filtrar en Excel
                 worksheet.write_formula(max_r + 1, i, f"=SUBTOTAL(101, {col_aux}2:{col_aux}{max_r + 1})", fmt_v)
-
-            # El formato condicional mantiene los negativos en rojo en el Excel
             worksheet.conditional_format(1, 8, max_r, 12, {'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_r})
             worksheet.set_column(0, 12, 22)
 
         st.download_button("📥 Descargar Reporte Final (A-M)", output.getvalue(), "Reporte_IAAS_Final.xlsx")
 
+        # --- VISTA PREVIA CORREGIDA (Sin decimales en columnas numéricas) ---
         with st.expander("👀 Ver Tabla de Datos"):
             df_vis = df_p[ETIQUETAS_FINALES].copy()
+            # Formatear fechas
             for col in ETIQUETAS_FINALES[:8]:
                 if "Fecha" in col or "FECHA" in col or "MES" in col:
                     df_vis[col] = df_vis[col].dt.strftime('%d/%m/%Y').astype(str).replace('nan', '-')
-            st.dataframe(df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_FINALES[8:]), use_container_width=True)
+            
+            # Usar estilizador para quitar decimales (.format(precision=0))
+            st.dataframe(
+                df_vis.style.map(color_negativo_rojo, subset=ETIQUETAS_FINALES[8:])
+                .format(precision=0, subset=ETIQUETAS_FINALES[8:]), 
+                use_container_width=True
+            )
