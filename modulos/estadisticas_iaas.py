@@ -34,7 +34,7 @@ if archivo_iaas:
             for i in idx_f:
                 df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS I, J, K, L (Ajustados a tus comandos) ---
+            # --- CÁLCULOS I, J, K, L ---
             df.insert(8, "Detección", (df.iloc[:, 0] - df.iloc[:, 1]).dt.days + 1)
             df.insert(9, "Cultivo", (df.iloc[:, 1] - df.iloc[:, 3]).dt.days + 1)
             df.insert(10, "Entrega", (df.iloc[:, 4] - df.iloc[:, 0]).dt.days + 1)
@@ -61,8 +61,8 @@ if archivo_iaas:
         st.subheader("🔍 Filtros de Análisis")
         c1, c2 = st.columns(2)
         with c1:
-            # Obtenemos lista de sujetos únicos y los convertimos a String para la gráfica
             sujetos_reales = sorted([s for s in df_p.iloc[:, 5].unique() if pd.notna(s)])
+            # Forzamos a que los sujetos sean tratados como etiquetas de texto
             opciones_sujeto = ["Todos"] + [str(int(s)) if isinstance(s, float) else str(s) for s in sujetos_reales]
             s_sel = st.selectbox("Seleccionar Sujeto (Col F)", opciones_sujeto)
         with c2:
@@ -82,18 +82,15 @@ if archivo_iaas:
         st.subheader(f"📈 Comparativa de Tiempos: {s_sel}")
 
         if not df_f.empty:
-            # Limpieza para gráfica (tratar negativos como 0 para no romper el eje Y)
             df_plot = df_f.copy()
+            # Para la gráfica, los negativos se muestran como 0 para no distorsionar el eje
             for c in cols_tiempos:
                 df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
             if s_sel == "Todos":
-                # Agrupamos por Sujeto y sacamos el promedio
-                # Forzamos que el Sujeto sea string para que Plotly no salte números
                 df_plot[df_plot.columns[5]] = df_plot[df_plot.columns[5]].astype(str)
                 comp_df = df_plot.groupby(df_plot.columns[5])[cols_tiempos].mean().reset_index()
                 
-                # Crear la gráfica de barras agrupadas
                 fig = px.bar(comp_df, 
                              x=df_plot.columns[5], 
                              y=cols_tiempos, 
@@ -103,10 +100,8 @@ if archivo_iaas:
                              text_auto='.1f',
                              color_discrete_sequence=px.colors.qualitative.Safe)
                 
-                # Ajuste para que el eje X muestre TODOS los números en orden
                 fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_sujeto[1:])
             else:
-                # Gráfica individual
                 ind_df = df_plot[cols_tiempos].mean().reset_index()
                 ind_df.columns = ['Etapa', 'Promedio Días']
                 fig = px.bar(ind_df, x='Etapa', y='Promedio Días', 
@@ -137,26 +132,35 @@ if archivo_iaas:
         render_m(m3, "Entrega", "Entrega")
         render_m(m4, "Captura", "Captura")
 
-        # --- EXPORTACIÓN Y VISTA PREVIA ---
+        # --- EXPORTACIÓN ---
         st.divider()
-        # Generar Excel con Tabla y Totales (Se mantiene lógica anterior)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
             df_export = df_p.iloc[:, :12].copy()
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
             workbook, worksheet = writer.book, writer.sheets['Reporte']
             
+            # max_r es el número de filas de datos
             max_r, max_c = df_export.shape
+            
             worksheet.add_table(0, 0, max_r - 1, max_c - 1, {
                 'columns': [{'header': c} for c in df_export.columns],
                 'style': 'Table Style Medium 9'
             })
             
-            # Fila de Totales PROMEDIO (Fila max_r + 1)
+            # Fila de Totales PROMEDIO (Corregido max_row a max_r)
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             worksheet.write(max_r, 7, "PROMEDIO TOTAL", fmt_v)
             for i, col_let in zip(range(8, 12), ['I', 'J', 'K', 'L']):
-                worksheet.write_formula(max_r, i, f"=AVERAGEIF({col_let}2:{col_let}{max_row}, \">=0\")", fmt_v)
+                # Ajustamos la fórmula para usar max_r
+                formula = f"=AVERAGEIF({col_let}2:{col_let}{max_r + 1}, \">=0\")"
+                worksheet.write_formula(max_r, i, formula, fmt_v)
+            
+            # Formato rojo para negativos
+            fmt_rojo = workbook.add_format({'font_color': 'red', 'bold': True})
+            worksheet.conditional_format(1, 8, max_r, 11, {
+                'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_rojo
+            })
             
             worksheet.set_column(0, 11, 20)
 
