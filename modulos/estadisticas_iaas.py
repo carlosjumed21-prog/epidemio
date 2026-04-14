@@ -5,7 +5,7 @@ import plotly.express as px
 
 # --- 1. CONFIGURACIÓN ---
 MESES_ORDEN = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
-               'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 MES_NUM_MAP = {
     1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
@@ -19,6 +19,8 @@ ETIQUETAS_FINALES = [
     "Fecha de captura en RHOVE", "MES 1", "Detección", 
     "Cultivo", "Entrega", "Captura", "Proceso"
 ]
+
+METRICAS_DISPONIBLES = ["Detección", "Cultivo", "Entrega", "Captura", "Proceso"]
 
 def color_negativo_rojo(val):
     if isinstance(val, (int, float)) and val < 0:
@@ -37,7 +39,6 @@ if archivo_iaas:
         df_base = df_raw.iloc[:, :8].copy()
         df_base.columns = ETIQUETAS_FINALES[:8]
         df_base["MODIFICACION"] = pd.to_numeric(df_base["MODIFICACION"], errors='coerce')
-        # Limpieza estricta de filas vacías
         st.session_state['df_base'] = df_base.dropna(how='all', subset=["Fecha de deteccion"]).reset_index(drop=True)
 
     if st.button("🚀 Procesar Datos Base"):
@@ -48,7 +49,7 @@ if archivo_iaas:
             for col in cols_f:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-            # --- CÁLCULOS I-M ---
+            # --- CÁLCULOS ---
             df["Detección"] = (df["Fecha de deteccion"] - df["Fecha de Inicio"]).dt.days + 1
             df["Cultivo"] = (df["Fecha de toma del cultivo"] - df["Fecha de Inicio"]).dt.days
             df["Entrega"] = (df["FECHA DE ENTREGA"] - df["Fecha de deteccion"]).dt.days + 1
@@ -63,10 +64,9 @@ if archivo_iaas:
 
     if 'df_procesado' in st.session_state:
         df_p = st.session_state['df_procesado']
-        etiquetas_grafica = ["Detección", "Cultivo", "Entrega", "Captura", "Proceso"]
 
         st.subheader("🔍 Filtros Dinámicos")
-        c1, c2 = st.columns([1, 2])
+        c1, c2, c3 = st.columns([1, 1, 2]) # Añadimos una columna más
         
         with c1:
             sujetos_lista = sorted([int(s) for s in df_p["MODIFICACION"].unique() if pd.notna(s)])
@@ -75,10 +75,18 @@ if archivo_iaas:
         
         with c2:
             st.write("Seleccionar Meses:")
-            check_t = st.checkbox("Seleccionar todo el año", value=True)
+            check_t = st.checkbox("Todo el año", value=True)
             meses_sel = MESES_ORDEN if check_t else st.multiselect("Meses", MESES_ORDEN, default=[])
 
-        # Filtrado Dinámico
+        with c3:
+            # --- NUEVA FUNCIONALIDAD: Selección de métricas ---
+            etiquetas_visibles = st.multiselect(
+                "Métricas a mostrar en gráfica e indicadores:",
+                options=METRICAS_DISPONIBLES,
+                default=METRICAS_DISPONIBLES
+            )
+
+        # Filtrado Dinámico de filas
         mask = pd.Series([True] * len(df_p))
         if s_sel != "Todos":
             mask = mask & (df_p["MODIFICACION"].fillna(-1).astype(int).astype(str) == s_sel)
@@ -87,81 +95,75 @@ if archivo_iaas:
         
         df_f = df_p[mask].copy()
 
-        if not df_f.empty:
+        if not df_f.empty and etiquetas_visibles:
             st.divider()
             df_plot = df_f.copy()
-            for c in etiquetas_grafica:
+            # Limpiamos negativos solo para la gráfica
+            for c in METRICAS_DISPONIBLES:
                 df_plot[c] = df_plot[c].apply(lambda x: x if x >= 0 else 0)
 
             if s_sel == "Todos":
-                comp_df = df_plot.groupby("MODIFICACION")[etiquetas_grafica].mean().reset_index()
+                comp_df = df_plot.groupby("MODIFICACION")[etiquetas_visibles].mean().reset_index()
                 comp_df = comp_df.sort_values(by="MODIFICACION")
                 comp_df["MODIFICACION"] = comp_df["MODIFICACION"].astype(int).astype(str)
-                fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_grafica, barmode='group',
+                
+                fig = px.bar(comp_df, x="MODIFICACION", y=etiquetas_visibles, barmode='group',
                              title="📊 Comparativa Anual por Sujeto",
                              labels={'MODIFICACION': 'ID Sujeto', 'value': 'Días', 'variable': 'Etapa'},
                              text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Bold)
                 fig.update_xaxes(type='category', categoryorder='array', categoryarray=opciones_s[1:])
             else:
-                evol_df = df_plot.groupby('Mes_Nombre')[etiquetas_grafica].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
-                fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_grafica, barmode='group',
+                evol_df = df_plot.groupby('Mes_Nombre')[etiquetas_visibles].mean().reindex(MESES_ORDEN).dropna(how='all').reset_index()
+                fig = px.bar(evol_df, x='Mes_Nombre', y=etiquetas_visibles, barmode='group',
                              title=f"📈 Evolución Mensual: Sujeto {s_sel}",
                              labels={'Mes_Nombre': 'Meses', 'value': 'Días', 'variable': 'Etapa'},
                              text_auto='.1f', color_discrete_sequence=px.colors.qualitative.Safe)
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # Indicadores
-            st.write(f"### Indicadores de Desempeño: Sujeto {s_sel}")
-            metrics_cols = st.columns(5)
-            for i, etiqueta in enumerate(ETIQUETAS_FINALES[8:]):
+            # Indicadores Dinámicos
+            st.write(f"### Indicadores de Desempeño Seleccionados")
+            metrics_cols = st.columns(len(etiquetas_visibles))
+            for i, etiqueta in enumerate(etiquetas_visibles):
                 val = df_f[etiqueta][df_f[etiqueta] >= 0].mean()
                 metrics_cols[i].metric(etiqueta, f"{val:.2f} d" if pd.notna(val) else "N/A")
+        
+        elif not etiquetas_visibles:
+            st.info("💡 Por favor, selecciona al menos una métrica en el filtro de arriba para visualizar los datos.")
         else:
             st.warning("⚠️ No hay datos para los filtros seleccionados.")
 
-        # --- EXCEL DE SALIDA (CORRECCIÓN DE POSICIÓN DE PROMEDIOS) ---
+        # --- EXCEL DE SALIDA (Mantiene la estructura original) ---
         st.divider()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
-            # Exportar datos reales
             df_export = df_p[ETIQUETAS_FINALES].copy()
             df_export.to_excel(writer, index=False, sheet_name='Reporte')
             
             workbook, worksheet = writer.book, writer.sheets['Reporte']
-            max_r = len(df_export) # Número de filas de datos (sin contar encabezado)
+            max_r = len(df_export)
             
-            # 1. Definir la Tabla de Excel (Rango A1 a M[N])
             column_settings = [{'header': col} for col in ETIQUETAS_FINALES]
             worksheet.add_table(0, 0, max_r, 12, {'columns': column_settings, 'style': 'Table Style Medium 9'})
             
-            # 2. Formatos
             fmt_v = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'num_format': '0.00', 'border': 1})
             fmt_r = workbook.add_format({'font_color': 'red', 'bold': True})
 
-            # 3. Columnas auxiliares (N, O, P, Q, R) para ignorar rojos en SUBTOTAL
-            # Estas celdas se llenan desde la fila 2 (index 1) hasta max_r + 1
             letras_base = ['I', 'J', 'K', 'L', 'M']
             for r_idx in range(1, max_r + 1):
                 for i, col_let in enumerate(letras_base):
-                    # Fórmula: SI(Valor >= 0, Valor, "")
                     formula = f"=IF({col_let}{r_idx+1}>=0, {col_let}{r_idx+1}, \"\")"
                     worksheet.write_formula(r_idx, 13 + i, formula)
 
-            # 4. Ocultar auxiliares y escribir Fila de Promedio Filtrado
             worksheet.set_column(13, 17, None, None, {'hidden': True})
-            
-            # La fila del promedio es max_r + 1 (justo debajo de la tabla)
             fila_promedio = max_r + 1
             worksheet.write(fila_promedio, 7, "PROM. FILTRADO", fmt_v)
             
             letras_aux = ['N', 'O', 'P', 'Q', 'R']
             for i, col_aux in zip(range(8, 13), letras_aux):
-                # SUBTOTAL(101, ...) hace el promedio de solo lo visible en Excel
                 formula_sub = f"=SUBTOTAL(101, {col_aux}2:{col_aux}{max_r + 1})"
                 worksheet.write_formula(fila_promedio, i, formula_sub, fmt_v)
 
-            # 5. Formato condicional para rojos
             worksheet.conditional_format(1, 8, max_r, 12, {'type': 'cell', 'criteria': '<', 'value': 0, 'format': fmt_r})
             worksheet.set_column(0, 12, 22)
 
