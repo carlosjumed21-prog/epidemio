@@ -33,7 +33,7 @@ def enviar_a_google_sheets(df):
         return False
 
 def cargar_aislamientos():
-    # 1. Carga inicial
+    # 1. Carga de datos crudos (sin saltar filas de más)
     df = pd.read_csv(SHEET_URL_READ, skiprows=1, engine='python', encoding='utf-8')
     df = df.iloc[:, 1:10] 
     df.columns = [str(c).strip().upper() for c in df.columns]
@@ -46,54 +46,52 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. LIMPIEZA AGRESIVA DE ESPACIOS ---
-    for col in df.columns:
-        df[col] = df[col].astype(str).str.strip()
+    # --- 2. TRATAMIENTO DE NULOS ---
+    # Marcamos como NaN real todo lo que visualmente está vacío
+    nulos = ['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO']
+    df = df.replace(nulos, np.nan)
 
-    # Reemplazar variantes de "vacío" por NaN real
-    nulos_detectados = ['nan', 'NAN', 'NONE', 'None', '', 'NULL', '.', '-', 'ACTIVO']
-    df = df.replace(nulos_detectados, np.nan)
+    # --- 3. RELLENO (FFILL) ANTES DE CUALQUIER FILTRO ---
+    # Esto asegura que la fila 160 sepa que es del paciente de la 159 
+    # ANTES de que intentemos borrar filas vacías.
+    df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
+    df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 3. RELLENO DE DATOS (FFILL) ---
-    df[col_cama] = df[col_cama].ffill().str.upper()
-    df[col_nombre] = df[col_nombre].ffill().str.upper()
+    # --- 4. FILTRO DE SUPERVIVENCIA ---
+    # Ahora que todas las filas tienen nombre, borramos las que NO tienen tipo de aislamiento
+    # (filas de relleno del final del Excel)
+    df = df.dropna(subset=[col_tipo])
 
-    # --- 4. CONVERSIÓN DE FECHAS PARA FILTRADO ---
-    # Si la fecha de término NO es una fecha válida, la tratamos como NaT (vacío/activo)
-    df[col_termino] = pd.to_datetime(df[col_termino], dayfirst=True, errors='coerce')
-    
-    # FILTRO: Solo conservamos las filas donde la fecha de término es NaT (viva)
+    # Filtramos: Solo conservamos las filas donde TÉRMINO está vacío
     df_activos = df[df[col_termino].isna()].copy()
 
     # 5. Cálculo de Días
     def calcular_dias_reales(fecha_str):
         try:
-            f = pd.to_datetime(str(fecha_str)[:10], dayfirst=True, errors='coerce')
-            if pd.isna(f): return 0
-            return (datetime.now() - f).days + 1
+            limpia = str(fecha_str).strip()[:10]
+            fecha_inicio = pd.to_datetime(limpia, dayfirst=True, errors='coerce')
+            if pd.isna(fecha_inicio): return 0
+            return (datetime.now() - fecha_inicio).days + 1
         except: return 0
 
     df_activos[col_dias] = df_activos[col_inicio].apply(calcular_dias_reales)
 
     # --- 6. CONSOLIDACIÓN ---
     def consolidar(group):
-        # Aseguramos que solo procese si hay tipo de aislamiento
-        validas = group.dropna(subset=[col_tipo])
-        if validas.empty: return None
-        
-        res = validas.iloc[0].copy()
-        res[col_tipo] = " / ".join(validas[col_tipo].unique())
-        res[col_protector] = " / ".join(validas[col_protector].dropna().unique()) if not validas[col_protector].dropna().empty else "VACÍO"
-        res[col_dias] = validas[col_dias].max()
+        res = group.iloc[0].copy()
+        tipos = group[col_tipo].dropna().unique()
+        res[col_tipo] = " / ".join(tipos)
+        prots = group[col_protector].dropna().unique()
+        res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
+        res[col_dias] = group[col_dias].max()
         return res
 
     if df_activos.empty:
         return pd.DataFrame(columns=df.columns[:-1])
 
     df_final = df_activos.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
-    df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
+    df_final = df_final.reset_index(drop=True)
 
-    # Limpieza final de columnas para mostrar
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
@@ -107,15 +105,18 @@ try:
     df_base = cargar_aislamientos()
     
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
-    df_filtrado = df_base[df_base.apply(lambda r: r.astype(str).str.contains(busqueda, case=False).any(), axis=1)] if busqueda else df_base
+    if busqueda:
+        mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
+        df_filtrado = df_base[mask]
+    else:
+        df_filtrado = df_base
 
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
-        # Columna 4 (Índice 3) suele ser protector
-        val_prot = len(df_filtrado[df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)])
-        st.metric(label="AISL. PROTECTORES", value=val_prot)
+        es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
+        st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
         promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
