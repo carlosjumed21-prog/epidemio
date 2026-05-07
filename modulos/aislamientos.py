@@ -46,15 +46,17 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. TRATAMIENTO DE NULOS Y RELLENO ---
-    nulos = ['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO']
-    df = df.replace(nulos, np.nan)
+    # --- 2. LIMPIEZA DE FILAS TOTALMENTE VACÍAS (FRENO DE SEGURIDAD) ---
+    # Si no tiene TIPO de aislamiento, la fila no nos sirve para nada.
+    df = df.replace(['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO'], np.nan)
+    df = df.dropna(subset=[col_tipo], how='all') 
 
-    # Rellenamos cama y nombre para que las filas unidas pertenezcan al mismo grupo
+    # --- 3. RELLENO DE DATOS ---
+    # Ahora sí, rellenamos cama y nombre pero solo sobre las filas que sobrevivieron (las que tienen aislamiento)
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 3. CÁLCULO DE DÍAS (Individual por fila) ---
+    # 4. Cálculo de Días
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -65,40 +67,31 @@ def cargar_aislamientos():
 
     df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # --- 4. FUNCIÓN DE CONSOLIDACIÓN CON LÓGICA DE SUPERVIVENCIA ---
+    # --- 5. CONSOLIDACIÓN CON LÓGICA DE FILA ACTIVA ---
     def consolidar_paciente(group):
-        # REGLA ORO: ¿Alguna fila tiene fecha de término vacía?
-        filas_activas = group[group[col_termino].isna()]
+        # Filtramos internamente: ¿Cuáles de estas filas no han terminado?
+        activos = group[group[col_termino].isna()]
         
-        # Caso A: Si NO hay filas vacías en término (todas terminaron), el paciente se va
-        if filas_activas.empty:
+        # Si todas las filas del grupo tienen fecha de término, el paciente no va al censo
+        if activos.empty:
             return None
         
-        # Caso B: Si hay al menos una activa, el paciente se queda
-        # Usamos la primera fila activa para extraer los datos base
-        res = filas_activas.iloc[0].copy()
+        # Si hay al menos una activa, tomamos esa como base
+        res = activos.iloc[0].copy()
         
-        # Concatenamos los tipos de aislamiento SOLO de las filas que siguen activas
-        tipos = filas_activas[col_tipo].dropna().unique()
-        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
-        
-        # Concatenamos protectores activos
-        prots = filas_activas[col_protector].dropna().unique()
-        res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
-        
-        # Días: El máximo de los aislamientos que siguen activos
-        res[col_dias] = filas_activas[col_dias].max()
+        # Unimos tipos y protectores de las filas que SIGUEN ACTIVAS
+        res[col_tipo] = " / ".join(activos[col_tipo].dropna().unique())
+        res[col_protector] = " / ".join(activos[col_protector].dropna().unique()) if not activos[col_protector].dropna().empty else "VACÍO"
+        res[col_dias] = activos[col_dias].max()
         
         return res
 
-    # --- 5. APLICAR AGRUPACIÓN ---
-    # Agrupamos por cama y nombre para identificar al paciente con sus N filas
+    # Agrupamos por cama y nombre
     df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
     
-    # Limpiamos los que retornaron None (los finalizados)
+    # Limpiamos resultados nulos
     df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
 
-    # Quitamos la columna de término para la visualización
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
@@ -118,16 +111,14 @@ try:
     else:
         df_filtrado = df_base
 
-    # Métricas calculadas sobre el dataframe ya consolidado y filtrado
+    # --- MÉTRICAS ---
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
-        # Columna 3 es Protector (índice 3)
         es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
-        # Columna 6 es Días (índice 6)
         promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
