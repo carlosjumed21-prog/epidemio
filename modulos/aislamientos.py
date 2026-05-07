@@ -54,14 +54,11 @@ def cargar_aislamientos():
     col_termino = df.columns[7]    # I
 
     # --- 2. LIMPIEZA INICIAL ---
-    # Eliminar filas totalmente vacías (filas fantasma de Sheets)
     df = df.dropna(subset=[col_cama, col_nombre, col_tipo], how='all')
 
-    # Normalizar texto para evitar duplicados por espacios o minúsculas
     for col in [col_cama, col_nombre]:
         df[col] = df[col].astype(str).str.strip().str.upper()
 
-    # Estandarizar nulos
     nulos_invalidos = ['NAN', 'NONE', 'none', '', 'NULL', ' ', '-', 'VACIO']
     df = df.replace(nulos_invalidos, np.nan)
 
@@ -83,35 +80,41 @@ def cargar_aislamientos():
 
     df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # --- 5. CONSOLIDACIÓN ---
+    # --- 5. CONSOLIDACIÓN CORREGIDA ---
     def consolidar_paciente(group):
-        # Si no tiene tipo de aislamiento, ignoramos la fila
-        if group[col_tipo].dropna().empty: return None
-            
-        res = group.iloc[0].copy()
+        # Filtramos internamente para quedarnos solo con las filas que NO tienen fecha de término
+        activos = group[group[col_termino].isna()]
         
-        # Unimos tipos y protectores
-        tipos = group[col_tipo].dropna().unique()
+        # Si después de filtrar no queda ninguna fila activa, el paciente ya no tiene aislamientos vigentes
+        if activos.empty:
+            return None
+            
+        # Tomamos la primera fila activa como base para los datos generales (cama, nombre)
+        res = activos.iloc[0].copy()
+        
+        # Unimos tipos y protectores SOLO de los registros que siguen activos
+        tipos = activos[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
         
-        prots = group[col_protector].dropna().unique()
+        prots = activos[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACIO"
         
-        # Está activo si alguna fila no tiene fecha de término
-        esta_activo = group[col_termino].isna().any()
-        res[col_termino] = "ACTIVO" if esta_activo else "FINALIZADO"
+        # Forzamos el estado a ACTIVO para que pase el filtro final
+        res[col_termino] = "ACTIVO"
         
-        res[col_dias] = group[col_dias].max()
+        # El día máximo de estancia en aislamiento entre los que siguen activos
+        res[col_dias] = activos[col_dias].max()
         return res
 
+    # Agrupamos por Cama y Nombre
     df_consolidado = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
+    
+    # Limpiamos resultados nulos del apply
+    df_consolidado = df_consolidado.reset_index(drop=True)
     df_consolidado = df_consolidado.dropna(subset=[col_cama])
 
-    # 6. FILTRO FINAL
+    # --- 6. FILTRO FINAL Y FORMATEO ---
     df_final = df_consolidado[df_consolidado[col_termino] == "ACTIVO"].copy()
-    
-    # IMPORTANTE: Guardamos el nombre de la columna protector antes de borrar el término
-    # para usarlo en la métrica más abajo
     
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
@@ -126,7 +129,8 @@ st.caption("CMN '20 de Noviembre' | Vigilancia Epidemiológica")
 
 try:
     df_base = cargar_aislamientos()
-    col_prot_name = df_base.columns[3] # La columna E (Protector)
+    col_prot_name = df_base.columns[3] # Columna Protector
+    col_dias_name = df_base.columns[6] # Columna Días
     
     # Buscador
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
@@ -141,11 +145,10 @@ try:
     with m1:
         st.metric(label="TOTAL AISLAMIENTOS", value=len(df_filtrado))
     with m2:
-        # Aquí restauramos el conteo de PROTECTORES
         es_prot = df_filtrado[col_prot_name].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
-        promedio = int(df_filtrado[df_base.columns[6]].mean()) if not df_filtrado.empty else 0
+        promedio = int(df_filtrado[col_dias_name].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
     st.divider()
