@@ -46,15 +46,23 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. NORMALIZACIÓN Y RELLENO ---
-    nulos_invalidos = ['NAN', 'NONE', 'none', '', 'NULL', ' ', '-', 'VACIO', 'ACTIVO']
-    df = df.replace(nulos_invalidos, np.nan)
+    # --- 2. LIMPIEZA DE FILAS VACÍAS REALES ---
+    # Si la fila no tiene ni cama, ni nombre, ni tipo, es basura del Sheets.
+    df = df.dropna(subset=[col_cama, col_nombre, col_tipo], how='all')
 
-    # RELLENO CRÍTICO: Aseguramos que las filas "huérfanas" (como la 160) hereden cama y nombre
+    # --- 3. RELLENO DE CELDAS COMBINADAS ---
+    # Reemplazamos textos vacíos por NaN real para que ffill funcione
+    df = df.replace(['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO'], np.nan)
+    
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # 3. Cálculo de Días (por cada fila individual)
+    # --- 4. FILTRO DE FILAS (ELIMINAR INDIVIDUALMENTE LAS TERMINADAS) ---
+    # Aquí está la clave: Si la FILA tiene fecha de término, se borra ANTES de agrupar.
+    # Así, si el paciente tiene una fila con término y otra sin término, solo sobrevive la que NO tiene término.
+    df_solo_activos = df[df[col_termino].isna()].copy()
+
+    # 5. Cálculo de Días para los que sobrevivieron
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -63,39 +71,32 @@ def cargar_aislamientos():
             return (datetime.now() - fecha_inicio).days + 1
         except: return 0
 
-    df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
+    df_solo_activos[col_dias] = df_solo_activos[col_inicio].apply(calcular_dias_reales)
 
-    # --- 4. FILTRO DE AISLAMIENTOS ACTIVOS (Lógica de Consolidación) ---
-    def consolidar_solo_activos(group):
-        # Nuestro filtro fundamental: Solo nos importan las filas SIN fecha de término
-        filas_vivas = group[group[col_termino].isna()]
+    # --- 6. CONSOLIDACIÓN FINAL POR PACIENTE ---
+    # Ahora que solo tenemos filas "vivas", agrupamos por si un paciente tiene varios tipos de aislamiento activos.
+    def consolidar(group):
+        res = group.iloc[0].copy()
         
-        # Si el paciente tiene 2 filas y AMBAS tienen fecha de término, el paciente ya no está aislado
-        if filas_vivas.empty:
-            return None
-            
-        # Si al menos una fila está vacía (activa), el paciente sigue en aislamiento
-        res = filas_vivas.iloc[0].copy()
-        
-        # Unimos los tipos y protectores SOLO de las filas que siguen activas
-        tipos = filas_vivas[col_tipo].dropna().unique()
+        # Unimos tipos y protectores
+        tipos = group[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
         
-        prots = filas_vivas[col_protector].dropna().unique()
+        prots = group[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
         
-        # Días de aislamiento (máximo entre las filas activas)
-        res[col_dias] = filas_vivas[col_dias].max()
-        
+        res[col_dias] = group[col_dias].max()
         return res
 
-    # Agrupamos por cama y nombre para procesar los bloques
-    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_solo_activos)
-    
-    # Eliminamos pacientes que resultaron en None (porque todos sus aislamientos terminaron)
-    df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
+    if df_solo_activos.empty:
+        return pd.DataFrame(columns=df.columns[:-1])
 
-    # Quitamos la columna de término para la vista limpia
+    df_final = df_solo_activos.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
+    
+    # Reset index para evitar que Streamlit se confunda con el multi-index del groupby
+    df_final = df_final.reset_index(drop=True)
+
+    # Quitar columna de término
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
@@ -108,7 +109,6 @@ st.caption("CMN '20 de Noviembre' | Vigilancia Epidemiológica")
 try:
     df_base = cargar_aislamientos()
     
-    # Buscador
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
     if busqueda:
         mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
@@ -116,7 +116,6 @@ try:
     else:
         df_filtrado = df_base
 
-    # --- MÉTRICAS ---
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
@@ -129,7 +128,6 @@ try:
 
     st.divider()
 
-    # --- ACCIONES ---
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         if st.button("🔄 Actualizar", use_container_width=True):
