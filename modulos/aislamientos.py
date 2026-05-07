@@ -46,19 +46,18 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. PRE-LIMPIEZA DE FILAS FANTASMA ---
-    # Reemplazamos basura por nulos reales
+    # --- 2. PRE-LIMPIEZA Y RELLENO ---
+    # Reemplazar basura por nulos reales
     df = df.replace(['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO'], np.nan)
     
-    # EL FRENO: Si la fila no tiene Tipo de Aislamiento, no es una fila válida.
-    # Esto evita que el ffill() se propague por las filas vacías del final.
-    df = df.dropna(subset=[col_tipo])
+    # Filtro de seguridad: Si no hay cama ni nombre ni tipo, la fila no existe
+    df = df.dropna(subset=[col_cama, col_nombre, col_tipo], how='all')
 
-    # --- 3. RELLENO DE DATOS COMBINADOS ---
+    # RELLENO: Cama y Nombre se propagan (para unir filas 159 y 160)
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # 4. Cálculo de Días
+    # --- 3. CÁLCULO DE DÍAS ---
     def calcular_dias(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -68,29 +67,33 @@ def cargar_aislamientos():
         except: return 0
     df[col_dias] = df[col_inicio].apply(calcular_dias)
 
-    # --- 5. LÓGICA DE CONSOLIDACIÓN (TU CONDICIÓN) ---
+    # --- 4. CONSOLIDACIÓN CON TU CONDICIÓN ---
     def consolidar_grupo(group):
-        # Identificamos filas sin fecha de término (ACTIVOS)
+        # Identificamos filas ACTIVAS (donde Término es NaN)
         filas_activas = group[group[col_termino].isna()]
         
-        # CONDICIÓN: Si TODAS las filas del grupo tienen fecha de término -> NO es aislamiento
+        # TU CONDICIÓN: 
+        # Si NO hay filas activas (todas tienen dato en término), el paciente se descarta
         if filas_activas.empty:
             return None
         
-        # Si al menos una está vacía, se queda como aislamiento activo
+        # Si hay al menos una activa (una tiene dato y otra no, o ambas están vacías), se queda
         res = filas_activas.iloc[0].copy()
         
-        # Consolidamos solo lo que sigue activo
+        # Consolidamos solo la info de las filas que siguen vigentes
         res[col_tipo] = " / ".join(filas_activas[col_tipo].dropna().unique())
         res[col_protector] = " / ".join(filas_activas[col_protector].dropna().unique()) if not filas_activas[col_protector].dropna().empty else "VACÍO"
         res[col_dias] = filas_activas[col_dias].max()
         
         return res
 
-    # 6. Agrupar y aplicar lógica
+    # 5. Agrupar y aplicar lógica
+    # Quitamos filas que no tengan microorganismo antes de agrupar para no crear "fantasmas"
+    df = df.dropna(subset=[col_tipo])
+    
     df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_grupo)
     
-    # Limpiamos los None (pacientes finalizados)
+    # Limpiar resultados nulos y resetear índice
     df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
 
     if col_termino in df_final.columns:
@@ -106,8 +109,13 @@ try:
     df_base = cargar_aislamientos()
     
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
-    df_filtrado = df_base[df_base.apply(lambda r: r.astype(str).str.contains(busqueda, case=False).any(), axis=1)] if busqueda else df_base
+    if busqueda:
+        mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
+        df_filtrado = df_base[mask]
+    else:
+        df_filtrado = df_base
 
+    # --- MÉTRICAS ---
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
