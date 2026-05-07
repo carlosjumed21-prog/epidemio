@@ -22,11 +22,9 @@ def enviar_a_google_sheets(df):
         sh = client.open_by_key(DESTINATION_SHEET_ID)
         worksheet = sh.get_worksheet(0) 
         worksheet.clear()
-        
         df_envio = df.copy()
         for col in df_envio.columns:
             df_envio[col] = df_envio[col].astype(str).replace(['nan', 'None', 'NaT'], '')
-            
         datos = [df_envio.columns.values.tolist()] + df_envio.values.tolist()
         worksheet.update('A1', datos)
         return True
@@ -48,88 +46,92 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. LIMPIEZA Y NORMALIZACIÓN ---
-    # Eliminamos filas donde no hay ni cama ni nombre
-    df = df.dropna(subset=[col_cama, col_nombre], how='all')
-    
-    # Estandarizamos nulos antes de rellenar
+    # --- 2. PRE-PROCESAMIENTO DE FILAS COMBINADAS ---
+    # Limpiamos nulos y "basura" visual de Sheets
     nulos_invalidos = ['NAN', 'NONE', 'none', '', 'NULL', ' ', '-', 'VACIO', 'ACTIVO']
     df = df.replace(nulos_invalidos, np.nan)
 
-    # Rellenar celdas combinadas para que cada fila tenga su Cama y Nombre
+    # RELLENAR: Cama y Nombre se propagan hacia abajo para que las filas 159 y 160 sean "hermanas"
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 3. FILTRO CRÍTICO: SOLO FILAS ACTIVAS ---
-    # Un aislamiento es activo SOLO si la fecha de término está vacía (NaN)
-    # Hacemos esto ANTES de consolidar para no mezclar datos viejos
-    df_activos_solo = df[df[col_termino].isna()].copy()
-
-    # 4. Cálculo de Días (solo para los activos)
+    # 3. Cálculo de Días (independiente por fila)
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
             fecha_inicio = pd.to_datetime(limpia, dayfirst=True, errors='coerce')
             if pd.isna(fecha_inicio): return 0
-            diferencia = (datetime.now() - fecha_inicio).days + 1
-            return diferencia if diferencia >= 0 else 0
+            return (datetime.now() - fecha_inicio).days + 1
         except: return 0
 
-    df_activos_solo[col_dias] = df_activos_solo[col_inicio].apply(calcular_dias_reales)
+    df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # --- 5. CONSOLIDACIÓN POR PACIENTE ---
+    # --- 4. LÓGICA DE CONSOLIDACIÓN (RESUELVE TU CONFLICTO) ---
     def consolidar(group):
-        res = group.iloc[0].copy()
+        # PASO A: Identificar solo las filas que NO han terminado (Término es NaN)
+        filas_activas = group[group[col_termino].isna()]
         
-        # Unimos tipos (ej: "CONTACTO / GOTITAS")
-        tipos = group[col_tipo].dropna().unique()
+        # Si NO hay ninguna fila vacía en la columna TÉRMINO, significa que 
+        # todos los aislamientos de este paciente ya cerraron.
+        if filas_activas.empty:
+            return None
+            
+        # PASO B: Si hay al menos una fila vacía (activa), construimos el registro
+        # Usamos la primera fila activa como base
+        res = filas_activas.iloc[0].copy()
+        
+        # Combinamos los TIPOS y PROTECTORES solo de las filas que siguen vigentes
+        tipos = filas_activas[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
         
-        # Unimos protectores
-        prots = group[col_protector].dropna().unique()
+        prots = filas_activas[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
         
-        # Días máximos del aislamiento más antiguo activo
-        res[col_dias] = group[col_dias].max()
+        # Los días de estancia corresponden al aislamiento activo más antiguo
+        res[col_dias] = filas_activas[col_dias].max()
         
         return res
 
-    # Agrupamos los que sobrevivieron al filtro de activos
-    df_final = df_activos_solo.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
+    # Agrupamos por cama y nombre para procesar los bloques (como 159-160)
+    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
     
-    # Limpieza final de columnas sobrantes para la vista
+    # Eliminamos los registros que devolvieron None (los totalmente finalizados)
+    df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
+
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
     return df_final.sort_values(by=col_cama)
 
-# --- INTERFAZ ---
+# --- INTERFAZ STREAMLIT ---
 st.title("🦠 Control de Aislamientos Activos")
 st.caption("CMN '20 de Noviembre' | Vigilancia Epidemiológica")
 
 try:
     df_base = cargar_aislamientos()
     
-    # Buscador dinámico
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
-    df_filtrado = df_base[df_base.apply(lambda r: r.astype(str).str.contains(busqueda, case=False).any(), axis=1)] if busqueda else df_base
+    if busqueda:
+        mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
+        df_filtrado = df_base[mask]
+    else:
+        df_filtrado = df_base
 
     # --- MÉTRICAS ---
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
-        # Columna Protector es la 4ta (índice 3)
+        # Columna 4 es Protector (índice 3)
         es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
-        # Columna Días es la 7ma (índice 6)
+        # Columna 7 es Días (índice 6)
         promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
     st.divider()
 
-    # --- BOTONES ---
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         if st.button("🔄 Actualizar", use_container_width=True):
