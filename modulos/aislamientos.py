@@ -16,15 +16,21 @@ DESTINATION_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{DESTINATION_SH
 def enviar_a_google_sheets(df):
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        info = st.secrets["connections"]["gsheets"] if "connections" in st.secrets else st.secrets["connections.gsheets"]
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            info = st.secrets["connections"]["gsheets"]
+        else:
+            info = st.secrets["connections.gsheets"]
+            
         creds = Credentials.from_service_account_info(info, scopes=scope)
         client = gspread.authorize(creds)
         sh = client.open_by_key(DESTINATION_SHEET_ID)
         worksheet = sh.get_worksheet(0) 
         worksheet.clear()
+        
         df_envio = df.copy()
         for col in df_envio.columns:
-            df_envio[col] = df_envio[col].astype(str).replace(['nan', 'None', 'NaT'], '')
+            df_envio[col] = df_envio[col].astype(str).replace(['nan', 'None', 'NaT', 'ACTIVO'], '')
+            
         datos = [df_envio.columns.values.tolist()] + df_envio.values.tolist()
         worksheet.update('A1', datos)
         return True
@@ -46,59 +52,66 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. PRE-LIMPIEZA Y RELLENO ---
-    # Reemplazar basura por nulos reales
-    df = df.replace(['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO'], np.nan)
+    # --- 2. PRE-LIMPIEZA (EL MURO DE CONTENCIÓN) ---
+    # Reemplazamos variantes de vacío por NaN real
+    df = df.replace(['NAN', 'NONE', 'none', '', 'NULL', ' ', '-', 'VACIO', 'ACTIVO'], np.nan)
     
-    # Filtro de seguridad: Si no hay cama ni nombre ni tipo, la fila no existe
-    df = df.dropna(subset=[col_cama, col_nombre, col_tipo], how='all')
+    # IMPORTANTE: Eliminamos filas que no tengan TIPO DE AISLAMIENTO. 
+    # Esto evita que el ffill() se propague por las filas vacías del final del Sheets.
+    df = df.dropna(subset=[col_tipo])
 
-    # RELLENO: Cama y Nombre se propagan (para unir filas 159 y 160)
+    # --- 3. RELLENO DE CELDAS COMBINADAS ---
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 3. CÁLCULO DE DÍAS ---
-    def calcular_dias(fecha_str):
+    # 4. Cálculo de Días
+    def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
-            f_inicio = pd.to_datetime(limpia, dayfirst=True, errors='coerce')
-            if pd.isna(f_inicio): return 0
-            return (datetime.now() - f_inicio).days + 1
+            fecha_inicio = pd.to_datetime(limpia, dayfirst=True, errors='coerce')
+            if pd.isna(fecha_inicio): return 0
+            diferencia = (datetime.now() - fecha_inicio).days + 1
+            return diferencia if diferencia >= 0 else 0
         except: return 0
-    df[col_dias] = df[col_inicio].apply(calcular_dias)
 
-    # --- 4. CONSOLIDACIÓN CON TU CONDICIÓN ---
-    def consolidar_grupo(group):
-        # Identificamos filas ACTIVAS (donde Término es NaN)
+    df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
+
+    # --- 5. CONSOLIDACIÓN CON TU CONDICIÓN ---
+    def consolidar_paciente(group):
+        # Filtramos internamente para ver cuáles de estas filas NO tienen fecha de término
         filas_activas = group[group[col_termino].isna()]
         
-        # TU CONDICIÓN: 
-        # Si NO hay filas activas (todas tienen dato en término), el paciente se descarta
+        # TU REGLA: Si NO hay filas activas (todas tienen fecha), no se cuenta
         if filas_activas.empty:
             return None
-        
-        # Si hay al menos una activa (una tiene dato y otra no, o ambas están vacías), se queda
+            
+        # Si llegamos aquí, es porque al menos una fila es activa (aislamiento incompleto/vigente)
         res = filas_activas.iloc[0].copy()
         
-        # Consolidamos solo la info de las filas que siguen vigentes
-        res[col_tipo] = " / ".join(filas_activas[col_tipo].dropna().unique())
-        res[col_protector] = " / ".join(filas_activas[col_protector].dropna().unique()) if not filas_activas[col_protector].dropna().empty else "VACÍO"
+        # Unimos tipos y protectores SOLO de lo que sigue activo
+        tipos = filas_activas[col_tipo].dropna().unique()
+        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
+        
+        prots = filas_activas[col_protector].dropna().unique()
+        res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACIO"
+        
+        # Mantenemos el estado activo para el filtro final
+        res[col_termino] = "ACTIVO"
         res[col_dias] = filas_activas[col_dias].max()
         
         return res
 
-    # 5. Agrupar y aplicar lógica
-    # Quitamos filas que no tengan microorganismo antes de agrupar para no crear "fantasmas"
-    df = df.dropna(subset=[col_tipo])
+    # 6. Agrupar y aplicar la lógica
+    df_consolidado = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
     
-    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_grupo)
-    
-    # Limpiar resultados nulos y resetear índice
-    df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
+    # Limpiamos los registros que devolvieron None (los finalizados)
+    df_final = df_consolidado.dropna(subset=[col_cama]).reset_index(drop=True)
 
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
-
+    
+    df_final[col_dias] = pd.to_numeric(df_final[col_dias], errors='coerce').fillna(0).astype(int)
+    
     return df_final.sort_values(by=col_cama)
 
 # --- INTERFAZ ---
@@ -107,23 +120,20 @@ st.caption("CMN '20 de Noviembre' | Vigilancia Epidemiológica")
 
 try:
     df_base = cargar_aislamientos()
+    col_prot_name = df_base.columns[3]
     
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
-    if busqueda:
-        mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
-        df_filtrado = df_base[mask]
-    else:
-        df_filtrado = df_base
+    df_filtrado = df_base[df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)] if busqueda else df_base
 
     # --- MÉTRICAS ---
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
-        es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
+        es_prot = df_filtrado[col_prot_name].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
-        promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
+        promedio = int(df_filtrado[df_base.columns[6]].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
     st.divider()
