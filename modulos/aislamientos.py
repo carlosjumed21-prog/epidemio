@@ -46,16 +46,15 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. PRE-PROCESAMIENTO DE FILAS COMBINADAS ---
-    # Limpiamos nulos y "basura" visual de Sheets
+    # --- 2. NORMALIZACIÓN Y RELLENO ---
     nulos_invalidos = ['NAN', 'NONE', 'none', '', 'NULL', ' ', '-', 'VACIO', 'ACTIVO']
     df = df.replace(nulos_invalidos, np.nan)
 
-    # RELLENAR: Cama y Nombre se propagan hacia abajo para que las filas 159 y 160 sean "hermanas"
+    # RELLENO CRÍTICO: Aseguramos que las filas "huérfanas" (como la 160) hereden cama y nombre
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # 3. Cálculo de Días (independiente por fila)
+    # 3. Cálculo de Días (por cada fila individual)
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -66,50 +65,50 @@ def cargar_aislamientos():
 
     df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # --- 4. LÓGICA DE CONSOLIDACIÓN (RESUELVE TU CONFLICTO) ---
-    def consolidar(group):
-        # PASO A: Identificar solo las filas que NO han terminado (Término es NaN)
-        filas_activas = group[group[col_termino].isna()]
+    # --- 4. FILTRO DE AISLAMIENTOS ACTIVOS (Lógica de Consolidación) ---
+    def consolidar_solo_activos(group):
+        # Nuestro filtro fundamental: Solo nos importan las filas SIN fecha de término
+        filas_vivas = group[group[col_termino].isna()]
         
-        # Si NO hay ninguna fila vacía en la columna TÉRMINO, significa que 
-        # todos los aislamientos de este paciente ya cerraron.
-        if filas_activas.empty:
+        # Si el paciente tiene 2 filas y AMBAS tienen fecha de término, el paciente ya no está aislado
+        if filas_vivas.empty:
             return None
             
-        # PASO B: Si hay al menos una fila vacía (activa), construimos el registro
-        # Usamos la primera fila activa como base
-        res = filas_activas.iloc[0].copy()
+        # Si al menos una fila está vacía (activa), el paciente sigue en aislamiento
+        res = filas_vivas.iloc[0].copy()
         
-        # Combinamos los TIPOS y PROTECTORES solo de las filas que siguen vigentes
-        tipos = filas_activas[col_tipo].dropna().unique()
+        # Unimos los tipos y protectores SOLO de las filas que siguen activas
+        tipos = filas_vivas[col_tipo].dropna().unique()
         res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
         
-        prots = filas_activas[col_protector].dropna().unique()
+        prots = filas_vivas[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
         
-        # Los días de estancia corresponden al aislamiento activo más antiguo
-        res[col_dias] = filas_activas[col_dias].max()
+        # Días de aislamiento (máximo entre las filas activas)
+        res[col_dias] = filas_vivas[col_dias].max()
         
         return res
 
-    # Agrupamos por cama y nombre para procesar los bloques (como 159-160)
-    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
+    # Agrupamos por cama y nombre para procesar los bloques
+    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_solo_activos)
     
-    # Eliminamos los registros que devolvieron None (los totalmente finalizados)
+    # Eliminamos pacientes que resultaron en None (porque todos sus aislamientos terminaron)
     df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
 
+    # Quitamos la columna de término para la vista limpia
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
     return df_final.sort_values(by=col_cama)
 
-# --- INTERFAZ STREAMLIT ---
+# --- INTERFAZ ---
 st.title("🦠 Control de Aislamientos Activos")
 st.caption("CMN '20 de Noviembre' | Vigilancia Epidemiológica")
 
 try:
     df_base = cargar_aislamientos()
     
+    # Buscador
     busqueda = st.text_input("🔍 Buscar por Cama o Nombre:")
     if busqueda:
         mask = df_base.apply(lambda row: row.astype(str).str.contains(busqueda, case=False).any(), axis=1)
@@ -122,16 +121,15 @@ try:
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
-        # Columna 4 es Protector (índice 3)
         es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
-        # Columna 7 es Días (índice 6)
         promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
     st.divider()
 
+    # --- ACCIONES ---
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         if st.button("🔄 Actualizar", use_container_width=True):
