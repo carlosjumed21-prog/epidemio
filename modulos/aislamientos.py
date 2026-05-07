@@ -33,7 +33,7 @@ def enviar_a_google_sheets(df):
         return False
 
 def cargar_aislamientos():
-    # 1. Carga de datos crudos (sin saltar filas de más)
+    # 1. Carga de datos
     df = pd.read_csv(SHEET_URL_READ, skiprows=1, engine='python', encoding='utf-8')
     df = df.iloc[:, 1:10] 
     df.columns = [str(c).strip().upper() for c in df.columns]
@@ -46,26 +46,15 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. TRATAMIENTO DE NULOS ---
-    # Marcamos como NaN real todo lo que visualmente está vacío
+    # --- 2. TRATAMIENTO DE NULOS Y RELLENO ---
     nulos = ['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO']
     df = df.replace(nulos, np.nan)
 
-    # --- 3. RELLENO (FFILL) ANTES DE CUALQUIER FILTRO ---
-    # Esto asegura que la fila 160 sepa que es del paciente de la 159 
-    # ANTES de que intentemos borrar filas vacías.
+    # Rellenamos cama y nombre para que las filas unidas pertenezcan al mismo grupo
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 4. FILTRO DE SUPERVIVENCIA ---
-    # Ahora que todas las filas tienen nombre, borramos las que NO tienen tipo de aislamiento
-    # (filas de relleno del final del Excel)
-    df = df.dropna(subset=[col_tipo])
-
-    # Filtramos: Solo conservamos las filas donde TÉRMINO está vacío
-    df_activos = df[df[col_termino].isna()].copy()
-
-    # 5. Cálculo de Días
+    # --- 3. CÁLCULO DE DÍAS (Individual por fila) ---
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -74,24 +63,42 @@ def cargar_aislamientos():
             return (datetime.now() - fecha_inicio).days + 1
         except: return 0
 
-    df_activos[col_dias] = df_activos[col_inicio].apply(calcular_dias_reales)
+    df[col_dias] = df[col_inicio].apply(calcular_dias_reales)
 
-    # --- 6. CONSOLIDACIÓN ---
-    def consolidar(group):
-        res = group.iloc[0].copy()
-        tipos = group[col_tipo].dropna().unique()
-        res[col_tipo] = " / ".join(tipos)
-        prots = group[col_protector].dropna().unique()
+    # --- 4. FUNCIÓN DE CONSOLIDACIÓN CON LÓGICA DE SUPERVIVENCIA ---
+    def consolidar_paciente(group):
+        # REGLA ORO: ¿Alguna fila tiene fecha de término vacía?
+        filas_activas = group[group[col_termino].isna()]
+        
+        # Caso A: Si NO hay filas vacías en término (todas terminaron), el paciente se va
+        if filas_activas.empty:
+            return None
+        
+        # Caso B: Si hay al menos una activa, el paciente se queda
+        # Usamos la primera fila activa para extraer los datos base
+        res = filas_activas.iloc[0].copy()
+        
+        # Concatenamos los tipos de aislamiento SOLO de las filas que siguen activas
+        tipos = filas_activas[col_tipo].dropna().unique()
+        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
+        
+        # Concatenamos protectores activos
+        prots = filas_activas[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
-        res[col_dias] = group[col_dias].max()
+        
+        # Días: El máximo de los aislamientos que siguen activos
+        res[col_dias] = filas_activas[col_dias].max()
+        
         return res
 
-    if df_activos.empty:
-        return pd.DataFrame(columns=df.columns[:-1])
+    # --- 5. APLICAR AGRUPACIÓN ---
+    # Agrupamos por cama y nombre para identificar al paciente con sus N filas
+    df_final = df.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar_paciente)
+    
+    # Limpiamos los que retornaron None (los finalizados)
+    df_final = df_final.dropna(subset=[col_cama]).reset_index(drop=True)
 
-    df_final = df_activos.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
-    df_final = df_final.reset_index(drop=True)
-
+    # Quitamos la columna de término para la visualización
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
@@ -111,13 +118,16 @@ try:
     else:
         df_filtrado = df_base
 
+    # Métricas calculadas sobre el dataframe ya consolidado y filtrado
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric(label="TOTAL PACIENTES", value=len(df_filtrado))
     with m2:
+        # Columna 3 es Protector (índice 3)
         es_prot = df_filtrado.iloc[:, 3].astype(str).str.contains("PROTECTOR", case=False, na=False)
         st.metric(label="AISL. PROTECTORES", value=len(df_filtrado[es_prot]))
     with m3:
+        # Columna 6 es Días (índice 6)
         promedio = int(df_filtrado.iloc[:, 6].mean()) if not df_filtrado.empty else 0
         st.metric(label="PROM. DÍAS", value=f"{promedio} d")
 
