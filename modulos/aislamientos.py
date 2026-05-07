@@ -33,7 +33,7 @@ def enviar_a_google_sheets(df):
         return False
 
 def cargar_aislamientos():
-    # 1. Carga de datos
+    # 1. Carga de datos crudos (sin saltar filas de más)
     df = pd.read_csv(SHEET_URL_READ, skiprows=1, engine='python', encoding='utf-8')
     df = df.iloc[:, 1:10] 
     df.columns = [str(c).strip().upper() for c in df.columns]
@@ -46,23 +46,26 @@ def cargar_aislamientos():
     col_dias = df.columns[6]       # H
     col_termino = df.columns[7]    # I
 
-    # --- 2. LIMPIEZA DE FILAS VACÍAS REALES ---
-    # Si la fila no tiene ni cama, ni nombre, ni tipo, es basura del Sheets.
-    df = df.dropna(subset=[col_cama, col_nombre, col_tipo], how='all')
+    # --- 2. TRATAMIENTO DE NULOS ---
+    # Marcamos como NaN real todo lo que visualmente está vacío
+    nulos = ['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO']
+    df = df.replace(nulos, np.nan)
 
-    # --- 3. RELLENO DE CELDAS COMBINADAS ---
-    # Reemplazamos textos vacíos por NaN real para que ffill funcione
-    df = df.replace(['', ' ', 'None', 'nan', 'NAN', 'NULL', 'ACTIVO'], np.nan)
-    
+    # --- 3. RELLENO (FFILL) ANTES DE CUALQUIER FILTRO ---
+    # Esto asegura que la fila 160 sepa que es del paciente de la 159 
+    # ANTES de que intentemos borrar filas vacías.
     df[col_cama] = df[col_cama].ffill().astype(str).str.strip().str.upper()
     df[col_nombre] = df[col_nombre].ffill().astype(str).str.strip().str.upper()
 
-    # --- 4. FILTRO DE FILAS (ELIMINAR INDIVIDUALMENTE LAS TERMINADAS) ---
-    # Aquí está la clave: Si la FILA tiene fecha de término, se borra ANTES de agrupar.
-    # Así, si el paciente tiene una fila con término y otra sin término, solo sobrevive la que NO tiene término.
-    df_solo_activos = df[df[col_termino].isna()].copy()
+    # --- 4. FILTRO DE SUPERVIVENCIA ---
+    # Ahora que todas las filas tienen nombre, borramos las que NO tienen tipo de aislamiento
+    # (filas de relleno del final del Excel)
+    df = df.dropna(subset=[col_tipo])
 
-    # 5. Cálculo de Días para los que sobrevivieron
+    # Filtramos: Solo conservamos las filas donde TÉRMINO está vacío
+    df_activos = df[df[col_termino].isna()].copy()
+
+    # 5. Cálculo de Días
     def calcular_dias_reales(fecha_str):
         try:
             limpia = str(fecha_str).strip()[:10]
@@ -71,32 +74,24 @@ def cargar_aislamientos():
             return (datetime.now() - fecha_inicio).days + 1
         except: return 0
 
-    df_solo_activos[col_dias] = df_solo_activos[col_inicio].apply(calcular_dias_reales)
+    df_activos[col_dias] = df_activos[col_inicio].apply(calcular_dias_reales)
 
-    # --- 6. CONSOLIDACIÓN FINAL POR PACIENTE ---
-    # Ahora que solo tenemos filas "vivas", agrupamos por si un paciente tiene varios tipos de aislamiento activos.
+    # --- 6. CONSOLIDACIÓN ---
     def consolidar(group):
         res = group.iloc[0].copy()
-        
-        # Unimos tipos y protectores
         tipos = group[col_tipo].dropna().unique()
-        res[col_tipo] = " / ".join(tipos) if len(tipos) > 0 else "SIN ESPECIFICAR"
-        
+        res[col_tipo] = " / ".join(tipos)
         prots = group[col_protector].dropna().unique()
         res[col_protector] = " / ".join(prots) if len(prots) > 0 else "VACÍO"
-        
         res[col_dias] = group[col_dias].max()
         return res
 
-    if df_solo_activos.empty:
+    if df_activos.empty:
         return pd.DataFrame(columns=df.columns[:-1])
 
-    df_final = df_solo_activos.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
-    
-    # Reset index para evitar que Streamlit se confunda con el multi-index del groupby
+    df_final = df_activos.groupby([col_cama, col_nombre], as_index=False, sort=False).apply(consolidar)
     df_final = df_final.reset_index(drop=True)
 
-    # Quitar columna de término
     if col_termino in df_final.columns:
         df_final = df_final.drop(columns=[col_termino])
 
