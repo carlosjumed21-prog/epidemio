@@ -14,51 +14,66 @@ if st.button("🚀 Sincronizar Censo", type="primary", use_container_width=True)
             df_actual = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 1", ttl=0)
             
             if df_actual is None or df_actual.empty:
-                st.warning("⚠️ La Hoja 1 está vacía.")
+                st.warning("⚠️ La Hoja 1 está vacía. Pega los datos con encabezados en la Fila 1.")
                 st.stop()
 
-            # 2. Intentar leer Hoja 2 (Historial)
+            # 2. Leer Hoja 2 (Historial) y PROTEGER SUS ENCABEZADOS
             try:
                 df_previo = conn.read(spreadsheet=URL_SABANA, worksheet="Hoja 2", ttl=0)
-                if df_previo is None or df_previo.empty:
-                    df_previo = pd.DataFrame(columns=df_actual.columns)
+                
+                # Si está totalmente vacía, le damos las columnas de la Hoja 1 por defecto
+                if df_previo is None or (df_previo.empty and len(df_previo.columns) == 0):
+                    encabezados_hoja2 = df_actual.columns.tolist()
+                    df_previo = pd.DataFrame(columns=encabezados_hoja2)
                 else:
-                    # Alineamos columnas por si acaso
-                    df_previo.columns = df_actual.columns
+                    # RESPALDAMOS EL ENCABEZADO ORIGINAL DE LA HOJA 2 (Fila 1)
+                    encabezados_hoja2 = df_previo.columns.tolist()
             except:
-                df_previo = pd.DataFrame(columns=df_actual.columns)
+                encabezados_hoja2 = df_actual.columns.tolist()
+                df_previo = pd.DataFrame(columns=encabezados_hoja2)
 
         # 3. FILTRADO (Columna D = Índice 3)
-        # Limpieza rápida para comparación
-        ids_historial = df_previo.iloc[:, 3].astype(str).str.strip().unique().tolist()
-        nuevos_pacientes = df_actual[~df_actual.iloc[:, 3].astype(str).str.strip().isin(ids_historial)]
+        if not df_previo.empty:
+            ids_historial = df_previo.iloc[:, 3].astype(str).str.strip().unique().tolist()
+        else:
+            ids_historial = []
+
+        # Encontramos los pacientes de Hoja 1 que NO están en Hoja 2
+        nuevos_pacientes = df_actual[~df_actual.iloc[:, 3].astype(str).str.strip().isin(ids_historial)].copy()
 
         if nuevos_pacientes.empty:
-            st.info("ℹ️ No hay pacientes nuevos. El historial está al día.")
+            st.info("ℹ️ No hay pacientes nuevos. El historial se mantiene intacto.")
             df_final = df_previo
         else:
-            # Unimos: Historial + Nuevos
+            # CLAVE: Hacemos que los nuevos pacientes adopten el nombre de columnas de la Hoja 2
+            # Esto evita que al unir se creen columnas raras o se mueva el encabezado
+            nuevos_pacientes.columns = encabezados_hoja2
+            
+            # Unimos: Historial (Hoja 2) + Nuevos pacientes (Hoja 1)
             df_final = pd.concat([df_previo, nuevos_pacientes], ignore_index=True)
             st.success(f"✨ Se integraron {len(nuevos_pacientes)} pacientes nuevos.")
 
         # 4. ORDEN CRONOLÓGICO ESTRICTO (Columna A = Índice 0)
-        # Convertimos a datetime para ordenar, pero mantenemos el formato original después
+        # Convertimos la columna A en fechas para ordenar (desde la Fila 2 hacia abajo)
         df_final['temp_date'] = pd.to_datetime(df_final.iloc[:, 0], dayfirst=True, errors='coerce')
         
-        # Ordenamos y eliminamos la columna temporal
+        # Ordenamos usando la fecha y luego borramos esa columna temporal
         df_final = df_final.sort_values(by='temp_date', ascending=True).drop(columns=['temp_date'])
 
-        # 5. LIMPIEZA FINAL Y FORMATEO
-        # Reemplazamos valores nulos para que Sheets no reciba errores de formato
+        # 5. LIMPIEZA FINAL DE NULOS
         df_final = df_final.fillna("")
         df_final = df_final.replace(["nan", "None", "<NA>", "nan.1"], "")
 
-        with st.spinner("Actualizando Hoja 2 (Fila 1: Encabezados | Fila 2+: Datos)..."):
-            # 'conn.update' con un DataFrame escribe los nombres de las columnas en la Fila 1 
-            # y los datos inmediatamente debajo.
+        # 6. RESTAURAR EL ENCABEZADO BLINDADO
+        # Aseguramos de manera definitiva que la Fila 1 sea tu encabezado original
+        df_final.columns = encabezados_hoja2
+
+        with st.spinner("Guardando cambios y orden cronológico en Hoja 2..."):
+            # Al mandar df_final, streamlit-gsheets pega los 'encabezados_hoja2' en la Fila 1
+            # y todos los pacientes ya ordenados por fecha a partir de la Fila 2.
             conn.update(spreadsheet=URL_SABANA, worksheet="Hoja 2", data=df_final)
 
-        st.write("### 📋 Vista Previa del Historial Sincronizado")
+        st.write("### 📋 Vista Previa: Hoja 2 Actualizada")
         st.dataframe(df_final, use_container_width=True)
 
     except Exception as e:
