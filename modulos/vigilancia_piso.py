@@ -38,7 +38,7 @@ def limpiar_hojas_salida(ss_salida):
         st.error(f"Error al limpiar: {e}")
         return False
 
-# --- 3. FUNCIÓN DE MAPEO Y FORMATO DETALLADO ---
+# --- 3. FUNCIÓN DE MAPEO ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
     try:
         # A. Día para el calendario
@@ -54,7 +54,7 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         col_sexo = 23 if sexo_raw == 'M' else (25 if sexo_raw == 'F' else None)
 
-        # C. Lista de celdas (Se agrega la Columna H -> S6)
+        # C. Lista de celdas (Columna H -> S6)
         lista_celdas = [
             gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3: Nombre
             gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3: Expediente
@@ -62,8 +62,8 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
             gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
             gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo Texto
             gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
-            gspread.Cell(row=6, col=19, value=str(fila_datos.iloc[7])), # S6: Dato Columna H (NUEVO)
-            gspread.Cell(row=9, col=col_dia, value="X")                  # Calendario
+            gspread.Cell(row=6, col=19, value=str(fila_datos.iloc[7])), # S6: Columna H
+            gspread.Cell(row=9, col=col_dia, value="X")                  
         ]
 
         if col_sexo:
@@ -71,22 +71,14 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # D. APLICAR FORMATOS
-        fmt_datos = {"horizontalAlignment": "LEFT"}
-        fmt_marca_x = {
-            "horizontalAlignment": "CENTER",
-            "textFormat": {"bold": True}
-        }
-
-        formateos = [
-            {"range": "B3:AC6", "format": fmt_datos},
+        # D. Formatos
+        fmt_marca_x = {"horizontalAlignment": "CENTER", "textFormat": {"bold": True}}
+        h_nueva.batch_format([
+            {"range": "B3:AC6", "format": {"horizontalAlignment": "LEFT"}},
             {"range": "W3", "format": fmt_marca_x},
             {"range": "Y3", "format": fmt_marca_x},
             {"range": "C9:AG9", "format": fmt_marca_x}
-        ]
-        
-        h_nueva.batch_format(formateos)
-
+        ])
     except Exception as e:
         st.error(f"Error en el mapeo: {e}")
 
@@ -94,31 +86,7 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 st.set_page_config(page_title="Vigilancia Epidemiológica", layout="wide")
 st.title("🛡️ Vigilancia Activa de Piso")
 
-# Sidebar para herramientas de mantenimiento
-with st.sidebar:
-    st.header("⚙️ Herramientas")
-    st.warning("### Zona de Peligro")
-    if st.button("🗑️ Borrar todas las hojas"):
-        st.session_state['confirmar_borrado'] = True
-
-    if st.session_state.get('confirmar_borrado'):
-        st.error("¿Estás seguro? Esto eliminará todas las pestañas de pacientes.")
-        col_si, col_no = st.columns(2)
-        with col_si:
-            if st.button("SÍ, BORRAR"):
-                res = conectar_piso_activo()
-                if res[0]:
-                    if limpiar_hojas_salida(res[0]):
-                        st.success("Hojas eliminadas. Solo queda la plantilla.")
-                        st.session_state['confirmar_borrado'] = False
-                        time.sleep(2)
-                        st.rerun()
-        with col_no:
-            if st.button("CANCELAR"):
-                st.session_state['confirmar_borrado'] = False
-                st.rerun()
-
-# Cuerpo principal
+# BOTÓN DE CARGA
 if st.button("🔍 Cargar Censo"):
     res = conectar_piso_activo()
     if res[0]:
@@ -127,45 +95,49 @@ if st.button("🔍 Cargar Censo"):
         df.columns = [str(c).strip().upper() for c in df.columns]
         df.insert(0, "SELECCIONAR", False)
         st.session_state['df_piso_final'] = df
-        st.success("Censo cargado correctamente.")
 
+# TABLA DE EDICIÓN
 if 'df_piso_final' in st.session_state:
-    df_visual = st.session_state['df_piso_final']
-    
     df_sel = st.data_editor(
-        df_visual,
+        st.session_state['df_piso_final'],
         column_config={"SELECCIONAR": st.column_config.CheckboxColumn("¿Crear?", default=False)},
-        disabled=[c for c in df_visual.columns if c != "SELECCIONAR"],
+        disabled=[c for c in st.session_state['df_piso_final'].columns if c != "SELECCIONAR"],
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
+        key="editor_censo"
     )
 
     if st.button("🚀 Generar Hojas Individuales", type="primary"):
         elegidos = df_sel[df_sel["SELECCIONAR"] == True]
-        
         if not elegidos.empty:
             res = conectar_piso_activo()
             if res[0]:
                 ss_sal, h_pla, _ = res
                 prog = st.progress(0)
-                status = st.empty()
-
                 for idx, (i, row) in enumerate(elegidos.iterrows()):
                     datos = row.drop("SELECCIONAR")
                     nombre = str(datos.iloc[4])[:20].strip()
-                    status.text(f"Creando pestaña para: {nombre}")
-                    
-                    try:
-                        nueva = ss_sal.duplicate_sheet(
-                            source_sheet_id=h_pla.id,
-                            new_sheet_name=f"Vig_{nombre}_{idx+1}",
-                            insert_sheet_index=idx + 1
-                        )
-                        actualizar_hoja_paciente(nueva, datos)
-                    except Exception as e:
-                        st.error(f"Error en {nombre}: {e}")
-                    
+                    nueva = ss_sal.duplicate_sheet(h_pla.id, f"Vig_{nombre}_{idx+1}", insert_sheet_index=idx+1)
+                    actualizar_hoja_paciente(nueva, datos)
                     prog.progress((idx + 1) / len(elegidos))
-                    time.sleep(3.5) # Respetando límites de la API de Google
-                
+                    time.sleep(3)
                 st.success("✅ Proceso finalizado.")
+
+# --- SECCIÓN DE LIMPIEZA (AL FINAL DE LA PÁGINA) ---
+st.divider()
+st.subheader("🧹 Mantenimiento de la Hoja de Salida")
+
+with st.expander("Presiona aquí para ver opciones de borrado"):
+    st.warning("Esta acción eliminará todas las pestañas de pacientes generadas, dejando solo la plantilla.")
+    
+    # Checkbox de seguridad
+    confirmar_seguro = st.checkbox("Entiendo que esto no se puede deshacer y deseo continuar.")
+    
+    if confirmar_seguro:
+        if st.button("🗑️ BORRAR PESTAÑAS AHORA", type="secondary"):
+            res = conectar_piso_activo()
+            if res[0]:
+                if limpiar_hojas_salida(res[0]):
+                    st.success("Hojas eliminadas correctamente.")
+                    time.sleep(2)
+                    st.rerun()
