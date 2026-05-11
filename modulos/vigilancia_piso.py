@@ -26,19 +26,27 @@ def conectar_piso_activo():
         st.error(f"⚠️ Error de conexión: {e}")
         return None, None, None
 
-# --- 2. FUNCIÓN DE LIMPIEZA ---
+# --- 2. FUNCIÓN DE LIMPIEZA (CORREGIDA) ---
 def limpiar_hojas_salida(ss_salida):
     try:
+        # Obtenemos la lista de todas las hojas actuales
         todas_las_hojas = ss_salida.worksheets()
-        # Borramos desde la segunda hoja (índice 1) en adelante
-        for i in range(1, len(todas_las_hojas)):
-            ss_salida.del_worksheet(todas_las_hojas[1]) # Siempre borramos la que queda en pos 1
+        
+        # Si solo hay una hoja (la plantilla), no hay nada que limpiar
+        if len(todas_las_hojas) <= 1:
+            return True
+            
+        # Borramos todas excepto la primera (índice 0)
+        # Iteramos sobre la lista de objetos directamente para evitar errores de ID
+        for hoja in todas_las_hojas[1:]:
+            ss_salida.del_worksheet(hoja)
+            time.sleep(0.5) # Breve pausa para no saturar la API
         return True
     except Exception as e:
         st.error(f"Error al limpiar: {e}")
         return False
 
-# --- 3. FUNCIÓN DE MAPEO ---
+# --- 3. FUNCIÓN DE MAPEO (Dato H -> S6) ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
     try:
         fecha_str = str(fila_datos.iloc[0])
@@ -55,7 +63,7 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
             gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
             gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo
             gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
-            gspread.Cell(row=6, col=19, value=str(fila_datos.iloc[7])), # S6: Columna H
+            gspread.Cell(row=6, col=19, value=str(fila_datos.iloc[7])), # S6: Dato Columna H
             gspread.Cell(row=9, col=col_dia, value="X")                  
         ]
 
@@ -64,20 +72,19 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # Formatos básicos
         h_nueva.batch_format([
             {"range": "B3:AC6", "format": {"horizontalAlignment": "LEFT"}},
             {"range": "W3:Y3", "format": {"horizontalAlignment": "CENTER", "textFormat": {"bold": True}}},
             {"range": "C9:AG9", "format": {"horizontalAlignment": "CENTER", "textFormat": {"bold": True}}}
         ])
     except Exception as e:
-        st.error(f"Error en el mapeo de datos: {e}")
+        st.error(f"Error en el mapeo: {e}")
 
 # --- 4. INTERFAZ ---
 st.set_page_config(page_title="Vigilancia Epidemiológica", layout="wide")
 st.title("🛡️ Vigilancia Activa de Piso")
 
-# CARGA DE DATOS
+# BOTÓN CARGAR
 if st.button("🔍 Cargar Censo"):
     res = conectar_piso_activo()
     if res[0]:
@@ -88,65 +95,66 @@ if st.button("🔍 Cargar Censo"):
         st.session_state['df_piso_final'] = df
 
 if 'df_piso_final' in st.session_state:
-    # --- Casilla Seleccionar Todos ---
-    sel_all = st.checkbox("Seleccionar todos los pacientes")
-    if sel_all:
-        st.session_state['df_piso_final']["SELECCIONAR"] = True
     
+    # --- Checkbox Seleccionar Todos ---
+    sel_todos = st.checkbox("Seleccionar todos los pacientes")
+    if sel_todos:
+        st.session_state['df_piso_final']["SELECCIONAR"] = True
+    else:
+        # Solo reseteamos si el usuario lo desmarca manualmente
+        if not sel_todos and st.session_state.get('prev_sel_todos', False):
+            st.session_state['df_piso_final']["SELECCIONAR"] = False
+    
+    st.session_state['prev_sel_todos'] = sel_todos
+
     df_sel = st.data_editor(
         st.session_state['df_piso_final'],
         column_config={"SELECCIONAR": st.column_config.CheckboxColumn("¿Crear?", default=False)},
         disabled=[c for c in st.session_state['df_piso_final'].columns if c != "SELECCIONAR"],
         hide_index=True,
         use_container_width=True,
-        key="editor_censo"
+        key="editor_piso"
     )
 
     if st.button("🚀 Generar Hojas Individuales", type="primary"):
         elegidos = df_sel[df_sel["SELECCIONAR"] == True]
         if not elegidos.empty:
             ss_sal, h_pla, _ = conectar_piso_activo()
-            if ss_sal and h_pla:
+            if ss_sal:
                 prog = st.progress(0)
                 for idx, (i, row) in enumerate(elegidos.iterrows()):
                     datos = row.drop("SELECCIONAR")
                     nombre_pac = str(datos.iloc[4])[:15].strip()
                     try:
-                        # FIX: Forzamos int() en h_pla.id para evitar el TypeError
-                        nueva = ss_sal.duplicate_sheet(
-                            source_sheet_id=int(h_pla.id), 
-                            new_sheet_name=f"Vig_{nombre_pac}_{idx+1}", 
-                            insert_sheet_index=idx + 1
-                        )
+                        nueva = ss_sal.duplicate_sheet(int(h_pla.id), f"Vig_{nombre_pac}_{idx+1}", insert_sheet_index=idx+1)
                         actualizar_hoja_paciente(nueva, datos)
                     except Exception as e:
-                        st.error(f"No se pudo crear la hoja de {nombre_pac}: {e}")
-                    
+                        st.error(f"Error en {nombre_pac}: {e}")
                     prog.progress((idx + 1) / len(elegidos))
-                    time.sleep(2) # Pausa mínima para no saturar la API
-                st.success("✅ Proceso finalizado.")
+                    time.sleep(3)
+                st.success("✅ Proceso terminado.")
 
-# --- SECCIÓN DE LIMPIEZA SIMPLE ---
+# --- SECCIÓN LIMPIEZA SIMPLE ---
 st.divider()
-st.subheader("🧹 Mantenimiento")
+st.subheader("🧹 Limpieza de Salida")
 
-if 'modo_limpieza' not in st.session_state:
-    st.session_state['modo_limpieza'] = False
+if 'confirmar' not in st.session_state:
+    st.session_state['confirmar'] = False
 
-if not st.session_state['modo_limpieza']:
+if not st.session_state['confirmar']:
     if st.button("Limpiar Hojas"):
-        st.session_state['modo_limpieza'] = True
+        st.session_state['confirmar'] = True
         st.rerun()
 else:
-    st.warning("⚠️ ¿Confirmas que deseas borrar todas las pestañas de pacientes?")
-    c1, c2, _ = st.columns([1, 1, 8])
-    if c1.button("SÍ"):
+    st.warning("¿Confirmas el borrado de las pestañas?")
+    col_si, col_no, _ = st.columns([1, 1, 8])
+    if col_si.button("SÍ"):
         ss_sal, _, _ = conectar_piso_activo()
         if ss_sal and limpiar_hojas_salida(ss_sal):
-            st.success("Hojas eliminadas.")
-            st.session_state['modo_limpieza'] = False
+            st.success("Archivo limpio.")
+            st.session_state['confirmar'] = False
             time.sleep(1)
             st.rerun()
-    if c2.button("NO"):
-        st.session_state['modo_limpieza'] = False
+    if col_no.button("NO"):
+        st.session_state['confirmar'] = False
         st.rerun()
