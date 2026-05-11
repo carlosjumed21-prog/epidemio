@@ -30,7 +30,6 @@ def conectar_piso_activo():
 def limpiar_hojas_salida(ss_salida):
     try:
         todas_las_hojas = ss_salida.worksheets()
-        # Mantenemos la primera (índice 0) y borramos las demás
         for i in range(1, len(todas_las_hojas)):
             ss_salida.del_worksheet(todas_las_hojas[i])
         return True
@@ -38,15 +37,13 @@ def limpiar_hojas_salida(ss_salida):
         st.error(f"Error al limpiar: {e}")
         return False
 
-# --- 3. FUNCIÓN DE MAPEO ---
+# --- 3. FUNCIÓN DE MAPEO (Columna H -> S6) ---
 def actualizar_hoja_paciente(h_nueva, fila_datos):
     try:
-        # A. Día para el calendario
         fecha_str = str(fila_datos.iloc[0])
         dia = int(fecha_str.split('/')[0])
         col_dia = dia + 2  
 
-        # B. Lógica de Sexo
         try:
             sexo_raw = str(fila_datos['SEXO']).strip().upper()
         except:
@@ -54,13 +51,12 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         col_sexo = 23 if sexo_raw == 'M' else (25 if sexo_raw == 'F' else None)
 
-        # C. Lista de celdas (Columna H -> S6)
         lista_celdas = [
             gspread.Cell(row=3, col=2, value=str(fila_datos.iloc[4])),  # B3: Nombre
             gspread.Cell(row=3, col=15, value=str(fila_datos.iloc[3])), # O3: Expediente
             gspread.Cell(row=3, col=29, value=str(fila_datos.iloc[2])), # AC3: Edad
             gspread.Cell(row=4, col=3, value=str(fila_datos.iloc[6])),  # C4: Servicio
-            gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo Texto
+            gspread.Cell(row=5, col=27, value=str(fila_datos.iloc[1])), # AA5: Sexo
             gspread.Cell(row=6, col=2, value=str(fila_datos.iloc[8])),  # B6: Dx
             gspread.Cell(row=6, col=19, value=str(fila_datos.iloc[7])), # S6: Columna H
             gspread.Cell(row=9, col=col_dia, value="X")                  
@@ -71,7 +67,6 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 
         h_nueva.update_cells(lista_celdas, value_input_option='USER_ENTERED')
         
-        # D. Formatos
         fmt_marca_x = {"horizontalAlignment": "CENTER", "textFormat": {"bold": True}}
         h_nueva.batch_format([
             {"range": "B3:AC6", "format": {"horizontalAlignment": "LEFT"}},
@@ -86,18 +81,32 @@ def actualizar_hoja_paciente(h_nueva, fila_datos):
 st.set_page_config(page_title="Vigilancia Epidemiológica", layout="wide")
 st.title("🛡️ Vigilancia Activa de Piso")
 
-# BOTÓN DE CARGA
-if st.button("🔍 Cargar Censo"):
-    res = conectar_piso_activo()
-    if res[0]:
-        _, _, h_dat = res
-        df = pd.DataFrame(h_dat.get_all_records())
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        df.insert(0, "SELECCIONAR", False)
-        st.session_state['df_piso_final'] = df
+# FILA DE ACCIONES PRINCIPALES
+col_btn1, col_btn2 = st.columns([1, 5])
 
-# TABLA DE EDICIÓN
+with col_btn1:
+    if st.button("🔍 Cargar Censo"):
+        res = conectar_piso_activo()
+        if res[0]:
+            _, _, h_dat = res
+            df = pd.DataFrame(h_dat.get_all_records())
+            df.columns = [str(c).strip().upper() for c in df.columns]
+            df.insert(0, "SELECCIONAR", False)
+            st.session_state['df_piso_final'] = df
+
+# MOSTRAR TABLA Y OPCIONES SI HAY DATOS
 if 'df_piso_final' in st.session_state:
+    
+    # Checkbox para seleccionar todos
+    if st.checkbox("✅ Seleccionar todos los pacientes"):
+        st.session_state['df_piso_final']["SELECCIONAR"] = True
+    else:
+        # Solo lo ponemos en False si fue el checkbox el que lo activó antes
+        if st.session_state.get('last_select_all', False):
+             st.session_state['df_piso_final']["SELECCIONAR"] = False
+    
+    st.session_state['last_select_all'] = st.session_state.get('select_all_active', False)
+
     df_sel = st.data_editor(
         st.session_state['df_piso_final'],
         column_config={"SELECCIONAR": st.column_config.CheckboxColumn("¿Crear?", default=False)},
@@ -123,21 +132,27 @@ if 'df_piso_final' in st.session_state:
                     time.sleep(3)
                 st.success("✅ Proceso finalizado.")
 
-# --- SECCIÓN DE LIMPIEZA (AL FINAL DE LA PÁGINA) ---
+# --- SECCIÓN DE LIMPIEZA SIMPLE ---
 st.divider()
-st.subheader("🧹 Mantenimiento de la Hoja de Salida")
+st.subheader("🧹 Limpiar Archivo de Salida")
 
-with st.expander("Presiona aquí para ver opciones de borrado"):
-    st.warning("Esta acción eliminará todas las pestañas de pacientes generadas, dejando solo la plantilla.")
-    
-    # Checkbox de seguridad
-    confirmar_seguro = st.checkbox("Entiendo que esto no se puede deshacer y deseo continuar.")
-    
-    if confirmar_seguro:
-        if st.button("🗑️ BORRAR PESTAÑAS AHORA", type="secondary"):
-            res = conectar_piso_activo()
-            if res[0]:
-                if limpiar_hojas_salida(res[0]):
-                    st.success("Hojas eliminadas correctamente.")
-                    time.sleep(2)
-                    st.rerun()
+if 'confirmar_borrado' not in st.session_state:
+    st.session_state['confirmar_borrado'] = False
+
+if not st.session_state['confirmar_borrado']:
+    if st.button("Limpiar Hojas"):
+        st.session_state['confirmar_borrado'] = True
+        st.rerun()
+else:
+    st.warning("¿Confirmas que deseas borrar todas las pestañas de pacientes?")
+    col1, col2, _ = st.columns([1, 1, 8])
+    if col1.button("SÍ"):
+        res = conectar_piso_activo()
+        if res[0] and limpiar_hojas_salida(res[0]):
+            st.success("Limpieza exitosa.")
+            st.session_state['confirmar_borrado'] = False
+            time.sleep(2)
+            st.rerun()
+    if col2.button("NO"):
+        st.session_state['confirmar_borrado'] = False
+        st.rerun()
