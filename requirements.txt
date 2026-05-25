@@ -10,3 +10,4 @@ gspread
 google-auth
 xlsxwriter
 plotly
+xhtml2pdf
