@@ -1,222 +1,156 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
-from xhtml2pdf import pisa
 
-# --- CONFIGURACIÓN DE TAMAÑOS DE HOJA (En mm para precisión) ---
-MEDIDAS_HOJA = {
-    "Carta (Vertical)": {"size": "letter", "orientation": "portrait"},
-    "Carta (Horizontal)": {"size": "letter", "orientation": "landscape"},
-    "Oficio (Vertical)": {"size": "8.5in 14in", "orientation": "portrait"},
-    "Oficio (Horizontal)": {"size": "14in 8.5in", "orientation": "landscape"},
-}
-
-def generar_html_para_pdf(dfs_dict, tamano_config, titulo_documento="Reporte IAAS"):
+def generar_html_impresion(dfs_dict, orientacion, tipo_hoja):
     """
-    Genera un string HTML con estilos CSS para forzar que las tablas
-    se autoajusten al ancho de la página seleccionada.
+    Genera un contenedor HTML estilizado con reglas de CSS @media print
+    para forzar el autoajuste de las tablas al tamaño de hoja al imprimir.
     """
-    size_css = tamano_config["size"]
-    orientation_css = tamano_config["orientation"]
+    # Configuración de dimensiones según la elección del usuario
+    ancho_hoja = "215.9mm"
+    alto_hoja = "279.4mm" if tipo_hoja == "Carta" else "355.6mm"
     
+    if orientacion == "Horizontal":
+        ancho_hoja, alto_hoja = alto_hoja, ancho_hoja
+
     html_content = f"""
-    <html>
-    <head>
-        <style>
+    <style>
+        /* Estilos en pantalla normal (Vista Previa) */
+        .preview-container {{
+            background-color: #ffffff;
+            padding: 15px;
+            margin-bottom: 30px;
+            border: 1px solid #e6e9ef;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }}
+        .preview-title {{
+            color: #003366;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #003366;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }}
+        .print-table {{
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed; /* Fuerza el autoajuste de columnas */
+            font-size: 11px;
+        }}
+        .print-table th {{
+            background-color: #f4f6f9;
+            color: #1e293b;
+            border: 1px solid #cbd5e1;
+            padding: 6px;
+            text-align: center;
+        }}
+        .print-table td {{
+            border: 1px solid #cbd5e1;
+            padding: 5px;
+            word-wrap: break-word;
+        }}
+        
+        /* 🚨 MAGIA DE IMPRESIÓN RESTRINGIDA AL CONTENEDOR 🚨 */
+        @media print {{
+            body * {{
+                visibility: hidden; /* Oculta toda la app de Streamlit (barras, botones) */
+            }}
+            .seccion-imprimible, .seccion-imprimible * {{
+                visibility: visible; /* Muestra SOLO lo que está en este contenedor */
+            }}
+            .seccion-imprimible {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }}
             @page {{
-                size: {size_css} {orientation_css};
-                margin: 1cm;
+                size: {ancho_hoja} {alto_hoja};
+                margin: 10mm;
             }}
-            body {{
-                font-family: 'Helvetica', 'Arial', sans-serif;
-                color: #333333;
-                font-size: 8pt;
+            .preview-container {{
+                border: none !important;
+                box-shadow: none !important;
+                page-break-after: always; /* Cada pestaña va a una hoja nueva */
+                page-break-inside: avoid;
             }}
-            .page-break {{
-                page-break-after: always;
-            }}
-            .page-break:last-child {{
+            .preview-container:last-child {{
                 page-break-after: avoid;
             }}
-            .header {{
-                text-align: center;
-                margin-bottom: 15px;
-                border-bottom: 2px solid #003366;
-                padding-bottom: 5px;
-            }}
-            .hospital-title {{
-                font-size: 14pt;
-                font-weight: bold;
-                color: #003366;
-            }}
-            .sheet-title {{
-                font-size: 11pt;
-                font-weight: bold;
-                margin-top: 5px;
-                color: #555555;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 20px;
-                table-layout: fixed; /* Fuerza el autoajuste de columnas dentro del ancho */
-            }}
-            th {{
-                background-color: #f2f2f2;
-                color: #003366;
-                font-weight: bold;
-                border: 1px solid #dddddd;
-                padding: 4px;
-                text-align: center;
-                font-size: 7.5pt;
-            }}
-            td {{
-                border: 1px solid #dddddd;
-                padding: 4px;
-                text-align: left;
-                word-wrap: break-word; /* Evita que textos largos rompan la celda */
-                font-size: 7pt;
-            }}
-            tr:nth-child(even) {{
-                background-color: #fafafa;
-            }}
-        </style>
-    </head>
-    <body>
+        }}
+    </style>
+    <div class="seccion-imprimible">
     """
     
-    # Iterar por cada pestaña del Excel
     for sheet_name, df in dfs_dict.items():
-        # Reemplazar valores nulos por vacío para una impresión limpia
         df_clean = df.fillna("")
-        
         html_content += f"""
-        <div class="page-break">
-            <div class="header">
-                <div class="hospital-title">CMN "20 de Noviembre" - ISSSTE</div>
-                <div class="sheet-title">Monitoreo Epidemiológico: {sheet_name}</div>
-            </div>
-            <table>
+        <div class="preview-container">
+            <div class="preview-title">CMN "20 de Noviembre" - Monitoreo IAAS: {sheet_name}</div>
+            <table class="print-table">
                 <thead>
                     <tr>
         """
-        # Renderizar Encabezados
         for col in df_clean.columns:
             html_content += f"<th>{col}</th>"
-            
-        html_content += """
-                    </tr>
-                </thead>
-                <tbody>
-        """
-        # Renderizar Filas
+        html_content += "</tr></thead><tbody>"
+        
         for _, row in df_clean.iterrows():
             html_content += "<tr>"
             for val in row:
                 html_content += f"<td>{val}</td>"
             html_content += "</tr>"
             
-        html_content += """
-                </tbody>
-            </table>
-        </div>
-        """
+        html_content += "</tbody></table></div>"
         
-    html_content += "</body></html>"
+    html_content += "</div>"
     return html_content
 
-def convertir_html_a_pdf(html_string):
-    """Convierte el HTML autogenerado en un archivo binario PDF."""
-    pdf_buffer = BytesIO()
-    pisa_status = pisa.CreatePDF(BytesIO(html_string.encode("utf-8")), dest=pdf_buffer)
-    if pisa_status.err:
-        return None
-    pdf_buffer.seek(0)
-    return pdf_buffer
+# --- INTERFAZ ---
+st.title("🖨️ Gestor de Impresión Nativo")
+st.subheader("Autoajuste de reportes de Excel a PDF vía Navegador")
 
-
-# --- INTERFAZ DE STREAMLIT ---
-
-st.title("🖨️ Gestor de Impresión y Formateo IAAS")
-st.subheader("Autoajuste de reportes de Excel a PDF de una sola hoja por pestaña")
-
-# Contenedor de configuración de página
-col1, col2 = st.columns([2, 2])
+col1, col2, col3 = st.columns([2, 2, 2])
 
 with col1:
-    tipo_hoja = st.selectbox(
-        "📄 Selecciona el tamaño y orientación de impresión:",
-        options=list(MEDIDAS_HOJA.keys()),
-        index=1 # Por defecto Carta Horizontal, suele ser mejor para censos
-    )
-
+    tipo_hoja = st.selectbox("📄 Tamaño de Hoja:", ["Carta", "Oficio"])
 with col2:
-    excel_subido = st.file_uploader(
-        "📂 Arrastra o selecciona el archivo Excel de origen",
-        type=["xlsx", "xls"],
-        help="Sube aquí cualquier reporte con múltiples pestañas para forzar su ajuste."
-    )
+    orientacion = st.selectbox("📐 Orientación:", ["Horizontal", "Vertical"], index=0)
+with col3:
+    excel_subido = st.file_uploader("📂 Cargar reporte Excel", type=["xlsx", "xls"])
 
 st.divider()
 
 if excel_subido:
     try:
-        # 1. Leer todas las pestañas del Excel de manera automática
         excel_file = pd.ExcelFile(excel_subido)
         pestanas = excel_file.sheet_names
         
-        st.success(f"📊 Archivo cargado correctamente. Se detectaron **{len(pestanas)}** pestañas.")
+        dict_dataframes = {p: pd.read_excel(excel_subido, sheet_name=p) for p in pestanas}
         
-        # Guardar los DataFrames en un diccionario
-        dict_dataframes = {}
-        for biente in pestanas:
-            # Seteamos header=0 para los títulos de columnas
-            dict_dataframes[biente] = pd.read_excel(excel_subido, sheet_name=biente)
+        # Generamos el componente HTML estilizado
+        html_impresion = generar_html_impresion(dict_dataframes, orientacion, tipo_hoja)
         
-        # 2. PESTAÑAS DE VISTA PREVIA EN STREAMLIT
-        st.markdown("### 👀 Vista Previa de Datos Origen")
-        tabs_visualizacion = st.tabs(pestanas)
+        # Instrucciones claras para el usuario clínico
+        st.info(
+            "💡 **Instrucciones para Imprimir / Guardar en PDF:**\n"
+            "1. Haz clic en el botón **'Abrir Gestor de Impresión'** abajo.\n"
+            "2. En el panel del navegador, cambia el Destino a **'Guardar como PDF'** o selecciona tu impresora física.\n"
+            "3. Asegúrate de activar la casilla **'Gráficos de fondo'** si quieres conservar los colores de las tablas."
+        )
         
-        for idx, nombre_pestana in enumerate(pestanas):
-            with tabs_visualizacion[idx]:
-                st.dataframe(
-                    dict_dataframes[nombre_pestana], 
-                    use_container_width=True,
-                    column_config={"_index": None}
-                )
+        # Botón truco para lanzar la impresión nativa del sistema
+        st.markdown(
+            '<button onclick="window.print()" style="width:100%; padding:12px; background-color:#003366; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-bottom:20px;">🖨️ Abrir Gestor de Impresión (o CTRL + P)</button>', 
+            unsafe_allow_html=True
+        )
         
-        st.divider()
+        st.markdown("### 👀 Vista Previa del Documento Ajustado")
+        # Inyectamos el HTML en la aplicación para previsualizarlo y dejarlo listo para el motor de impresión
+        st.markdown(html_impresion, unsafe_allow_html=True)
         
-        # 3. GENERACIÓN DE DOCUMENTO DE IMPRESIÓN
-        with st.spinner("⚙️ Mapeando y autoajustando dimensiones para PDF..."):
-            # Generar HTML con la configuración elegida
-            html_final = generar_html_para_pdf(dict_dataframes, MEDIDAS_HOJA[tipo_hoja])
-            pdf_listo = convertir_html_a_pdf(html_final)
-            
-        if pdf_listo:
-            st.markdown("### 🖨️ Centro de Descarga e Impresión")
-            
-            info_col, btn_col = st.columns([3, 1])
-            with info_col:
-                st.info(
-                    f"✨ El documento ha sido formateado en tamaño **{tipo_hoja}**. \n"
-                    f"Las columnas han sido forzadas mediante CSS (`table-layout: fixed`) "
-                    f"para compactarse automáticamente al ancho de una página por pestaña."
-                )
-            with btn_col:
-                st.write("") # Espaciador
-                st.download_button(
-                    label="📥 Descargar PDF listo para Imprimir",
-                    data=pdf_listo,
-                    file_name="Reporte_IAAS_Impresion.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-        else:
-            st.error("❌ Hubo un error al compilar el PDF. Revisa que el Excel no contenga caracteres extraños.")
-            
     except Exception as e:
-        st.error(f"❌ Error al procesar el archivo Excel: {e}")
-
+        st.error(f"❌ Error al mapear el archivo: {e}")
 else:
-    st.info("👋 Sube un archivo de Excel en la barra superior para generar la maquetación de impresión.")
+    st.info("👋 Por favor sube un archivo Excel con pestañas para activar la vista previa de impresión.")
