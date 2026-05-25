@@ -1,13 +1,13 @@
 streamlit
-pandas
 numpy
 lxml
 html5lib
-openpyxl
 reportlab
 st-gsheets-connection
 gspread
 google-auth
 xlsxwriter
 plotly
+pandas
+openpyxl
 xhtml2pdf
