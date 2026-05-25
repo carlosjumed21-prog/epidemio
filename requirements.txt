@@ -10,3 +10,4 @@ xlsxwriter
 plotly
 pandas
 openpyxl
+pdf2
