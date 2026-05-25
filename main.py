@@ -1,6 +1,10 @@
 import streamlit as st
 
-# --- 1. CONFIGURACIÓN GLOBAL (¡DEBE SER LA PRIMERA EN EJECUTARSE!) ---
+# --- 0. CONTROL DE DESPLIEGUE (CACHE COMPILER BUSTING) ---
+# Modificación de control: Forzar actualización e instalación de dependencias en Python 3.13 (pandas, openpyxl, fpdf2)
+# Última actualización del gestor: Mayo 2026
+
+# --- 1. CONFIGURACIÓN GLOBAL ---
 st.set_page_config(
     page_title="EpidemioManager - CMN 20 de Noviembre", 
     page_icon="🏥",
@@ -11,7 +15,7 @@ st.set_page_config(
 # --- 2. BARRA LATERAL (SIDEBAR) ---
 st.sidebar.header("⚙️ Configuración")
 
-# Selector de archivos para el Censo HTML
+# Selector de archivos para el Censo HTML original
 archivo_subido = st.sidebar.file_uploader(
     "Subir Censo HTML", 
     type=["html", "htm"],
@@ -27,7 +31,6 @@ else:
 st.sidebar.divider()
 
 # --- 3. NAVEGACIÓN Y ESTRUCTURA DE PÁGINAS ---
-# Ahora que ya se ejecutó set_page_config, podemos inicializar la navegación sin errores
 pg = st.navigation([
     st.Page(
         "modulos/censo_diario.py", 
