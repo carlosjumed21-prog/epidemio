@@ -1,3 +1,18 @@
+import subprocess
+import sys
+
+# Forzar la instalación de fpdf2 en el contenedor si no está presente
+try:
+    from fpdf import FPDF
+except ModuleNotFoundError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "fpdf2"])
+    from fpdf import FPDF
+
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+
+# ... (El resto de tu código de fpdf y la interfaz se queda exactamente igual)
 import streamlit as st
 
 # --- 0. CONTROL DE DESPLIEGUE (CACHE COMPILER BUSTING) ---
