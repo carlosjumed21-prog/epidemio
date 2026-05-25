@@ -10,5 +10,3 @@ xlsxwriter
 plotly
 pandas
 openpyxl
-reportlab>=4.1.0
-xhtml2pdf>=0.2.16
