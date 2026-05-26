@@ -69,11 +69,6 @@ pg = st.navigation([
         title="Estadísticas IAAS", 
         icon="📊"
     ),
-    st.Page(
-        "modulos/impresion_excel.py", 
-        title="Gestor de Impresión", 
-        icon="🖨️"
-    ),
 ])
 
 # --- 4. EJECUCIÓN ---
