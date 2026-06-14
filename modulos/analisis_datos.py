@@ -58,7 +58,7 @@ if uploaded_file:
         for col in df.columns:
             is_multi = df[col].astype(str).str.contains(',').any()
             
-            # --- PREPARACIÓN DE DATOS PROPORCIONALES ---
+            # Preparación de datos proporcionales
             if is_multi:
                 data_plot = (df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100).reset_index()
                 data_plot.columns = ['Categoría', 'Porcentaje']
@@ -66,10 +66,11 @@ if uploaded_file:
                 data_plot = (df[col].value_counts(normalize=True) * 100).reset_index()
                 data_plot.columns = [col, 'Porcentaje']
 
-            # --- GRÁFICA ---
+            # Gráfica
             fig, ax = plt.subplots(figsize=(8, 5))
             if is_multi:
-                sns.barplot(data=data_plot, x='Porcentaje', y='Categoría', palette="salmon", ax=ax)
+                # CORRECCIÓN: Se cambió "salmon" por "viridis"
+                sns.barplot(data=data_plot, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
             else:
                 sns.barplot(data=data_plot, x=col, y='Porcentaje', palette="viridis", ax=ax)
                 plt.xticks(rotation=45)
@@ -78,7 +79,7 @@ if uploaded_file:
             ax.set_title(f"Distribución de {col}")
             st.pyplot(fig)
             
-            # --- REDACCIÓN ---
+            # Redacción Automática
             st.markdown(generar_redaccion_tesis(df, col, is_multi))
             st.write("---")
 
