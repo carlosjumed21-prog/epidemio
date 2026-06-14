@@ -69,6 +69,11 @@ pg = st.navigation([
         title="Estadísticas IAAS", 
         icon="📊"
     ),
+    st.Page(
+        "modulos/Formulario_VIH.py", 
+        title="Formulario VIH", 
+        icon="📝"
+    ),
 ])
 
 # --- 4. EJECUCIÓN ---
