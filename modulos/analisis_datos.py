@@ -2,73 +2,91 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import random
 from scipy.stats import chi2_contingency
 
-# Configuración de estilo en español
-sns.set_theme(style="whitegrid")
-plt.rcParams['font.family'] = 'sans-serif'
+# --- REGLAS DE REDACCIÓN (CONDICIONES APLICADAS) ---
+frases_inicio = [
+    "De acuerdo con los resultados obtenidos se observa que",
+    "Este resultado arroja que",
+    "Podemos observar que la mayoría",
+    "Es trascendente saber que",
+    "Con los datos obtenidos se observa que",
+    "Observando los resultados obtenidos se identifica que",
+    "Las tres cuartas partes de la población están conscientes de",
+    "Con los datos obtenidos se puede comprobar que",
+    "Es importante señalar que un poco más de la mitad de la población menciona",
+    "Resulta positivo observar que la mayoría de la población"
+]
 
-def obtener_reporte_profesional(df, var):
-    freqs = df[var].value_counts(normalize=True)
-    count = df[var].value_counts()
-    
-    # Análisis clínico-estadístico
-    categoria_top = freqs.idxmax()
-    prop_top = freqs.max() * 100
-    
-    texto = f"**Análisis de {var}:**\n\n"
-    texto += f"El {prop_top:.1f}% de la muestra ({count[categoria_top]} sujetos) reporta '{categoria_top}'. "
-    texto += "Este hallazgo evidencia una tendencia conductual que impacta directamente en la barrera de seguridad biológica. "
-    texto += "Desde una perspectiva epidemiológica, esta prevalencia sugiere que las estrategias actuales de capacitación están logrando una penetración efectiva, "
-    texto += "aunque se debe considerar el impacto de aquellos que se encuentran en los extremos de la distribución para evitar brechas en la seguridad del paciente."
-    return texto
+def get_descriptor(prop):
+    if prop >= 0.90: return "casi la totalidad"
+    elif prop >= 0.75: return "las tres cuartas partes"
+    elif prop >= 0.50: return "la mayoría"
+    elif prop > 0.25: return "un poco más de la mitad"
+    else: return "una mínima parte"
 
-def generar_grafica_espanol(df, var, var_y=None):
-    fig, ax = plt.subplots(figsize=(8, 5))
-    if var_y is None:
-        sns.countplot(data=df, x=var, palette="viridis", ax=ax)
-        ax.set_title(f"Distribución de {var}", fontsize=14)
-        ax.set_xlabel("Categorías", fontsize=12)
-        ax.set_ylabel("Frecuencia (n)", fontsize=12)
+def generar_redaccion_tesis(df, col, es_multiselect=False):
+    # Si es multiselect, tratamos la columna diferente
+    if es_multiselect:
+        # Explotamos la cadena para contar cada ítem individualmente
+        s = df[col].str.split(', ', expand=True).stack()
+        freqs = s.value_counts(normalize=True)
     else:
-        pd.crosstab(df[var], df[var_y]).plot(kind='bar', stacked=True, ax=ax)
-        ax.set_title(f"Relación: {var} vs {var_y}", fontsize=14)
-        ax.set_xlabel("Nivel de Conocimiento", fontsize=12)
-        ax.set_ylabel("Frecuencia", fontsize=12)
-        ax.legend(title="Cumplimiento", labels=["Nunca", "A veces", "Frecuentemente", "Siempre"])
-    return fig
+        freqs = df[col].value_counts(normalize=True)
+        
+    categoria_top = freqs.idxmax()
+    prop_top = freqs.max()
+    inicio = random.choice(frases_inicio)
+    
+    redaccion = f"• {inicio} {get_descriptor(prop_top)} del personal reporta '{categoria_top}'. "
+    redaccion += f"Este hallazgo es fundamental para comprender la variable {col} en el contexto de nuestra investigación. "
+    redaccion += "Es importante señalar que la distribución observada nos permite identificar las áreas prioritarias para la mejora institucional. "
+    redaccion += "El análisis de esta pregunta confirma que la percepción del personal es un factor clave en la dinámica de bioseguridad y, por lo tanto, valida la necesidad de estrategias de capacitación continua."
+    return redaccion
 
 # --- INTERFAZ ---
-st.title("🩺 EpidemioManager: Análisis Clínico Profesional")
-uploaded_file = st.file_uploader("Carga tu CSV", type=["csv"])
+st.title("🩺 Motor de Tesis: Análisis Epidemiológico")
+uploaded_file = st.file_uploader("Carga tu archivo CSV", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    opcion = st.sidebar.radio("Sección:", ["Análisis Descriptivo", "Prueba de Hipótesis"])
+    # Regla: Ignorar fecha
+    if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    if opcion == "Análisis Descriptivo":
-        var = st.selectbox("Variable:", df.columns)
-        if st.button("Generar Reporte Profesional"):
-            st.pyplot(generar_grafica_espanol(df, var))
-            st.markdown(obtener_reporte_profesional(df, var))
+    seccion = st.sidebar.radio("Selecciona Análisis:", ["4.2 Análisis de Resultados", "4.3 Discusión de Hipótesis"])
+    
+    if seccion == "4.2 Análisis de Resultados":
+        st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
+        for col in df.columns:
+            # Detectar multiselección por el contenido
+            is_multi = df[col].astype(str).str.contains(',').any()
             
-    elif opcion == "Prueba de Hipótesis":
-        st.subheader("Validación de Hipótesis: NOM-010 vs. Aplicación")
-        v1, v2 = "Conocimiento_NOM", "Frecuencia_EPP"
-        if st.button("Ejecutar Prueba Chi-Cuadrado"):
-            st.pyplot(generar_grafica_espanol(df, v1, v2))
-            
-            # Cálculo Estadístico
-            tabla = pd.crosstab(df[v1], df[v2])
-            chi2, p, dof, _ = chi2_contingency(tabla)
-            
-            st.write(f"### Resultados Estadísticos")
-            st.metric("Valor de Chi-Cuadrado (χ²)", f"{chi2:.3f}")
-            st.metric("Grados de Libertad (gl)", dof)
-            st.metric("Valor p", f"{p:.4f}")
-            
-            # Interpretación Clínica
-            if p < 0.05:
-                st.success("Interpretación: Se rechaza la Hipótesis Nula (p < 0.05). Existe evidencia estadísticamente significativa de que el nivel de conocimiento sobre la NOM-010-SSA-2023 condiciona la aplicación técnica de los protocolos.")
+            # Gráfica
+            fig, ax = plt.subplots()
+            if is_multi:
+                data_plot = df[col].str.split(', ', expand=True).stack().value_counts()
+                data_plot.plot(kind='bar', color='salmon', ax=ax)
             else:
-                st.warning("Interpretación: No hay significancia estadística (p > 0.05). La aplicación de bioseguridad parece ser independiente del conocimiento teórico, sugiriendo la influencia de factores externos como la infraestructura o la carga asistencial.")
+                sns.countplot(data=df, x=col, palette="viridis", ax=ax)
+                plt.xticks(rotation=45)
+            st.pyplot(fig)
+            
+            # Redacción Automática
+            st.markdown(generar_redaccion_tesis(df, col, is_multi))
+            st.write("---")
+
+    elif seccion == "4.3 Discusión de Hipótesis":
+        st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
+        # Validación estadística fija
+        v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
+        tabla = pd.crosstab(df[v_indep], df[v_dep])
+        _, p, _, _ = chi2_contingency(tabla)
+        
+        st.write(f"**Valor p obtenido:** {p:.4f}")
+        
+        # Lógica de discusión
+        if p < 0.05:
+            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa, validando que el conocimiento normativo (NOM-010-SSA-2023) es el factor predictivo del cumplimiento técnico. Se recomienda reforzar la capacitación en los grupos con menor puntuación.")
+        else:
+            st.write("**Discusión:** La hipótesis nula no se rechaza. La aplicación técnica es independiente del nivel de conocimiento, lo que sugiere barreras estructurales (falta de insumos o carga laboral) más que una deficiencia cognitiva.")
