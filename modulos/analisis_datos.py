@@ -23,11 +23,10 @@ def get_descriptor(prop):
     elif prop > 0.25: return "un poco más de la mitad"
     else: return "una mínima parte"
 
-def generar_redaccion_inteligente(df, col, es_multiselect=False):
+def generar_redaccion_tesis(df, col, is_multi):
     # Cálculo de frecuencias
-    if es_multiselect:
-        s = df[col].str.split(', ', expand=True).stack()
-        freqs = s.value_counts(normalize=True)
+    if is_multi:
+        freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
     else:
         freqs = df[col].value_counts(normalize=True)
     
@@ -35,18 +34,21 @@ def generar_redaccion_inteligente(df, col, es_multiselect=False):
     prop_top = freqs.max()
     inicio = random.choice(frases_inicio)
     
-    # Clasificación por contexto de variable para evitar generalizaciones erróneas
-    col_lower = col.lower()
-    is_demografica = any(x in col_lower for x in ['sexo', 'edad', 'turno', 'grado', 'anios'])
+    # Análisis de dispersión: (si la categoría top < 50%, hay alta dispersión, lo cual es un hallazgo crítico)
+    dispersión = "alta" if prop_top < 0.50 else "concentrada"
     
     redaccion = f"• {inicio} {get_descriptor(prop_top)} del personal reporta '{categoria_top}'. "
     
-    if is_demografica:
-        redaccion += f"Este dato caracteriza la estructura demográfica de la muestra, proporcionando una base clara sobre el perfil profesional del personal evaluado en el presente estudio."
+    # Análisis crítico
+    if dispersión == "alta":
+        redaccion += f"El hecho de que los resultados se encuentren distribuidos sin una tendencia dominante en {col}, sugiere una falta de estandarización en la práctica clínica actual. "
+        redaccion += "Esta variabilidad en la respuesta es un indicador crítico de heterogeneidad operativa, lo cual aumenta el riesgo de inconsistencias en el cumplimiento de los protocolos establecidos. "
+        redaccion += "Resulta imperativo analizar los factores causales que impiden que esta variable converja hacia un criterio único y seguro."
     else:
-        redaccion += f"Al analizar este resultado, se identifica una tendencia que evidencia áreas de cumplimiento técnico y posibles brechas operativas. "
-        redaccion += "La información obtenida resulta fundamental para establecer áreas de oportunidad que requieren atención para garantizar la seguridad asistencial."
-        
+        redaccion += f"Al analizar la distribución de {col}, se identifica una tendencia consolidada en la muestra. "
+        redaccion += "Este comportamiento demuestra un nivel de uniformidad que, si bien es favorable para la estandarización, debe ser contrastado con la normativa vigente para asegurar que la práctica actual sea realmente efectiva. "
+        redaccion += "Es importante señalar que la distribución observada facilita la identificación de áreas donde la institución ha logrado una madurez operativa, permitiendo enfocar los recursos de mejora en los segmentos disidentes."
+    
     return redaccion
 
 # --- INTERFAZ ---
@@ -57,20 +59,17 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    # 4.1 RESUMEN GENERAL (TABLA 1)
     st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
     st.write("### Tabla 1: Resumen General de Variables")
     st.dataframe(df.describe(include='all').transpose())
-    
     st.divider()
     
-    # 4.2 ANÁLISIS DE RESULTADOS
     st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
     for col in df.columns:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # 1. Tabla de fundamento (Evidencia)
+        # 1. Tabla de fundamento
         if is_multi:
             frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
             porcentajes = (frecuencias / len(df) * 100).round(1)
@@ -81,18 +80,21 @@ if uploaded_file:
         tabla_datos = pd.DataFrame({'Frecuencia (n)': frecuencias, 'Porcentaje (%)': porcentajes})
         st.table(tabla_datos)
         
-        # 2. Gráfica Proporcional con Etiquetas en todas las barras
+        # 2. Gráfica Proporcional
         plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
         fig, ax = plt.subplots(figsize=(8, 4))
         sns.barplot(data=plot_data, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
         
-        ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
+        # Etiquetas en todas las barras
+        for container in ax.containers:
+            ax.bar_label(container, fmt='%.1f%%', padding=3)
+        
         ax.set_ylabel("")
         ax.set_xlabel("Frecuencia (%)")
         st.pyplot(fig)
         
-        # 3. Redacción profesional y contextual
-        st.markdown(generar_redaccion_inteligente(df, col, is_multi))
+        # 3. Redacción Analítica y Crítica
+        st.markdown(generar_redaccion_tesis(df, col, is_multi))
         st.write("---")
 
     # 4.3 DISCUSIÓN DE HIPÓTESIS
@@ -103,6 +105,6 @@ if uploaded_file:
         _, p, _, _ = chi2_contingency(tabla)
         
         if p < 0.05:
-            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa (p < 0.05), validando que el conocimiento normativo (NOM-010-SSA-2023) es un factor predictivo del cumplimiento técnico.")
+            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa (p < 0.05), validando que el conocimiento normativo (NOM-010-SSA-2023) es un factor predictivo del cumplimiento técnico. La coherencia entre el saber y el hacer es el eje central de este hallazgo.")
         else:
-            st.write("**Discusión:** La hipótesis nula no se rechaza (p > 0.05). La aplicación técnica es independiente del nivel de conocimiento, sugiriendo la presencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana.")
+            st.write("**Discusión:** La hipótesis nula no se rechaza (p > 0.05). La aplicación técnica es independiente del nivel de conocimiento, lo cual es un hallazgo crítico que sugiere la existencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana.")
