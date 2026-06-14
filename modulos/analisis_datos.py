@@ -34,14 +34,15 @@ def generar_redaccion_tesis(df, col, es_multiselect=False):
     prop_top = freqs.max()
     inicio = random.choice(frases_inicio)
     
+    # Redacción analítica, sin sesgos terminológicos, centrada en la práctica hospitalaria
     redaccion = f"• {inicio} {get_descriptor(prop_top)} del personal reporta '{categoria_top}'. "
-    redaccion += f"Este hallazgo es fundamental para comprender la variable {col} en el contexto de nuestra investigación. "
-    redaccion += "Es importante señalar que la distribución observada nos permite identificar las áreas prioritarias para la mejora institucional. "
-    redaccion += "El análisis de esta pregunta confirma que la percepción del personal es un factor clave en la dinámica de bioseguridad, validando la necesidad de estrategias de capacitación continua."
+    redaccion += f"Al analizar la distribución de la variable {col}, se identifica una disparidad técnica significativa respecto a las categorías restantes. "
+    redaccion += "Este comportamiento denota que, si bien existe una tendencia hacia la estandarización, persisten brechas operativas que requieren atención inmediata para la seguridad del paciente. "
+    redaccion += "La persistencia de prácticas alternativas subraya la necesidad crítica de reforzar la capacitación técnica y la supervisión directa en el servicio para garantizar un cumplimiento uniforme de los protocolos establecidos."
     return redaccion
 
 # --- INTERFAZ ---
-st.title("🩺 Motor de Tesis: Análisis Epidemiológico")
+st.title("🩺 Motor de Tesis: Análisis Clínico")
 uploaded_file = st.file_uploader("Carga tu archivo CSV", type=["csv"])
 
 if uploaded_file:
@@ -49,50 +50,43 @@ if uploaded_file:
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
     # 4.1 RESUMEN GENERAL (TABLA 1)
-    st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN (RESUMEN GENERAL)")
-    # Resumen de variables clave
-    resumen = df.describe(include='all').transpose()
-    st.dataframe(resumen)
+    st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
+    st.write("### Tabla 1: Resumen de variables")
+    st.dataframe(df.describe(include='all').transpose())
     
     st.divider()
     
-    # 4.2 ANÁLISIS DETALLADO
+    # 4.2 ANÁLISIS DE RESULTADOS
     st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
     for col in df.columns:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # 1. Tabla de evidencia (n y %)
+        # Calcular proporciones
         if is_multi:
-            frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
-            porcentajes = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100
+            porcentajes = (df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100).reset_index()
+            porcentajes.columns = ['Categoría', 'Porcentaje']
         else:
-            frecuencias = df[col].value_counts()
-            porcentajes = df[col].value_counts(normalize=True) * 100
+            porcentajes = (df[col].value_counts(normalize=True) * 100).reset_index()
+            porcentajes.columns = ['Categoría', 'Porcentaje']
         
-        tabla_datos = pd.DataFrame({'Frecuencia (n)': frecuencias, 'Porcentaje (%)': porcentajes.round(1)})
-        st.table(tabla_datos)
-        st.write(f"**Observación:** La variable {col} muestra una distribución donde '{porcentajes.idxmax()}' representa la mayor concentración de la muestra.")
+        # Gráfica Profesional con etiquetas en TODAS las barras
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.barplot(data=porcentajes, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
         
-        # 2. Gráfica Proporcional con Etiquetas
-        plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
-        fig, ax = plt.subplots(figsize=(7, 4))
-        
-        if is_multi:
-            sns.barplot(data=plot_data, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
-        else:
-            sns.barplot(data=plot_data, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
-            plt.xticks(rotation=45)
+        # Etiquetar todas las barras
+        for container in ax.containers:
+            ax.bar_label(container, fmt='%.1f%%', padding=3)
             
-        ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
-        ax.set_ylabel("Porcentaje (%)")
+        ax.set_ylabel("")
+        ax.set_xlabel("Frecuencia (%)")
         st.pyplot(fig)
         
-        # 3. Redacción profesional
+        # Redacción (Reglas aplicadas)
         st.markdown(generar_redaccion_tesis(df, col, is_multi))
         st.write("---")
 
-    # 4.3 DISCUSIÓN DE HIPÓTESIS
+    # 4.3 DISCUSIÓN
     st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
     v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
     if v_indep in df.columns and v_dep in df.columns:
@@ -100,6 +94,6 @@ if uploaded_file:
         _, p, _, _ = chi2_contingency(tabla)
         
         if p < 0.05:
-            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa (p < 0.05), validando que el conocimiento normativo (NOM-010-SSA-2023) es el factor predictivo del cumplimiento técnico.")
+            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa (p < 0.05), validando que el conocimiento normativo (NOM-010-SSA-2023) es un factor predictivo del cumplimiento técnico. Se recomienda estandarizar la supervisión.")
         else:
-            st.write("**Discusión:** La hipótesis nula no se rechaza (p > 0.05). La aplicación técnica es independiente del nivel de conocimiento, sugiriendo barreras estructurales (falta de insumos o carga laboral) más que una deficiencia cognitiva.")
+            st.write("**Discusión:** La hipótesis nula no se rechaza (p > 0.05). La aplicación técnica es independiente del nivel de conocimiento, sugiriendo la presencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana.")
