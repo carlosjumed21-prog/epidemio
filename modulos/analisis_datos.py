@@ -23,7 +23,8 @@ def get_descriptor(prop):
     elif prop > 0.25: return "un poco más de la mitad"
     else: return "una mínima parte"
 
-def generar_redaccion_tesis(df, col, es_multiselect=False):
+def generar_redaccion_inteligente(df, col, es_multiselect=False):
+    # Cálculo de frecuencias
     if es_multiselect:
         s = df[col].str.split(', ', expand=True).stack()
         freqs = s.value_counts(normalize=True)
@@ -34,11 +35,18 @@ def generar_redaccion_tesis(df, col, es_multiselect=False):
     prop_top = freqs.max()
     inicio = random.choice(frases_inicio)
     
-    # Redacción técnica, objetiva y profesional, centrada en el análisis de resultados
+    # Clasificación por contexto de variable para evitar generalizaciones erróneas
+    col_lower = col.lower()
+    is_demografica = any(x in col_lower for x in ['sexo', 'edad', 'turno', 'grado', 'anios'])
+    
     redaccion = f"• {inicio} {get_descriptor(prop_top)} del personal reporta '{categoria_top}'. "
-    redaccion += f"Al contrastar este hallazgo con el comportamiento de la muestra, se identifica una inclinación marcada en la variable {col}. "
-    redaccion += "Este resultado evidencia áreas de cumplimiento técnico y brechas operativas que requieren atención inmediata para la seguridad del paciente. "
-    redaccion += "La persistencia de estas prácticas subraya la necesidad de reforzar la capacitación técnica y la supervisión directa para garantizar un cumplimiento uniforme de los protocolos."
+    
+    if is_demografica:
+        redaccion += f"Este dato caracteriza la estructura demográfica de la muestra, proporcionando una base clara sobre el perfil profesional del personal evaluado en el presente estudio."
+    else:
+        redaccion += f"Al analizar este resultado, se identifica una tendencia que evidencia áreas de cumplimiento técnico y posibles brechas operativas. "
+        redaccion += "La información obtenida resulta fundamental para establecer áreas de oportunidad que requieren atención para garantizar la seguridad asistencial."
+        
     return redaccion
 
 # --- INTERFAZ ---
@@ -62,7 +70,7 @@ if uploaded_file:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # Calcular frecuencias y porcentajes para la tabla de fundamento
+        # 1. Tabla de fundamento (Evidencia)
         if is_multi:
             frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
             porcentajes = (frecuencias / len(df) * 100).round(1)
@@ -70,11 +78,10 @@ if uploaded_file:
             frecuencias = df[col].value_counts()
             porcentajes = (frecuencias / len(df) * 100).round(1)
         
-        # 1. Tabla de fundamento (Evidencia de la gráfica)
         tabla_datos = pd.DataFrame({'Frecuencia (n)': frecuencias, 'Porcentaje (%)': porcentajes})
         st.table(tabla_datos)
         
-        # 2. Gráfica Proporcional con Etiquetas
+        # 2. Gráfica Proporcional con Etiquetas en todas las barras
         plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
         fig, ax = plt.subplots(figsize=(8, 4))
         sns.barplot(data=plot_data, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
@@ -84,11 +91,11 @@ if uploaded_file:
         ax.set_xlabel("Frecuencia (%)")
         st.pyplot(fig)
         
-        # 3. Redacción profesional (Reglas aplicadas)
-        st.markdown(generar_redaccion_tesis(df, col, is_multi))
+        # 3. Redacción profesional y contextual
+        st.markdown(generar_redaccion_inteligente(df, col, is_multi))
         st.write("---")
 
-    # 4.3 DISCUSIÓN
+    # 4.3 DISCUSIÓN DE HIPÓTESIS
     st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
     v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
     if v_indep in df.columns and v_dep in df.columns:
