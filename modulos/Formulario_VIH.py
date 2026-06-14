@@ -24,28 +24,30 @@ if st.button("🚀 Generar Muestra de Simulación (n=100)"):
     start_date = datetime.datetime(2026, 1, 1)
     end_date = datetime.datetime(2026, 6, 14)
     
-    grados = ["Técnico", "Licenciatura", "Especialidad", "Maestría"]
-    prob_grados = [0.15, 0.50, 0.30, 0.05]
+    opciones_barreras = ["Higiene de Manos", "Uso de EPP", "Manejo de Punzocortantes", "Limpieza/Desinfección"]
     
     for _ in range(100):
         fecha = (start_date + datetime.timedelta(days=random.randrange((end_date - start_date).days))).strftime("%Y-%m-%d")
         cap = random.choice(["Si", "No"])
-        grado = np.random.choice(grados, p=prob_grados)
+        grado = np.random.choice(["Técnico", "Licenciatura", "Especialidad", "Maestría"], p=[0.15, 0.50, 0.30, 0.05])
         
-        # Ajuste de probabilidades seguro
+        # Lógica de probabilidades segura
         base_p = 0.8 if cap == "Si" else 0.4
-        if grado in ["Especialidad", "Maestría"]:
-            base_p = min(0.95, base_p + 0.1)
+        if grado in ["Especialidad", "Maestría"]: base_p = min(0.95, base_p + 0.1)
         
         p1 = base_p
         p2 = 0.2
         p3 = round(1.0 - (p1 + p2), 2)
         if p3 < 0: p1, p2, p3 = 0.6, 0.3, 0.1
-            
+        
+        # Aleatoriedad en barreras (Sesgo eliminado)
+        k = random.randint(2, 4) if cap == "Si" else random.randint(1, 2)
+        barreras_sel = random.sample(opciones_barreras, k=k)
+        
         row = {
             "Fecha": fecha,
             "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p1, p2, p3]),
-            "Barreras_Proteccion": "Higiene de Manos, Uso de EPP",
+            "Barreras_Proteccion": ", ".join(barreras_sel),
             "Accion_Lavado": np.random.choice(["Siempre", "Casi Siempre", "A veces"], p=[0.7, 0.2, 0.1]),
             "Accion_Notificacion": np.random.choice(["Siempre", "Casi Siempre"], p=[0.8, 0.2]),
             "Accion_Registro": np.random.choice(["Siempre", "Casi Siempre"], p=[0.7, 0.3]),
