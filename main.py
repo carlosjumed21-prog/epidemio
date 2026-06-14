@@ -74,6 +74,11 @@ pg = st.navigation([
         title="Formulario VIH", 
         icon="📝"
     ),
+    st.Page(
+        "modulos/analisis_datos.py", 
+        title="Análisis Estadístico", 
+        icon="📉"
+    ),
 ])
 
 # --- 4. EJECUCIÓN ---
