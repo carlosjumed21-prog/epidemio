@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- CONFIGURACIÓN DE REDACCIÓN (REGLAS DE ORO) ---
+# --- REGLAS DE REDACCIÓN ---
 frases_inicio = [
     "De acuerdo con los resultados obtenidos se observa que",
     "Este resultado arroja que",
@@ -13,9 +13,6 @@ frases_inicio = [
     "Es trascendente saber que",
     "Con los datos obtenidos se observa que",
     "Observando los resultados obtenidos se identifica que",
-    "Las tres cuartas partes de la población están conscientes de",
-    "Con los datos obtenidos se puede comprobar que",
-    "Es importante señalar que un poco más de la mitad de la población menciona",
     "Resulta positivo observar que la mayoría de la población"
 ]
 
@@ -26,8 +23,10 @@ def get_descriptor(prop):
     elif prop > 0.25: return "un poco más de la mitad"
     else: return "una mínima parte"
 
+def generar_observacion_tabla(col, categoria_top):
+    return f"**Observación:** La tabla describe la distribución de frecuencias para {col}, donde la categoría predominante '{categoria_top}' concentra la mayor parte de la muestra, reflejando una tendencia clara en el comportamiento del personal ante esta variable."
+
 def generar_redaccion_tesis(df, col, es_multiselect=False):
-    # Lógica para contar frecuencias
     if es_multiselect:
         s = df[col].str.split(', ', expand=True).stack()
         freqs = s.value_counts(normalize=True)
@@ -38,39 +37,27 @@ def generar_redaccion_tesis(df, col, es_multiselect=False):
     prop_top = freqs.max()
     inicio = random.choice(frases_inicio)
     
-    # Redacción ajustada a 4-5 renglones, sin porcentajes numéricos
     redaccion = f"• {inicio} {get_descriptor(prop_top)} del personal reporta '{categoria_top}'. "
-    redaccion += f"Este hallazgo es fundamental para comprender la variable {col} en el contexto de nuestra investigación. "
-    redaccion += "Es importante señalar que la distribución observada nos permite identificar las áreas prioritarias para la mejora institucional. "
-    redaccion += "El análisis de esta pregunta confirma que la percepción del personal es un factor clave en la dinámica de bioseguridad y, por lo tanto, valida la necesidad de estrategias de capacitación continua."
+    redaccion += f"Este hallazgo es fundamental para comprender la variable {col} en el contexto de nuestra investigación epidemiológica. "
+    redaccion += "Es importante señalar que la distribución observada nos permite identificar las áreas prioritarias para la mejora institucional y la mitigación de riesgos biológicos. "
+    redaccion += "El análisis de esta pregunta confirma que la percepción del personal es un factor clave en la dinámica de bioseguridad, validando la imperante necesidad de estrategias de capacitación continua alineadas a la normativa vigente."
     return redaccion
 
 # --- INTERFAZ ---
-st.title("🩺 Motor de Tesis: Análisis Epidemiológico")
+st.title("🩺 Motor de Tesis: Análisis Profesional")
 uploaded_file = st.file_uploader("Carga tu archivo CSV", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    # 4.1 RESUMEN GENERAL (TABLA 1)
-    st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
-    st.write("### Tabla 1: Características Sociodemográficas")
-    
-    # Generar tabla general rápida
-    tabla_resumen = df.describe(include='all').transpose()
-    st.dataframe(tabla_resumen)
-    
-    st.divider()
-    
-    # 4.2 ANÁLISIS DETALLADO
-    st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
+    st.subheader("4.1 y 4.2 Análisis de Resultados")
     
     for col in df.columns:
-        st.write(f"#### Análisis de: {col}")
+        st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # 1. Tabla de frecuencias (Números y porcentajes para la evidencia)
+        # 1. Tabla de evidencia
         if is_multi:
             frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
             porcentajes = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100
@@ -78,31 +65,27 @@ if uploaded_file:
             frecuencias = df[col].value_counts()
             porcentajes = df[col].value_counts(normalize=True) * 100
         
-        st.table(pd.DataFrame({'Frecuencia': frecuencias, 'Porcentaje (%)': porcentajes.round(2)}))
+        tabla_datos = pd.DataFrame({'Frecuencia (n)': frecuencias, 'Porcentaje (%)': porcentajes.round(1)})
+        st.table(tabla_datos)
+        st.write(generar_observacion_tabla(col, porcentajes.idxmax()))
         
-        # 2. Gráfica Proporcional
-        fig, ax = plt.subplots(figsize=(6, 3))
+        # 2. Gráfica Proporcional con Etiquetas
+        fig, ax = plt.subplots(figsize=(7, 4))
         if is_multi:
-            data_plot = (porcentajes).reset_index()
-            sns.barplot(data=data_plot, x='proportion', y='index', palette="viridis", ax=ax)
+            plot_df = porcentajes.reset_index()
+            sns.barplot(data=plot_df, x='proportion', y='index', palette="viridis", ax=ax)
+            ax.set_xlabel("Frecuencia (%)")
+            # Etiquetas en barras
+            ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
         else:
             sns.countplot(data=df, x=col, palette="viridis", ax=ax)
             plt.xticks(rotation=45)
-        
-        ax.set_xlabel("Frecuencia (%)")
+            ax.set_ylabel("Frecuencia (n)")
+            # Etiquetas en barras
+            ax.bar_label(ax.containers[0], fmt='%d (%.0f%%)')
+            
         st.pyplot(fig)
         
         # 3. Redacción profesional (Reglas de estilo)
         st.markdown(generar_redaccion_tesis(df, col, is_multi))
         st.write("---")
-
-    # 4.3 DISCUSIÓN DE HIPÓTESIS
-    st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
-    v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
-    tabla = pd.crosstab(df[v_indep], df[v_dep])
-    _, p, _, _ = chi2_contingency(tabla)
-    
-    if p < 0.05:
-        st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa (p < 0.05), validando que el conocimiento normativo (NOM-010-SSA-2023) es el factor predictivo del cumplimiento técnico.")
-    else:
-        st.write("**Discusión:** La hipótesis nula no se rechaza (p > 0.05). La aplicación técnica es independiente del nivel de conocimiento, sugiriendo barreras estructurales (falta de insumos o carga laboral) más que una deficiencia cognitiva.")
