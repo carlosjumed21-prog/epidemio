@@ -11,3 +11,6 @@ plotly
 pandas
 openpyxl
 pdf2
+seaborn
+scipy
+matplotlib
