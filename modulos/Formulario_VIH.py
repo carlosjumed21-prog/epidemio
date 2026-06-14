@@ -8,84 +8,84 @@ import matplotlib.pyplot as plt
 from scipy.stats import chi2_contingency
 from io import BytesIO
 
-# --- 1. CONFIGURACIÓN Y ESTRUCTURA ---
+# --- 1. CONFIGURACIÓN ---
 if 'db_vih' not in st.session_state:
-    st.session_state.db_vih = pd.DataFrame()
+    columnas = [
+        "Fecha", "Frecuencia_EPP", "Barreras_Proteccion", "Lavado_Accidente", 
+        "Notificacion_Accidente", "Registro_Accidente", "PPE_Accidente",
+        "Lavado_Manos_OMS", "Proteccion_Identidad", "Conocimiento_NOM",
+        "Edad", "Grado_Academico", "Sexo", "Turno", "Anios_Servicio", "Capacitacion_VIH"
+    ]
+    st.session_state.db_vih = pd.DataFrame(columns=columnas)
 
-st.title("📋 Gestión y Análisis: Vigilancia VIH")
-tab1, tab2, tab3 = st.tabs(["📝 Formulario", "🚀 Simulación", "📉 Análisis Estadístico"])
+st.title("📋 Vigilancia VIH: Formulario y Análisis")
+tab1, tab2, tab3 = st.tabs(["📝 Formulario", "🚀 Simulación", "📉 Análisis"])
 
-# --- 2. PESTAÑA: FORMULARIO ---
+# --- 2. FORMULARIO ---
 with tab1:
     with st.form("form_vih"):
         q1 = st.radio("¿Frecuencia de uso de EPP completo?", ["Nunca", "A veces", "Frecuentemente", "Siempre"])
-        q2 = st.multiselect("Barreras aplicadas", ["Higiene de Manos", "Uso de EPP", "Manejo de Punzocortantes", "Limpieza/Desinfección"])
-        r1 = st.select_slider("Lavado inmediato zona", options=["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"])
-        q_grado = st.selectbox("Grado Académico", ["Técnico", "Licenciatura", "Especialidad", "Maestría"])
-        q11 = st.radio("¿Capacitación en los últimos 12 meses?", ["Si", "No"])
+        q2 = st.multiselect("Barreras de protección aplicadas", ["Higiene de Manos", "Uso de EPP", "Manejo de Punzocortantes", "Limpieza, Desinfección y Manejo de Ropa", "Consideración ante una exposición accidental"])
+        
+        st.write("### Frecuencia ante exposición accidental")
+        r1 = st.select_slider("Lavado inmediato de zona", options=["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"])
+        r2 = st.select_slider("Notificación inmediata", options=["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"])
+        r3 = st.select_slider("Registro del accidente", options=["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"])
+        r4 = st.select_slider("Valoración para Profilaxis (PPE)", options=["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"])
+        
+        q4 = st.radio("¿Usa técnica de lavado de manos 5 momentos OMS?", ["Si", "No"])
+        q5 = st.radio("¿Protege identidad/diagnóstico del paciente?", ["Si", "No"])
+        q6 = st.select_slider("Nivel de conocimiento NOM-010-SSA-2023", options=["Bajo (0-5.9)", "Medio (6-8.9)", "Alto (9-10)"])
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            q7 = st.selectbox("Edad", ["10-20", "21-30", "31-40", "41-50", "60 o más"])
+            q_grado = st.selectbox("Grado Académico", ["Técnico", "Licenciatura", "Especialidad", "Maestría"])
+            q8 = st.radio("Sexo", ["Femenino", "Masculino"])
+        with c2:
+            q9 = st.selectbox("Turno", ["Matutino", "Vespertino", "Nocturno", "Jornada Acumulada"])
+            q10 = st.number_input("Años laborando", min_value=0)
+            q11 = st.radio("¿Capacitación en últimos 12 meses?", ["Si", "No"])
+            
         submit = st.form_submit_button("Guardar Respuesta")
 
     if submit:
-        nueva_fila = {
-            "Fecha": datetime.datetime.now().strftime("%Y-%m-%d"), 
-            "Frecuencia_EPP": q1, 
-            "Grado_Academico": q_grado, 
-            "Capacitacion_VIH": q11
-        }
-        st.session_state.db_vih = pd.concat([st.session_state.db_vih, pd.DataFrame([nueva_fila])], ignore_index=True)
-        st.success("✅ Respuesta guardada.")
+        nueva = {"Fecha": datetime.datetime.now().strftime("%Y-%m-%d"), "Frecuencia_EPP": q1, "Barreras_Proteccion": ", ".join(q2),
+                 "Lavado_Accidente": r1, "Notificacion_Accidente": r2, "Registro_Accidente": r3, "PPE_Accidente": r4,
+                 "Lavado_Manos_OMS": q4, "Proteccion_Identidad": q5, "Conocimiento_NOM": q6, "Edad": q7, 
+                 "Grado_Academico": q_grado, "Sexo": q8, "Turno": q9, "Anios_Servicio": q10, "Capacitacion_VIH": q11}
+        st.session_state.db_vih = pd.concat([st.session_state.db_vih, pd.DataFrame([nueva])], ignore_index=True)
+        st.success("Guardado.")
 
-# --- 3. PESTAÑA: SIMULACIÓN ROBUSTA ---
+# --- 3. SIMULACIÓN ---
 with tab2:
-    if st.button("🚀 Generar 100 registros para Tesis"):
+    if st.button("🚀 Generar 100 registros coherentes"):
         data = []
         for _ in range(100):
             cap = random.choice(["Si", "No"])
             grado = np.random.choice(["Técnico", "Licenciatura", "Especialidad", "Maestría"], p=[0.1, 0.5, 0.35, 0.05])
-            
-            # Lógica probabilística estricta (suma siempre = 1.0)
-            p1 = 0.85 if cap == "Si" else 0.45
-            p2 = 0.10
-            p3 = 1.0 - (p1 + p2)
-            
+            p_epp = 0.85 if cap == "Si" else 0.45
             data.append({
-                "Fecha": "2026-01-01", 
-                "Capacitacion_VIH": cap, 
-                "Grado_Academico": grado,
-                "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p1, p2, p3])
+                "Fecha": "2026-03-01", "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p_epp, 0.3, 1-p_epp-0.3]),
+                "Capacitacion_VIH": cap, "Grado_Academico": grado, "Conocimiento_NOM": "Alto (9-10)" if cap == "Si" else "Bajo (0-5.9)"
             })
         st.session_state.db_vih = pd.DataFrame(data)
-        st.success("✅ Datos simulados correctamente.")
+        st.success("Base de datos simulada creada.")
 
-# --- 4. PESTAÑA: ANÁLISIS ESTADÍSTICO ---
+# --- 4. ANÁLISIS ---
 with tab3:
     if not st.session_state.db_vih.empty:
         df = st.session_state.db_vih
-        st.subheader("Análisis de Hipótesis (Chi-Cuadrado)")
-        
-        var_indep = st.selectbox("Variable Independiente", df.columns)
-        var_dep = st.selectbox("Variable Dependiente", df.columns)
-        
-        if st.button("Ejecutar Análisis"):
-            tabla = pd.crosstab(df[var_indep], df[var_dep])
-            chi2, p, dof, expected = chi2_contingency(tabla)
-            
-            st.metric("Valor p (p-value)", f"{p:.4f}")
-            if p < 0.05:
-                st.success("Resultado significativo (p < 0.05). Se rechaza la hipótesis nula.")
-            else:
-                st.warning("No hay significancia estadística (p > 0.05).")
-            
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.heatmap(tabla, annot=True, cmap="YlGnBu", fmt="d")
-            st.pyplot(fig)
-    else:
-        st.info("No hay datos cargados.")
-
-# --- 5. EXPORTACIÓN ---
-if not st.session_state.db_vih.empty:
-    st.divider()
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        st.session_state.db_vih.to_excel(writer, index=False)
-    st.download_button("📥 Descargar Excel", data=output.getvalue(), file_name="Resultados_Tesis.xlsx")
+        v1 = st.selectbox("Independiente", df.columns)
+        v2 = st.selectbox("Dependiente", df.columns)
+        if st.button("Calcular Chi-Cuadrado"):
+            tabla = pd.crosstab(df[v1], df[v2])
+            chi2, p, _, _ = chi2_contingency(tabla)
+            st.metric("Valor p", f"{p:.4f}")
+            sns.heatmap(tabla, annot=True, cmap="Blues")
+            st.pyplot(plt)
+    
+    if not st.session_state.db_vih.empty:
+        output = BytesIO()
+        with pd.ExcelWriter(output) as w: st.session_state.db_vih.to_excel(w, index=False)
+        st.download_button("📥 Descargar Excel", data=output.getvalue(), file_name="Tesis_Datos.xlsx")
