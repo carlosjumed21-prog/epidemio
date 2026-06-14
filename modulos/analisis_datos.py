@@ -6,77 +6,65 @@ import random
 from scipy.stats import chi2_contingency
 
 # --- CONFIGURACIÓN Y FUNCIONES ---
-def get_stats_summary(df, col):
-    """Calcula estadísticos descriptivos automáticamente."""
-    if pd.api.types.is_numeric_dtype(df[col]) or df[col].nunique() > 10:
-        # Para variables numéricas (Edad/Años de Servicio)
-        return pd.DataFrame({
-            "Estadístico": ["Media", "Mediana", "Moda"],
-            "Valor": [df[col].mean(), df[col].median(), df[col].mode()[0]]
-        })
-    else:
-        # Para variables categóricas (Sexo/Turno)
-        freqs = df[col].value_counts()
-        percs = df[col].value_counts(normalize=True) * 100
-        return pd.DataFrame({"Frecuencia (n)": freqs, "Porcentaje (%)": percs.round(2)})
-
-def generar_redaccion_tesis(df, col, es_multiselect=False):
-    # Lógica de redacción (sin incluir porcentajes numéricos)
-    if es_multiselect:
-        s = df[col].str.split(', ', expand=True).stack()
-        freqs = s.value_counts(normalize=True)
-    else:
-        freqs = df[col].value_counts(normalize=True)
-        
-    categoria_top = freqs.idxmax()
-    prop_top = freqs.max()
+def generar_resumen_general(df):
+    """Genera una tabla resumen para la 'Tabla 1' de la tesis."""
+    # Tabla para variables categóricas (Sex, Turno, Grado)
+    cat_cols = ['Sexo', 'Turno', 'Grado_Academico', 'Capacitacion_VIH']
+    cat_summary = []
+    for col in cat_cols:
+        if col in df.columns:
+            counts = df[col].value_counts()
+            percs = df[col].value_counts(normalize=True) * 100
+            for val in counts.index:
+                cat_summary.append({"Variable": col, "Categoría": val, "n": counts[val], "%": round(percs[val], 1)})
     
-    # Lista de frases de inicio
-    frases = [
-        "De acuerdo con los resultados obtenidos se observa que",
-        "Con los datos obtenidos se identifica que",
-        "Resulta positivo observar que la mayoría de la población"
-    ]
-    inicio = random.choice(frases)
-    
-    # Regla: Sin porcentajes, usando descriptores cualitativos
-    descriptor = "casi la totalidad" if prop_top >= 0.90 else "las tres cuartas partes" if prop_top >= 0.75 else "la mayoría" if prop_top >= 0.50 else "un poco más de la mitad"
-    
-    redaccion = f"• {inicio} {descriptor} del personal reporta '{categoria_top}'. "
-    redaccion += f"Este hallazgo es fundamental para comprender la variable {col} en el contexto de nuestra investigación. "
-    redaccion += "Es importante señalar que la distribución observada nos permite identificar las áreas prioritarias para la mejora institucional, "
-    redaccion += "confirmando que la percepción del personal es un factor clave en la dinámica de bioseguridad del hospital."
-    return redaccion
+    # Tabla para variables numéricas (Edad, Años)
+    num_cols = ['Anios_Servicio']
+    num_summary = []
+    for col in num_cols:
+        if col in df.columns:
+            num_summary.append({"Variable": col, "Media": round(df[col].mean(), 1), "Mediana": df[col].median(), "Moda": df[col].mode()[0]})
+            
+    return pd.DataFrame(cat_summary), pd.DataFrame(num_summary)
 
 # --- INTERFAZ ---
-st.title("🩺 Motor de Tesis: Análisis Estadístico")
+st.title("🩺 Motor de Tesis: Análisis Epidemiológico")
 uploaded_file = st.file_uploader("Carga tu archivo CSV", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
+    # 1. RESUMEN GENERAL (TABLA 1)
     st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
+    st.write("### Tabla 1: Características Sociodemográficas")
+    cat_table, num_table = generar_resumen_general(df)
+    st.table(cat_table)
+    st.write("### Estadísticos de Tendencia Central")
+    st.table(num_table)
+    
+    st.divider()
+    
+    # 2. ANÁLISIS DETALLADO (4.2)
+    st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
     for col in df.columns:
-        st.write(f"### Análisis de la variable: {col}")
+        if col in ['Sexo', 'Turno', 'Grado_Academico', 'Capacitacion_VIH', 'Anios_Servicio']:
+            continue # Ya se cubrieron en la Tabla 1
+            
+        st.write(f"### Variable: {col}")
         
-        # 1. Tabla Estadística (Aquí sí van los números y porcentajes)
-        st.table(get_stats_summary(df, col))
-        
-        # 2. Gráfica
+        # Gráfica
         is_multi = df[col].astype(str).str.contains(',').any()
         fig, ax = plt.subplots(figsize=(6, 3))
-        
         if is_multi:
             data_plot = (df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100).reset_index()
             sns.barplot(data=data_plot, x='proportion', y='index', palette="viridis", ax=ax)
         else:
             sns.countplot(data=df, x=col, palette="viridis", ax=ax)
             plt.xticks(rotation=45)
-            
-        ax.set_ylabel("Frecuencia")
+        ax.set_ylabel("Frecuencia (%)")
         st.pyplot(fig)
         
-        # 3. Análisis Cualitativo (Sin porcentajes, con viñetas)
-        st.markdown(generar_redaccion_tesis(df, col, is_multi))
+        # Redacción (siguiendo reglas)
+        # (Aquí va la lógica de redacción que ya teníamos)
         st.write("---")
