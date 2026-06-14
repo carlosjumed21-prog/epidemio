@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- REGLAS DE REDACCIÓN (CONDICIONES APLICADAS) ---
+# --- CONFIGURACIÓN DE REDACCIÓN (REGLAS FIJAS) ---
 frases_inicio = [
     "De acuerdo con los resultados obtenidos se observa que",
     "Este resultado arroja que",
@@ -27,9 +27,7 @@ def get_descriptor(prop):
     else: return "una mínima parte"
 
 def generar_redaccion_tesis(df, col, es_multiselect=False):
-    # Si es multiselect, tratamos la columna diferente
     if es_multiselect:
-        # Explotamos la cadena para contar cada ítem individualmente
         s = df[col].str.split(', ', expand=True).stack()
         freqs = s.value_counts(normalize=True)
     else:
@@ -51,7 +49,6 @@ uploaded_file = st.file_uploader("Carga tu archivo CSV", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    # Regla: Ignorar fecha
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
     seccion = st.sidebar.radio("Selecciona Análisis:", ["4.2 Análisis de Resultados", "4.3 Discusión de Hipótesis"])
@@ -59,34 +56,41 @@ if uploaded_file:
     if seccion == "4.2 Análisis de Resultados":
         st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
         for col in df.columns:
-            # Detectar multiselección por el contenido
             is_multi = df[col].astype(str).str.contains(',').any()
             
-            # Gráfica
-            fig, ax = plt.subplots()
+            # --- PREPARACIÓN DE DATOS PROPORCIONALES ---
             if is_multi:
-                data_plot = df[col].str.split(', ', expand=True).stack().value_counts()
-                data_plot.plot(kind='bar', color='salmon', ax=ax)
+                data_plot = (df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100).reset_index()
+                data_plot.columns = ['Categoría', 'Porcentaje']
             else:
-                sns.countplot(data=df, x=col, palette="viridis", ax=ax)
+                data_plot = (df[col].value_counts(normalize=True) * 100).reset_index()
+                data_plot.columns = [col, 'Porcentaje']
+
+            # --- GRÁFICA ---
+            fig, ax = plt.subplots(figsize=(8, 5))
+            if is_multi:
+                sns.barplot(data=data_plot, x='Porcentaje', y='Categoría', palette="salmon", ax=ax)
+            else:
+                sns.barplot(data=data_plot, x=col, y='Porcentaje', palette="viridis", ax=ax)
                 plt.xticks(rotation=45)
+            
+            ax.set_ylabel("Frecuencia (%)")
+            ax.set_title(f"Distribución de {col}")
             st.pyplot(fig)
             
-            # Redacción Automática
+            # --- REDACCIÓN ---
             st.markdown(generar_redaccion_tesis(df, col, is_multi))
             st.write("---")
 
     elif seccion == "4.3 Discusión de Hipótesis":
         st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
-        # Validación estadística fija
         v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
         tabla = pd.crosstab(df[v_indep], df[v_dep])
         _, p, _, _ = chi2_contingency(tabla)
         
         st.write(f"**Valor p obtenido:** {p:.4f}")
         
-        # Lógica de discusión
         if p < 0.05:
-            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa, validando que el conocimiento normativo (NOM-010-SSA-2023) es el factor predictivo del cumplimiento técnico. Se recomienda reforzar la capacitación en los grupos con menor puntuación.")
+            st.write("**Discusión:** La hipótesis es verdadera. Existe una relación estadísticamente significativa, validando que el conocimiento normativo (NOM-010-SSA-2023) es el factor predictivo del cumplimiento técnico.")
         else:
             st.write("**Discusión:** La hipótesis nula no se rechaza. La aplicación técnica es independiente del nivel de conocimiento, lo que sugiere barreras estructurales (falta de insumos o carga laboral) más que una deficiencia cognitiva.")
