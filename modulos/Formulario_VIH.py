@@ -26,51 +26,65 @@ with tab1:
         submit = st.form_submit_button("Guardar Respuesta")
 
     if submit:
-        nueva_fila = {"Fecha": datetime.datetime.now().strftime("%Y-%m-%d"), "Frecuencia_EPP": q1, 
-                      "Grado_Academico": q_grado, "Capacitacion_VIH": q11}
+        nueva_fila = {
+            "Fecha": datetime.datetime.now().strftime("%Y-%m-%d"), 
+            "Frecuencia_EPP": q1, 
+            "Grado_Academico": q_grado, 
+            "Capacitacion_VIH": q11
+        }
         st.session_state.db_vih = pd.concat([st.session_state.db_vih, pd.DataFrame([nueva_fila])], ignore_index=True)
         st.success("✅ Respuesta guardada.")
 
-# --- 3. PESTAÑA: SIMULADOR ---
+# --- 3. PESTAÑA: SIMULACIÓN ROBUSTA ---
 with tab2:
     if st.button("🚀 Generar 100 registros para Tesis"):
         data = []
         for _ in range(100):
             cap = random.choice(["Si", "No"])
             grado = np.random.choice(["Técnico", "Licenciatura", "Especialidad", "Maestría"], p=[0.1, 0.5, 0.35, 0.05])
-            p_epp = 0.85 if cap == "Si" else 0.45
+            
+            # Lógica probabilística estricta (suma siempre = 1.0)
+            p1 = 0.85 if cap == "Si" else 0.45
+            p2 = 0.10
+            p3 = 1.0 - (p1 + p2)
+            
             data.append({
-                "Fecha": "2026-01-01", "Capacitacion_VIH": cap, "Grado_Academico": grado,
-                "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p_epp, 0.3, 0.7-p_epp])
+                "Fecha": "2026-01-01", 
+                "Capacitacion_VIH": cap, 
+                "Grado_Academico": grado,
+                "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p1, p2, p3])
             })
         st.session_state.db_vih = pd.DataFrame(data)
-        st.success("✅ Datos simulados generados.")
+        st.success("✅ Datos simulados correctamente.")
 
 # --- 4. PESTAÑA: ANÁLISIS ESTADÍSTICO ---
 with tab3:
     if not st.session_state.db_vih.empty:
         df = st.session_state.db_vih
+        st.subheader("Análisis de Hipótesis (Chi-Cuadrado)")
+        
         var_indep = st.selectbox("Variable Independiente", df.columns)
         var_dep = st.selectbox("Variable Dependiente", df.columns)
         
-        if st.button("Ejecutar Análisis Chi-Cuadrado"):
+        if st.button("Ejecutar Análisis"):
             tabla = pd.crosstab(df[var_indep], df[var_dep])
             chi2, p, dof, expected = chi2_contingency(tabla)
             
-            st.write(f"### Valor p (p-value): {p:.4f}")
+            st.metric("Valor p (p-value)", f"{p:.4f}")
             if p < 0.05:
-                st.success("Resultado estadísticamente significativo (p < 0.05). Existe relación entre variables.")
+                st.success("Resultado significativo (p < 0.05). Se rechaza la hipótesis nula.")
             else:
                 st.warning("No hay significancia estadística (p > 0.05).")
             
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(figsize=(6, 4))
             sns.heatmap(tabla, annot=True, cmap="YlGnBu", fmt="d")
             st.pyplot(fig)
     else:
-        st.info("Genera datos o carga una base para analizar.")
+        st.info("No hay datos cargados.")
 
-# --- 5. DESCARGA ---
+# --- 5. EXPORTACIÓN ---
 if not st.session_state.db_vih.empty:
+    st.divider()
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         st.session_state.db_vih.to_excel(writer, index=False)
