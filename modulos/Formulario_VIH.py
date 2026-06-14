@@ -25,26 +25,32 @@ if st.button("🚀 Generar Muestra de Simulación (n=100)"):
     end_date = datetime.datetime(2026, 6, 14)
     
     grados = ["Técnico", "Licenciatura", "Especialidad", "Maestría"]
-    prob_grados = [0.15, 0.50, 0.30, 0.05] # Distribución realista
+    prob_grados = [0.15, 0.50, 0.30, 0.05]
     
     for _ in range(100):
         fecha = (start_date + datetime.timedelta(days=random.randrange((end_date - start_date).days))).strftime("%Y-%m-%d")
         cap = random.choice(["Si", "No"])
         grado = np.random.choice(grados, p=prob_grados)
         
-        # Lógica: Especialistas/Maestros tienen mayor probabilidad de aplicación
-        peso_grado = 0.2 if grado in ["Especialidad", "Maestría"] else 0
-        prob = min(0.9, (0.8 if cap == "Si" else 0.4) + peso_grado)
+        # Ajuste de probabilidades seguro
+        base_p = 0.8 if cap == "Si" else 0.4
+        if grado in ["Especialidad", "Maestría"]:
+            base_p = min(0.95, base_p + 0.1)
         
+        p1 = base_p
+        p2 = 0.2
+        p3 = round(1.0 - (p1 + p2), 2)
+        if p3 < 0: p1, p2, p3 = 0.6, 0.3, 0.1
+            
         row = {
             "Fecha": fecha,
-            "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[prob, 0.3, 0.7-prob]),
+            "Frecuencia_EPP": np.random.choice(["Siempre", "Frecuentemente", "A veces"], p=[p1, p2, p3]),
             "Barreras_Proteccion": "Higiene de Manos, Uso de EPP",
-            "Accion_Lavado": np.random.choice(["Siempre", "Casi Siempre", "A veces"], p=[0.75, 0.2, 0.05]),
+            "Accion_Lavado": np.random.choice(["Siempre", "Casi Siempre", "A veces"], p=[0.7, 0.2, 0.1]),
             "Accion_Notificacion": np.random.choice(["Siempre", "Casi Siempre"], p=[0.8, 0.2]),
             "Accion_Registro": np.random.choice(["Siempre", "Casi Siempre"], p=[0.7, 0.3]),
-            "Accion_PPE": np.random.choice(["Siempre", "Casi Siempre", "A veces"], p=[prob, 0.3, 0.7-prob]),
-            "Lavado_Manos_OMS": np.random.choice(["Si", "No"], p=[0.85, 0.15]),
+            "Accion_PPE": np.random.choice(["Siempre", "Casi Siempre", "A veces"], p=[p1, p2, p3]),
+            "Lavado_Manos_OMS": np.random.choice(["Si", "No"], p=[0.8, 0.2]),
             "Proteccion_Identidad": "Si",
             "Conocimiento_NOM": np.random.choice(["Alto (9-10)", "Medio (6-8.9)", "Bajo (0-5.9)"], p=[0.5, 0.3, 0.2]),
             "Edad": random.choice(["21-30", "31-40", "41-50", "51-60"]),
