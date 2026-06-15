@@ -5,7 +5,7 @@ import datetime
 import random
 from io import BytesIO
 
-# --- 1. CONFIGURACIÓN Y ESTRUCTURA ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(layout="wide")
 
 if 'db_vih' not in st.session_state:
@@ -19,34 +19,46 @@ if 'db_vih' not in st.session_state:
 
 st.title("📋 EpidemioManager: Registro de Vigilancia VIH")
 
-# --- 2. SIMULADOR DE DATOS ---
+# --- 2. SIMULADOR DE DATOS CON VARIABILIDAD ---
 st.subheader("⚙️ Simulador de Muestra")
 n_sim = st.number_input("Cantidad de registros a simular:", min_value=1, max_value=1000, value=50)
 
-if st.button(f"🚀 Generar {n_sim} registros"):
+if st.button(f"🚀 Generar {n_sim} registros con variabilidad"):
     data = []
-    # (Tu lógica de simulación permanece igual, manteniendo el sesgo femenino 85%)
+    opt_slider = ["Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"]
+    opciones_barreras = ["Higiene de Manos", "Uso de EPP", "Manejo de Punzocortantes", "Limpieza/Desinfección"]
+    
     for _ in range(n_sim):
-        cap = random.choice(["Si", "No"])
-        # ... (resto de lógica de simulación)
+        # Lógica de probabilidad sesgada para que los datos parezcan reales
+        cap = np.random.choice(["Si", "No"], p=[0.7, 0.3])
+        grado = np.random.choice(["Técnico", "Licenciatura", "Especialidad", "Maestría"], p=[0.15, 0.50, 0.30, 0.05])
+        
+        # Generación de fila con variabilidad
         row = {
-            "Fecha": datetime.datetime.now().strftime("%Y-%m-%d"),
-            "Frecuencia_EPP": "Siempre", "Barreras_Proteccion": "Higiene de Manos",
-            "Accion_Lavado": "Siempre", "Accion_Notificacion": "Siempre", 
-            "Accion_Registro": "Siempre", "Accion_PPE": "Siempre",
-            "Lavado_Manos_OMS": "Si", "Proteccion_Identidad": "Si",
-            "Conocimiento_NOM": "Alto (9-10)", "Edad": "21-30",
-            "Grado_Academico": "Licenciatura", 
+            "Fecha": (datetime.datetime.now() - datetime.timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d"),
+            "Frecuencia_EPP": np.random.choice(["Nunca", "A veces", "Frecuentemente", "Siempre"], p=[0.05, 0.15, 0.30, 0.50]),
+            "Barreras_Proteccion": ", ".join(random.sample(opciones_barreras, k=random.randint(1, 4))),
+            "Accion_Lavado": random.choice(opt_slider),
+            "Accion_Notificacion": random.choice(opt_slider),
+            "Accion_Registro": random.choice(opt_slider),
+            "Accion_PPE": random.choice(opt_slider),
+            "Lavado_Manos_OMS": random.choice(["Si", "No"]),
+            "Proteccion_Identidad": "Si",
+            "Conocimiento_NOM": np.random.choice(["Bajo (0-5.9)", "Medio (6-8.9)", "Alto (9-10)"], p=[0.1, 0.3, 0.6]),
+            "Edad": random.choice(["21-30", "31-40", "41-50", "51-60", "Más de 60"]),
+            "Grado_Academico": grado,
             "Sexo": np.random.choice(["Femenino", "Masculino"], p=[0.85, 0.15]), 
-            "Turno": "Matutino", "Anios_Servicio": 5, "Capacitacion_VIH": cap
+            "Turno": random.choice(["Matutino", "Vespertino", "Nocturno", "Jornada Acumulada"]),
+            "Anios_Servicio": random.randint(1, 35), # Aquí está la variabilidad real
+            "Capacitacion_VIH": cap
         }
         data.append(row)
+    
     st.session_state.db_vih = pd.concat([st.session_state.db_vih, pd.DataFrame(data)], ignore_index=True)
-    st.success(f"✅ {n_sim} registros generados.")
+    st.success(f"✅ {n_sim} registros con datos variables generados.")
 
 # --- 3. FORMULARIO EN BLANCO ---
 with st.form("form_vih"):
-    # index=None hace que empiecen vacíos
     q1 = st.radio("¿Con qué frecuencia utiliza el EPP completo al realizar procedimientos en pacientes con VIH?", 
                   ["Nunca", "A veces", "Frecuentemente", "Siempre"], index=None)
     
@@ -54,7 +66,6 @@ with st.form("form_vih"):
                         ["Higiene de Manos", "Uso de EPP", "Manejo de Punzocortantes", "Limpieza/Desinfección"])
     
     st.subheader("Frecuencia de Acciones ante Exposición")
-    # Para sliders, agregamos una opción neutral al inicio
     opt_slider = ["-- Seleccione --", "Nunca", "Rara Vez", "A veces", "Casi Siempre", "Siempre"]
     r1 = st.select_slider("Lavado inmediato zona", options=opt_slider)
     r2 = st.select_slider("Notificación inmediata", options=opt_slider)
@@ -81,9 +92,9 @@ with st.form("form_vih"):
     submit = st.form_submit_button("Guardar Respuesta")
 
 if submit:
-    # Validación simple para asegurar que no guarden vacíos
+    # Validación simple
     if q1 is None or q8 is None:
-        st.error("⚠️ Por favor responde las preguntas obligatorias.")
+        st.error("⚠️ Por favor asegúrate de seleccionar todas las opciones requeridas.")
     else:
         nueva_fila = {
             "Fecha": datetime.datetime.now().strftime("%Y-%m-%d"),
