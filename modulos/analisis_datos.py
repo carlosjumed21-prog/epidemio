@@ -5,48 +5,28 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- CONFIGURACIÓN DE REDACCIÓN (REGLAS DE ORO) ---
-frases_inicio = [
-    "De acuerdo con los resultados obtenidos se observa que",
-    "Este resultado arroja que",
-    "Podemos observar que la mayoría",
-    "Es trascendente saber que",
-    "Con los datos obtenidos se observa que",
-    "Observando los resultados obtenidos se identifica que",
-    "Resulta positivo observar que la mayoría de la población"
-]
-
-def get_descriptor(prop):
-    if prop >= 0.90: return "casi la totalidad"
-    elif prop >= 0.75: return "las tres cuartas partes"
-    elif prop >= 0.50: return "la mayoría"
-    elif prop > 0.25: return "un poco más de la mitad"
-    else: return "una mínima parte"
-
-def generar_redaccion_tesis(plot_data, col):
-    # Ordenar datos para obtener el top y el segundo lugar
-    datos = plot_data.sort_values('Porcentaje', ascending=False)
-    top_cat = datos.iloc[0]['Categoría']
-    top_prop = datos.iloc[0]['Porcentaje'] / 100
-    inicio = random.choice(frases_inicio)
+# --- CONFIGURACIÓN DE REDACCIÓN ---
+def generar_analisis_clinico(df, col, is_multi):
+    if is_multi:
+        freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
+    else:
+        freqs = df[col].value_counts(normalize=True)
     
-    # Análisis comparativo (Contraste crítico)
-    redaccion = f"• {inicio} {get_descriptor(top_prop)} del personal reporta '{top_cat}'. "
+    top_cat = freqs.idxmax()
     
-    if len(datos) > 1:
-        segunda_cat = datos.iloc[1]['Categoría']
-        segunda_prop = datos.iloc[1]['Porcentaje']
+    # Redacción con conexión teórica (Aquí es donde fundamentas tu tesis)
+    analisis = f"La tendencia predominante hacia '{top_cat}' refleja la dinámica operativa actual. "
+    
+    # Conexión con teoría (Fundamentación)
+    col_lower = col.lower()
+    if any(x in col_lower for x in ['conocimiento', 'capacitacion']):
+        analisis += "Este hallazgo se alinea con la teoría de la conducta organizacional, donde la competencia técnica es el pilar de la seguridad asistencial. La brecha observada cuestiona si el modelo de capacitación actual es suficiente para garantizar la adherencia a la NOM-010."
+    elif any(x in col_lower for x in ['epp', 'lavado', 'barreras']):
+        analisis += "Este resultado es consistente con los modelos de seguridad del paciente que señalan el error humano como un factor multicausal. La variabilidad detectada indica que el cumplimiento no depende solo de la voluntad individual, sino de la estandarización del proceso asistencial."
+    else:
+        analisis += "Estos datos permiten caracterizar la estructura de la muestra, sirviendo como fundamento empírico para contrastar la realidad institucional con los estándares de calidad vigentes."
         
-        if segunda_prop > 15: # Solo comentar si la segunda categoría es relevante
-            redaccion += f"Al contrastar este hallazgo, se identifica que un segmento significativo ({segunda_prop}%) opta por '{segunda_cat}', lo cual sugiere una variabilidad en los procesos de atención. "
-            redaccion += "Esta heterogeneidad en la práctica clínica evidencia la necesidad de fortalecer la supervisión y la estandarización operativa para mitigar riesgos en la seguridad del paciente. "
-            redaccion += "La persistencia de estas discrepancias técnicas subraya la importancia de reevaluar los protocolos actuales para garantizar una praxis asistencial uniforme y efectiva."
-        else:
-            redaccion += f"Al analizar la distribución de la variable {col}, se identifica una tendencia consolidada en la muestra. "
-            redaccion += "Este comportamiento demuestra un nivel de uniformidad que, si bien es favorable para la estandarización, debe ser contrastado continuamente con la normativa para asegurar la efectividad técnica. "
-            redaccion += "Es importante señalar que la distribución observada facilita la identificación de áreas donde la institución ha logrado una madurez operativa, permitiendo enfocar los recursos de mejora de manera precisa."
-    
-    return redaccion
+    return f"• {analisis} Se requiere una revisión de las estrategias actuales de gestión para asegurar que la práctica clínica converja con los estándares teóricos."
 
 # --- INTERFAZ ---
 st.title("🩺 Motor de Tesis: Análisis Clínico")
@@ -67,34 +47,34 @@ if uploaded_file:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # Lógica de cálculo (Binning para Anios_Servicio)
-        if col == 'Anios_Servicio':
-            bins = [0, 5, 10, 15, 20, 25, 30, 100]
-            labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
-            df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
-            plot_df = (df['Anios_Grupo'].value_counts(normalize=True, sort=False) * 100).reset_index()
-            plot_df.columns = ['Categoría', 'Porcentaje']
-        elif is_multi:
+        # Cálculo de datos
+        if is_multi:
             frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
-            plot_df = pd.DataFrame({'Categoría': frecuencias.index, 'Porcentaje': (frecuencias / len(df) * 100).round(1)})
+            porcentajes = (frecuencias / len(df) * 100).round(1)
         else:
-            porcentajes = (df[col].value_counts(normalize=True) * 100).reset_index()
-            porcentajes.columns = ['Categoría', 'Porcentaje']
-            plot_df = porcentajes
-        
+            frecuencias = df[col].value_counts()
+            porcentajes = (frecuencias / len(df) * 100).round(1)
+            
         # Gráfica Profesional
+        plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
         fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
+        sns.barplot(data=plot_data, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
         
-        # Etiquetas en TODAS las barras
-        ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
+        # CORRECCIÓN: Etiquetado robusto para todas las barras
+        for p in ax.patches:
+            ax.annotate(f'{p.get_height():.1f}%', 
+                        (p.get_x() + p.get_width() / 2., p.get_height()), 
+                        ha = 'center', va = 'center', 
+                        xytext = (0, 9), 
+                        textcoords = 'offset points')
+        
+        plt.xticks(rotation=45, ha='right')
         ax.set_ylabel("Frecuencia (%)")
         ax.set_xlabel("")
-        plt.xticks(rotation=45, ha='right')
         st.pyplot(fig)
         
-        # Redacción Analítica
-        st.markdown(generar_redaccion_tesis(plot_df, col))
+        # Análisis con fundamento teórico
+        st.markdown(generar_analisis_clinico(df, col, is_multi))
         st.write("---")
 
     # 4.3 DISCUSIÓN
@@ -104,7 +84,7 @@ if uploaded_file:
         tabla = pd.crosstab(df[v_indep], df[v_dep])
         _, p, _, _ = chi2_contingency(tabla)
         
-        if p < 0.05:
-            st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida que el conocimiento normativo es un factor predictivo del cumplimiento técnico, reforzando la importancia de la educación continua como pilar de la calidad asistencial.")
-        else:
-            st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05), sugiriendo la presencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana, lo que requiere medidas de gestión correctivas.")
+        # Conclusión teórica de la discusión
+        conclusion_teorica = "Esto sugiere una desconexión entre la norma técnica y la práctica asistencial, validando la hipótesis de barreras estructurales." if p > 0.05 else "Esto valida que el conocimiento normativo es un pilar fundamental para la práctica segura."
+        
+        st.write(f"**Discusión:** {conclusion_teorica} Este hallazgo refuerza la necesidad de integrar la normativa vigente con la supervisión operativa diaria, superando el enfoque tradicional de capacitación aislada.")
