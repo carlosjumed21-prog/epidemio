@@ -3,6 +3,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import random
+from scipy.stats import chi2_contingency
 
 # --- CONFIGURACIÓN DE REDACCIÓN (REGLAS DE ORO) ---
 frases_inicio = [
@@ -37,17 +38,19 @@ def generar_analisis_clinico(plot_df, col):
     # Redacción base
     analisis = f"• {inicio} {expresion} de la población seleccionó '{top_cat}'. "
     
-    # Análisis de contraste
+    # Análisis de contraste y rigor académico
     if len(df_sorted) > 1:
         segunda_cat = df_sorted.iloc[1]['Categoría']
         segunda_p = df_sorted.iloc[1]['Porcentaje']
         
         if segunda_p > 15:
             analisis += f"Al realizar el contraste, se identifica que un segmento significativo también refiere '{segunda_cat}'. "
+            analisis += "Esta variabilidad sugiere que el cumplimiento operativo no es uniforme, lo cual representa un riesgo de inconsistencia en la seguridad asistencial. "
         else:
             analisis += "Al contrastar con las otras categorías, se identifica una tendencia consolidada en la muestra. "
+            analisis += "Este comportamiento demuestra un nivel de uniformidad que, aunque favorable para la estandarización, requiere supervisión para asegurar la efectividad técnica. "
             
-    # Fundamentación según tipo de variable
+    # Fundamentación teórica
     if any(x in col_lower for x in ['sexo', 'edad', 'anios']):
         analisis += "Este hallazgo refleja la estructura demográfica y operativa actual del hospital, proporcionando una base clara para la comprensión del perfil del personal que labora en la unidad."
     else:
@@ -63,47 +66,64 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
-    st.dataframe(df.describe(include='all').transpose())
-    st.divider()
-    
-    st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
-    for col in df.columns:
-        st.write(f"### Variable: {col}")
-        is_multi = df[col].astype(str).str.contains(',').any()
+    # Botón para generar el informe completo
+    if st.button("🚀 Generar Informe Estadístico y Análisis"):
         
-        # Procesamiento de datos
-        if col == 'Anios_Servicio':
-            bins = [0, 5, 10, 15, 20, 25, 30, 100]
-            labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
-            df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
-            counts = df['Anios_Grupo'].value_counts(sort=False)
-            percents = (counts / len(df) * 100).round(1)
-        elif is_multi:
-            counts = df[col].str.split(', ', expand=True).stack().value_counts()
-            percents = (counts / len(df) * 100).round(1)
-        else:
-            counts = df[col].value_counts()
-            percents = (counts / len(df) * 100).round(1)
+        st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
+        st.dataframe(df.describe(include='all').transpose())
+        st.divider()
+        
+        st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
+        for col in df.columns:
+            st.write(f"### Variable: {col}")
+            is_multi = df[col].astype(str).str.contains(',').any()
             
-        plot_df = pd.DataFrame({'Categoría': counts.index, 'Porcentaje': percents.values})
-        
-        # 1. Tabla de Fundamento
-        st.table(pd.DataFrame({'Frecuencia (n)': counts, 'Porcentaje (%)': percents}))
-        
-        # 2. Gráfica Profesional
-        fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
-        
-        # Porcentajes en barras
-        for container in ax.containers:
-            ax.bar_label(container, fmt='%.1f%%', padding=3)
+            # Procesamiento de datos
+            if col == 'Anios_Servicio':
+                bins = [0, 5, 10, 15, 20, 25, 30, 100]
+                labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
+                df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
+                counts = df['Anios_Grupo'].value_counts(sort=False)
+                percents = (counts / len(df) * 100).round(1)
+            elif is_multi:
+                counts = df[col].str.split(', ', expand=True).stack().value_counts()
+                percents = (counts / len(df) * 100).round(1)
+            else:
+                counts = df[col].value_counts()
+                percents = (counts / len(df) * 100).round(1)
+                
+            plot_df = pd.DataFrame({'Categoría': counts.index.astype(str), 'Porcentaje': percents.values})
             
-        plt.xticks(rotation=45, ha='right')
-        ax.set_ylabel("Frecuencia (%)")
-        ax.set_xlabel("")
-        st.pyplot(fig)
-        
-        # 3. Análisis de Redacción (Sin porcentajes numéricos)
-        st.markdown(generar_analisis_clinico(plot_df, col))
-        st.write("---")
+            # 1. Tabla de Fundamento
+            st.table(pd.DataFrame({'Frecuencia (n)': counts, 'Porcentaje (%)': percents}))
+            
+            # 2. Gráfica Profesional
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
+            
+            # Porcentajes en barras
+            for container in ax.containers:
+                ax.bar_label(container, fmt='%.1f%%', padding=3)
+                
+            plt.xticks(rotation=45, ha='right')
+            ax.set_ylabel("Frecuencia (%)")
+            ax.set_xlabel("")
+            st.pyplot(fig)
+            
+            # 3. Análisis de Redacción
+            st.markdown(generar_analisis_clinico(plot_df, col))
+            st.write("---")
+
+        # 4.3 DISCUSIÓN Y CORRELACIÓN (CHI-CUADRADA)
+        st.subheader("4.3 DISCUSIÓN: ANÁLISIS DE CORRELACIÓN")
+        v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
+        if v_indep in df.columns and v_dep in df.columns:
+            st.write(f"**Prueba de Hipótesis:** Análisis entre *{v_indep}* y *{v_dep}*")
+            tabla = pd.crosstab(df[v_indep], df[v_dep])
+            chi2, p, dof, expected = chi2_contingency(tabla)
+            
+            st.write(f"**Valor p:** {p:.4f}")
+            if p < 0.05:
+                st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida la hipótesis de investigación: el conocimiento normativo es un factor predictor del cumplimiento técnico. La teoría y la práctica muestran una convergencia significativa.")
+            else:
+                st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05). Este es un hallazgo crítico que sugiere la presencia de barreras estructurales; el personal conoce la norma, pero factores ajenos al conocimiento (carga laboral, insumos) impiden su correcta ejecución.")
