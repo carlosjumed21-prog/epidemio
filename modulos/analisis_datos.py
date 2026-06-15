@@ -5,34 +5,41 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- LÓGICA DE ANÁLISIS ESPECÍFICO ---
+# --- CONFIGURACIÓN DE REDACCIÓN CRÍTICA ---
 def generar_analisis_clinico(df, col, is_multi):
-    # Calcular datos principales
+    # Cálculo de frecuencias y porcentajes
     if is_multi:
         freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
     else:
         freqs = df[col].value_counts(normalize=True)
     
-    cat_top = freqs.idxmax()
+    # Datos para el análisis
+    top_cat = freqs.index[0]
+    top_prop = freqs.iloc[0]
     
-    # Base de conocimientos por variable (Lo que le da lógica y coherencia)
-    analisis = {
-        'Sexo': f"La distribución de la muestra con predominio de '{cat_top}' refleja la composición demográfica habitual en el área de enfermería. Este dato es estructural y establece la base sobre la cual se analizan el resto de las variables de desempeño.",
-        'Edad': f"La concentración del personal en el grupo '{cat_top}' indica una fuerza laboral con madurez profesional. Esta distribución sugiere que la mayor parte del equipo cuenta con experiencia acumulada, lo cual es un factor determinante para la adherencia a procesos complejos.",
-        'Grado_Academico': f"La prevalencia del nivel '{cat_top}' en la formación académica del personal representa el estándar de competencia teórica actual. Este nivel de preparación debe traducirse directamente en la toma de decisiones clínicas y en la aplicación de los protocolos de seguridad.",
-        'Turno': f"La distribución del personal en el turno '{cat_top}' impacta directamente en la carga asistencial. Es vital considerar si las variaciones en los procesos de atención identificadas coinciden con los momentos de mayor saturación operativa en este horario.",
-        'Anios_Servicio': f"La presencia de personal con '{cat_top}' años de servicio sugiere una curva de aprendizaje consolidada. Este segmento de la población es clave para el mantenimiento de la cultura de seguridad, actuando como referencia para el personal de reciente ingreso.",
-        'Frecuencia_EPP': f"El reporte predominante de '{cat_top}' en el uso de EPP indica una cultura de autocuidado establecida. Sin embargo, la brecha hacia el cumplimiento absoluto señala que aún existen situaciones donde el personal prioriza la agilidad sobre la barrera de protección física.",
-        'Conocimiento_NOM': f"Identificar un nivel '{cat_top}' de conocimiento sobre la normativa vigente es un hallazgo crítico. Esto demuestra que la base teórica es sólida, pero plantea la duda de por qué este conocimiento no siempre se refleja en una aplicación técnica perfecta en la práctica asistencial.",
-        'Capacitacion_VIH': f"El hecho de que la mayoría reporte '{cat_top}' en capacitación reciente es un indicador de la vigilancia institucional. La continuidad de este indicador es el motor necesario para evitar la obsolescencia técnica en el manejo de riesgos por VIH.",
-        'Barreras_Proteccion': f"La elección de '{cat_top}' como barrera principal destaca la percepción de riesgo del personal. La variabilidad observada en el resto de las barreras sugiere que el personal adapta su protección según el procedimiento, lo que requiere supervisión para evitar omisiones por exceso de confianza."
-    }
-
-    # Retorno: Análisis específico si existe en el diccionario, o genérico profesional
-    if col in analisis:
-        return f"• {analisis[col]}"
+    # Análisis de contraste (identificar si hay una minoría significativa o una dispersión alta)
+    analysis_text = f"• Se observa una tendencia predominante hacia '{top_cat}'. "
+    
+    # Lógica crítica: Comparar la mayoría vs el resto
+    if len(freqs) > 1:
+        segunda_cat = freqs.index[1]
+        segunda_prop = freqs.iloc[1]
+        
+        # Si la segunda categoría tiene peso significativo (más del 20%)
+        if segunda_prop > 0.20:
+            analysis_text += f"No obstante, es relevante señalar que '{segunda_cat}' representa una proporción considerable. "
+            analysis_text += "Esta divergencia en la práctica sugiere que, aunque el proceso está estandarizado, existe una variabilidad operativa que podría comprometer la uniformidad de los resultados clínicos. "
+        else:
+            analysis_text += "Este nivel de concentración indica una práctica asistencial consolidada en torno a este criterio, mostrando una baja variabilidad entre el personal evaluado. "
+    
+    # Contextualización clínica
+    col_lower = col.lower()
+    if any(x in col_lower for x in ['conocimiento', 'capacitacion', 'epp', 'lavado', 'barreras']):
+        analysis_text += "Desde una perspectiva de gestión de riesgos, cualquier desviación respecto al estándar operativo principal debe ser monitorizada, ya que la inconsistencia en la aplicación de protocolos es, frecuentemente, el origen de eventos adversos."
     else:
-        return f"• Los resultados muestran una tendencia hacia '{cat_top}'. Este comportamiento requiere un análisis detallado sobre cómo la variabilidad observada impacta directamente en la seguridad del paciente y en la eficacia de los procesos hospitalarios, siendo necesario evaluar si existen barreras estructurales que impiden un desempeño estandarizado."
+        analysis_text += "La distribución observada es consistente con las características estructurales de la muestra y permite definir el perfil de operación actual en la unidad."
+        
+    return analysis_text
 
 # --- INTERFAZ ---
 st.title("🩺 Motor de Tesis: Análisis Clínico")
@@ -69,7 +76,7 @@ if uploaded_file:
         ax.set_xlabel("Frecuencia (%)")
         st.pyplot(fig)
         
-        # Redacción inteligente y crítica
+        # Redacción inteligente, analítica y crítica
         st.markdown(generar_analisis_clinico(df, col, is_multi))
         st.write("---")
 
@@ -81,6 +88,6 @@ if uploaded_file:
         _, p, _, _ = chi2_contingency(tabla)
         
         if p < 0.05:
-            st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida que el conocimiento normativo (NOM-010-SSA-2023) es un factor predictivo del cumplimiento técnico. Se recomienda estandarizar la supervisión.")
+            st.write("**Discusión:** Los hallazgos estadísticos confirman una correlación significativa (p < 0.05), lo que implica que el nivel de conocimiento técnico influye directamente en la adherencia operativa. Este resultado es un llamado a la estandarización de las competencias en el personal.")
         else:
-            st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05), lo cual sugiere la existencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana, lo que requiere medidas correctivas de gestión.")
+            st.write("**Discusión:** La ausencia de una correlación estadísticamente significativa (p > 0.05) entre el nivel de conocimiento y la práctica clínica, pone en evidencia una desconexión crítica entre la teoría y la praxis hospitalaria, señalando fallas estructurales más que una falta de competencias individuales.")
