@@ -116,14 +116,25 @@ if uploaded_file:
 
         # 4.3 DISCUSIÓN Y CORRELACIÓN (CHI-CUADRADA)
         st.subheader("4.3 DISCUSIÓN: ANÁLISIS DE CORRELACIÓN")
-        v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
-        if v_indep in df.columns and v_dep in df.columns:
-            st.write(f"**Prueba de Hipótesis:** Análisis entre *{v_indep}* y *{v_dep}*")
+        st.write("Selecciona variables para evaluar la hipótesis de independencia.")
+        
+        cols_for_corr = [c for c in df.columns if c != 'Anios_Grupo' and c != 'Fecha']
+        v_indep = st.selectbox("Seleccione Variable Independiente:", cols_for_corr, index=0)
+        v_dep = st.selectbox("Seleccione Variable Dependiente:", cols_for_corr, index=1)
+        
+        if st.button("Ejecutar Correlación"):
             tabla = pd.crosstab(df[v_indep], df[v_dep])
             chi2, p, dof, expected = chi2_contingency(tabla)
             
+            st.write(f"**Prueba Chi-cuadrada:** Análisis entre *{v_indep}* y *{v_dep}*")
             st.write(f"**Valor p:** {p:.4f}")
+            
+            # Visualización Heatmap para la correlación
+            fig_corr, ax_corr = plt.subplots(figsize=(6, 4))
+            sns.heatmap(tabla, annot=True, fmt='d', cmap='Blues', ax=ax_corr)
+            st.pyplot(fig_corr)
+            
             if p < 0.05:
-                st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida la hipótesis de investigación: el conocimiento normativo es un factor predictor del cumplimiento técnico. La teoría y la práctica muestran una convergencia significativa.")
+                st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida la hipótesis de investigación: la variable independiente es un factor predictor de la dependiente. La teoría y la práctica muestran una convergencia significativa.")
             else:
-                st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05). Este es un hallazgo crítico que sugiere la presencia de barreras estructurales; el personal conoce la norma, pero factores ajenos al conocimiento (carga laboral, insumos) impiden su correcta ejecución.")
+                st.write("**Discusión:** La aplicación técnica es independiente (p > 0.05). Este es un hallazgo crítico que sugiere la presencia de barreras estructurales; el personal conoce la norma, pero factores ajenos impiden su correcta ejecución.")
