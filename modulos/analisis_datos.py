@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import random
-from scipy.stats import chi2_contingency
 
-# --- CONFIGURACIÓN DE REDACCIÓN ---
+# --- CONFIGURACIÓN DE REDACCIÓN ESPECÍFICA ---
 def generar_analisis_clinico(df, col, is_multi):
+    # Cálculo de frecuencias
     if is_multi:
         freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
     else:
@@ -14,19 +13,25 @@ def generar_analisis_clinico(df, col, is_multi):
     
     top_cat = freqs.idxmax()
     
-    # Redacción con conexión teórica (Aquí es donde fundamentas tu tesis)
-    analisis = f"La tendencia predominante hacia '{top_cat}' refleja la dinámica operativa actual. "
-    
-    # Conexión con teoría (Fundamentación)
+    # Análisis específico por variable
     col_lower = col.lower()
-    if any(x in col_lower for x in ['conocimiento', 'capacitacion']):
-        analisis += "Este hallazgo se alinea con la teoría de la conducta organizacional, donde la competencia técnica es el pilar de la seguridad asistencial. La brecha observada cuestiona si el modelo de capacitación actual es suficiente para garantizar la adherencia a la NOM-010."
-    elif any(x in col_lower for x in ['epp', 'lavado', 'barreras']):
-        analisis += "Este resultado es consistente con los modelos de seguridad del paciente que señalan el error humano como un factor multicausal. La variabilidad detectada indica que el cumplimiento no depende solo de la voluntad individual, sino de la estandarización del proceso asistencial."
+    
+    # 1. Variables Demográficas (Descripción objetiva)
+    if 'sexo' in col_lower:
+        analisis = f"La prevalencia del sexo '{top_cat}' es un resultado esperado, ya que refleja la composición demográfica tradicional y predominante en el personal de enfermería en el entorno hospitalario."
+    elif 'edad' in col_lower:
+        analisis = f"La concentración del personal en el rango '{top_cat}' indica una fuerza laboral con experiencia, lo cual es fundamental para la estabilidad operativa de la unidad."
+    elif 'anios' in col_lower:
+        analisis = f"La distribución en el rango '{top_cat}' de años de servicio refleja una curva de aprendizaje consolidada, la cual es clave para el mantenimiento de la cultura de seguridad en el hospital."
+    
+    # 2. Variables de Desempeño y Conocimiento (Análisis Crítico)
+    elif any(x in col_lower for x in ['conocimiento', 'capacitacion', 'epp', 'lavado', 'barreras', 'accion']):
+        analisis = f"La tendencia predominante hacia '{top_cat}' evidencia la práctica actual. Sin embargo, al observar la dispersión en las otras categorías, se identifican brechas operativas que requieren una supervisión directa. Es necesario analizar si estas variaciones en la aplicación de los protocolos son resultado de barreras estructurales o de falta de estandarización en la praxis asistencial."
+    
     else:
-        analisis += "Estos datos permiten caracterizar la estructura de la muestra, sirviendo como fundamento empírico para contrastar la realidad institucional con los estándares de calidad vigentes."
+        analisis = f"Se observa una tendencia hacia '{top_cat}'. Este resultado caracteriza la distribución operativa actual, permitiendo establecer una base para la toma de decisiones."
         
-    return f"• {analisis} Se requiere una revisión de las estrategias actuales de gestión para asegurar que la práctica clínica converja con los estándares teóricos."
+    return f"• {analisis}"
 
 # --- INTERFAZ ---
 st.title("🩺 Motor de Tesis: Análisis Clínico")
@@ -37,7 +42,6 @@ if uploaded_file:
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
     st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
-    st.write("### Tabla 1: Resumen General de Variables")
     st.dataframe(df.describe(include='all').transpose())
     
     st.divider()
@@ -47,44 +51,35 @@ if uploaded_file:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # Cálculo de datos
-        if is_multi:
+        # Lógica de cálculo
+        if col == 'Anios_Servicio':
+            bins = [0, 5, 10, 15, 20, 25, 30, 100]
+            labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
+            df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
+            plot_df = (df['Anios_Grupo'].value_counts(normalize=True, sort=False) * 100).reset_index()
+            plot_df.columns = ['Categoría', 'Porcentaje']
+        elif is_multi:
             frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
             porcentajes = (frecuencias / len(df) * 100).round(1)
+            plot_df = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
         else:
-            frecuencias = df[col].value_counts()
-            porcentajes = (frecuencias / len(df) * 100).round(1)
-            
+            porcentajes = (df[col].value_counts(normalize=True) * 100).reset_index()
+            porcentajes.columns = ['Categoría', 'Porcentaje']
+            plot_df = porcentajes
+        
         # Gráfica Profesional
-        plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
         fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=plot_data, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
+        sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
         
-        # CORRECCIÓN: Etiquetado robusto para todas las barras
-        for p in ax.patches:
-            ax.annotate(f'{p.get_height():.1f}%', 
-                        (p.get_x() + p.get_width() / 2., p.get_height()), 
-                        ha = 'center', va = 'center', 
-                        xytext = (0, 9), 
-                        textcoords = 'offset points')
-        
+        # Forzar etiquetas en todas las barras
+        for container in ax.containers:
+            ax.bar_label(container, fmt='%.1f%%', padding=3)
+            
         plt.xticks(rotation=45, ha='right')
         ax.set_ylabel("Frecuencia (%)")
         ax.set_xlabel("")
         st.pyplot(fig)
         
-        # Análisis con fundamento teórico
+        # Redacción específica
         st.markdown(generar_analisis_clinico(df, col, is_multi))
         st.write("---")
-
-    # 4.3 DISCUSIÓN
-    st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
-    v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
-    if v_indep in df.columns and v_dep in df.columns:
-        tabla = pd.crosstab(df[v_indep], df[v_dep])
-        _, p, _, _ = chi2_contingency(tabla)
-        
-        # Conclusión teórica de la discusión
-        conclusion_teorica = "Esto sugiere una desconexión entre la norma técnica y la práctica asistencial, validando la hipótesis de barreras estructurales." if p > 0.05 else "Esto valida que el conocimiento normativo es un pilar fundamental para la práctica segura."
-        
-        st.write(f"**Discusión:** {conclusion_teorica} Este hallazgo refuerza la necesidad de integrar la normativa vigente con la supervisión operativa diaria, superando el enfoque tradicional de capacitación aislada.")
