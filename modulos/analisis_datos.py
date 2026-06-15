@@ -6,7 +6,6 @@ from scipy.stats import chi2_contingency
 
 # --- CONFIGURACIÓN DE REDACCIÓN ---
 def generar_analisis_clinico(df, col, is_multi):
-    # Calcular frecuencias para el análisis
     if is_multi:
         freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
     else:
@@ -14,18 +13,18 @@ def generar_analisis_clinico(df, col, is_multi):
     
     top_cat = freqs.index[0]
     
-    # Análisis crítico específico
     col_lower = col.lower()
+    # Análisis clínico directo y objetivo
     if 'anios' in col_lower:
-        analisis = f"La distribución del personal muestra una concentración principal en el rango '{top_cat}'. Este dato es clave para valorar la madurez operativa de la unidad, donde una mayor antigüedad sugiere una estabilidad técnica que favorece la seguridad del paciente."
+        analisis = f"La concentración de personal en '{top_cat}' refleja la experiencia acumulada en el servicio. Este segmento constituye el soporte técnico para la transferencia de conocimientos."
     elif any(x in col_lower for x in ['conocimiento', 'capacitacion']):
-        analisis = f"El resultado predominante hacia '{top_cat}' evidencia el nivel de competencia teórica actual. Es crítico considerar si esta posición es suficiente para mitigar los riesgos identificados o si existen brechas que el personal aún no ha logrado solventar."
+        analisis = f"El resultado hacia '{top_cat}' marca el nivel de competencia teórica actual. Es necesario contrastar si esta base teórica se traduce efectivamente en la aplicación técnica durante la atención."
     elif any(x in col_lower for x in ['epp', 'lavado', 'barreras']):
-        analisis = f"La tendencia observada en '{top_cat}' marca el estándar de práctica actual. Sin embargo, la dispersión en las categorías restantes indica que no existe una estandarización total, lo que representa un riesgo potencial en la continuidad de la seguridad asistencial."
+        analisis = f"La tendencia observada en '{top_cat}' establece el estándar de práctica actual. La dispersión en las otras categorías debe ser vigilada para evitar variabilidad en los procesos de seguridad."
     else:
-        analisis = f"La muestra se inclina predominantemente hacia '{top_cat}'. Esta distribución caracteriza el perfil operativo actual y sirve como línea base para identificar desviaciones en el desempeño clínico."
+        analisis = f"Los resultados muestran una inclinación hacia '{top_cat}', caracterizando la distribución operativa actual en la unidad."
     
-    return f"• {analisis} Se observa una variabilidad que requiere atención en la supervisión de los procesos."
+    return f"• {analisis} Se requiere supervisión continua para asegurar la estandarización de los procesos."
 
 # --- INTERFAZ ---
 st.title("🩺 Motor de Tesis: Análisis Clínico")
@@ -35,45 +34,52 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    # 4.1 RESUMEN GENERAL (TABLA 1)
     st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
     st.write("### Tabla 1: Resumen General de Variables")
     st.dataframe(df.describe(include='all').transpose())
     
     st.divider()
     
-    # 4.2 ANÁLISIS DE RESULTADOS
     st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
     for col in df.columns:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # 1. Tabla de fundamento (Evidencia de datos)
+        # 1. Tabla de fundamento
         if is_multi:
-            freqs = df[col].str.split(', ', expand=True).stack().value_counts()
-            porcentajes = (freqs / len(df) * 100).round(1)
+            frecuencias = df[col].str.split(', ', expand=True).stack().value_counts()
+            porcentajes = (frecuencias / len(df) * 100).round(1)
         else:
-            freqs = df[col].value_counts()
-            porcentajes = (freqs / len(df) * 100).round(1)
+            frecuencias = df[col].value_counts()
+            porcentajes = (frecuencias / len(df) * 100).round(1)
             
-        # Lógica de agrupación para Años de Servicio (Binning)
-        if col == 'Anios_Servicio':
-            df_plot = pd.DataFrame({'Categoría': porcentajes.index.astype(str), 'Porcentaje': porcentajes.values})
-        else:
-            df_plot = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
-            
-        st.table(pd.DataFrame({'Frecuencia (n)': freqs, 'Porcentaje (%)': porcentajes}))
+        tabla_datos = pd.DataFrame({'Frecuencia (n)': frecuencias, 'Porcentaje (%)': porcentajes})
+        st.table(tabla_datos)
         
-        # 2. Gráfica Horizontal Profesional
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.barplot(data=df_plot, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
+        # 2. Gráfica Vertical con etiquetas en todas las barras
+        plot_data = pd.DataFrame({'Categoría': porcentajes.index, 'Porcentaje': porcentajes.values})
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.barplot(data=plot_data, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
         
-        # Etiquetas exactas en todas las barras
-        ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=5)
-        ax.set_ylabel("")
-        ax.set_xlabel("Porcentaje de participantes (%)")
+        # Rotación para que no se encimen y etiquetas en cada barra
+        plt.xticks(rotation=45, ha='right')
+        ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
+        ax.set_ylabel("Frecuencia (%)")
+        ax.set_xlabel("")
         st.pyplot(fig)
         
-        # 3. Redacción Analítica y Crítica
+        # 3. Redacción profesional
         st.markdown(generar_analisis_clinico(df, col, is_multi))
         st.write("---")
+
+    # 4.3 DISCUSIÓN
+    st.subheader("4.3 DISCUSIÓN DE LOS RESULTADOS")
+    v_indep, v_dep = "Conocimiento_NOM", "Frecuencia_EPP"
+    if v_indep in df.columns and v_dep in df.columns:
+        tabla = pd.crosstab(df[v_indep], df[v_dep])
+        _, p, _, _ = chi2_contingency(tabla)
+        
+        if p < 0.05:
+            st.write("**Discusión:** La relación estadísticamente significativa (p < 0.05) valida que el conocimiento normativo es un factor predictivo del cumplimiento técnico.")
+        else:
+            st.write("**Discusión:** La independencia estadística (p > 0.05) sugiere que el conocimiento no se traduce automáticamente en praxis asistencial, indicando fallas estructurales.")
