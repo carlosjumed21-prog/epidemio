@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- CONFIGURACIÓN DE REDACCIÓN (REGLAS DE ORO) ---
+# --- CONFIGURACIÓN DE REDACCIÓN ---
 frases_inicio = [
     "De acuerdo con los resultados obtenidos se observa que",
     "Con los datos obtenidos se observa que",
@@ -32,26 +32,17 @@ def generar_analisis_clinico(plot_df, col):
     expresion = obtener_expresion(top_p)
     col_lower = col.lower()
     
-    # Análisis de redacción
     analisis = f"• {inicio} {expresion} de la población seleccionó '{top_cat}'. "
-    
     if len(df_sorted) > 1:
         segunda_cat = df_sorted.iloc[1]['Categoría']
         segunda_p = df_sorted.iloc[1]['Porcentaje']
-        
         if segunda_p > 15:
             analisis += f"Al realizar el contraste, se identifica que un segmento significativo también refiere '{segunda_cat}'. "
-            analisis += "Esta variabilidad sugiere que el cumplimiento operativo no es uniforme, lo cual representa un riesgo de inconsistencia en la seguridad asistencial. "
-        else:
-            analisis += "Al contrastar con las otras categorías, se identifica una tendencia consolidada en la muestra. "
-            analisis += "Este comportamiento demuestra un nivel de uniformidad que, aunque favorable para la estandarización, requiere supervisión para asegurar la efectividad técnica. "
-            
-    # Fundamentación teórica
+    
     if any(x in col_lower for x in ['sexo', 'edad', 'anios']):
-        analisis += "Este hallazgo refleja la estructura demográfica y operativa actual del hospital, proporcionando una base clara para la comprensión del perfil del personal."
+        analisis += "Este hallazgo refleja la estructura demográfica actual del personal."
     else:
-        analisis += "Este comportamiento denota la dinámica asistencial vigente, permitiendo visualizar áreas donde la estandarización operativa debe ser fortalecida para garantizar la calidad en la atención."
-        
+        analisis += "Este comportamiento denota la dinámica asistencial vigente, permitiendo visualizar áreas donde la estandarización operativa debe ser fortalecida."
     return analisis
 
 # --- INTERFAZ ---
@@ -63,11 +54,10 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'Fecha' in df.columns: df = df.drop(columns=['Fecha'])
     
-    # --- BLOQUE 1: INFORME Y ANÁLISIS ---
-    if st.button("🚀 Generar Informe Estadístico y Análisis"):
-        st.session_state.show_report = True
-        
-    if st.session_state.get('show_report', False):
+    if 'show_report' not in st.session_state: st.session_state.show_report = False
+    if st.button("🚀 Generar Informe Estadístico y Análisis"): st.session_state.show_report = True
+
+    if st.session_state.show_report:
         st.subheader("4.1 PRESENTACIÓN DE LA INFORMACIÓN")
         st.dataframe(df.describe(include='all').transpose())
         st.divider()
@@ -75,57 +65,50 @@ if uploaded_file:
         st.subheader("4.2 ANÁLISIS DE LOS RESULTADOS")
         for col in df.columns:
             st.write(f"### Variable: {col}")
-            is_multi = df[col].astype(str).str.contains(',').any()
-            
+            # [Lógica de procesamiento igual a la anterior...]
             if col == 'Anios_Servicio':
                 bins = [0, 5, 10, 15, 20, 25, 30, 100]
                 labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
                 df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
                 counts = df['Anios_Grupo'].value_counts(sort=False)
-                percents = (counts / len(df) * 100).round(1)
-            elif is_multi:
+            elif df[col].astype(str).str.contains(',').any():
                 counts = df[col].str.split(', ', expand=True).stack().value_counts()
-                percents = (counts / len(df) * 100).round(1)
             else:
                 counts = df[col].value_counts()
-                percents = (counts / len(df) * 100).round(1)
-                
+            
+            percents = (counts / len(df) * 100).round(1)
             plot_df = pd.DataFrame({'Categoría': counts.index.astype(str), 'Porcentaje': percents.values})
             
             st.table(pd.DataFrame({'Frecuencia (n)': counts, 'Porcentaje (%)': percents}))
-            
             fig, ax = plt.subplots(figsize=(8, 5))
             sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
-            for container in ax.containers:
-                ax.bar_label(container, fmt='%.1f%%', padding=3)
+            for container in ax.containers: ax.bar_label(container, fmt='%.1f%%', padding=3)
             plt.xticks(rotation=45, ha='right')
             st.pyplot(fig)
-            
             st.markdown(generar_analisis_clinico(plot_df, col))
             st.write("---")
 
-        # --- BLOQUE 2: DISCUSIÓN Y CORRELACIÓN (CHI-CUADRADA) ---
+        # 4.3 DISCUSIÓN Y CORRELACIÓN (BARRAS APILADAS)
         st.subheader("4.3 DISCUSIÓN: ANÁLISIS DE CORRELACIÓN")
-        st.info("Utilice esta sección para validar su hipótesis cruzando variables teóricas vs. prácticas.")
-        
-        # Filtrar solo columnas relevantes para chi-cuadrada (evitar fechas o IDs)
-        categorical_cols = [c for c in df.columns if c not in ['Anios_Grupo', 'Fecha', 'Anios_Servicio']]
-        
-        col_v1, col_v2 = st.columns(2)
-        v_indep = col_v1.selectbox("Variable Independiente (Teórica):", categorical_cols, index=0)
-        v_dep = col_v2.selectbox("Variable Dependiente (Práctica):", categorical_cols, index=1)
+        cols = [c for c in df.columns if c not in ['Anios_Grupo', 'Fecha']]
+        v_indep = st.selectbox("Variable Independiente (Teórica):", cols, key="v1")
+        v_dep = st.selectbox("Variable Dependiente (Práctica):", cols, key="v2")
         
         if st.button("Ejecutar Estadística (Chi-cuadrada)"):
-            tabla = pd.crosstab(df[v_indep], df[v_dep])
-            chi2, p, dof, expected = chi2_contingency(tabla)
+            # Crosstab normalizado por índice para barras apiladas al 100%
+            tabla_norm = pd.crosstab(df[v_indep], df[v_dep], normalize='index') * 100
+            chi2, p, dof, expected = chi2_contingency(pd.crosstab(df[v_indep], df[v_dep]))
             
-            st.write(f"**Valor p:** {p:.4f}")
+            st.write(f"### Valor p: {p:.4f}")
             
-            fig_corr, ax_corr = plt.subplots(figsize=(6, 4))
-            sns.heatmap(tabla, annot=True, fmt='d', cmap='Blues', ax=ax_corr)
-            st.pyplot(fig_corr)
+            # Gráfico de barras apiladas
+            ax = tabla_norm.plot(kind='bar', stacked=True, figsize=(8, 5), colormap='viridis')
+            plt.ylabel("Porcentaje (%)")
+            plt.xticks(rotation=45)
+            plt.legend(title=v_dep, bbox_to_anchor=(1.05, 1), loc='upper left')
+            st.pyplot(ax.figure)
             
             if p < 0.05:
-                st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida la hipótesis de investigación: el conocimiento es un predictor fundamental del cumplimiento.")
+                st.success("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Se rechaza la hipótesis nula. El conocimiento normativo influye directamente en la práctica.")
             else:
-                st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05). Este es un hallazgo crítico que sugiere la presencia de barreras estructurales; el personal conoce la norma, pero factores ajenos impiden su ejecución.")
+                st.warning("**Discusión:** No existe relación estadísticamente significativa (p > 0.05). No se puede rechazar la hipótesis nula. La práctica clínica es independiente del nivel de conocimiento.")
