@@ -5,40 +5,26 @@ import matplotlib.pyplot as plt
 import random
 from scipy.stats import chi2_contingency
 
-# --- CONFIGURACIÓN DE REDACCIÓN CRÍTICA ---
+# --- CONFIGURACIÓN DE REDACCIÓN ---
 def generar_analisis_clinico(df, col, is_multi):
-    # Cálculo de frecuencias y porcentajes
+    # Cálculo de frecuencias
     if is_multi:
         freqs = df[col].str.split(', ', expand=True).stack().value_counts(normalize=True)
     else:
         freqs = df[col].value_counts(normalize=True)
     
-    # Datos para el análisis
-    top_cat = freqs.index[0]
-    top_prop = freqs.iloc[0]
+    top_cat = freqs.idxmax()
+    analysis_text = f"• Se observa una tendencia hacia la categoría '{top_cat}'. "
     
-    # Análisis de contraste (identificar si hay una minoría significativa o una dispersión alta)
-    analysis_text = f"• Se observa una tendencia predominante hacia '{top_cat}'. "
-    
-    # Lógica crítica: Comparar la mayoría vs el resto
-    if len(freqs) > 1:
-        segunda_cat = freqs.index[1]
-        segunda_prop = freqs.iloc[1]
-        
-        # Si la segunda categoría tiene peso significativo (más del 20%)
-        if segunda_prop > 0.20:
-            analysis_text += f"No obstante, es relevante señalar que '{segunda_cat}' representa una proporción considerable. "
-            analysis_text += "Esta divergencia en la práctica sugiere que, aunque el proceso está estandarizado, existe una variabilidad operativa que podría comprometer la uniformidad de los resultados clínicos. "
-        else:
-            analysis_text += "Este nivel de concentración indica una práctica asistencial consolidada en torno a este criterio, mostrando una baja variabilidad entre el personal evaluado. "
-    
-    # Contextualización clínica
+    # Análisis crítico contextual
     col_lower = col.lower()
-    if any(x in col_lower for x in ['conocimiento', 'capacitacion', 'epp', 'lavado', 'barreras']):
-        analysis_text += "Desde una perspectiva de gestión de riesgos, cualquier desviación respecto al estándar operativo principal debe ser monitorizada, ya que la inconsistencia en la aplicación de protocolos es, frecuentemente, el origen de eventos adversos."
+    if 'anios' in col_lower:
+        analysis_text += "La categorización por antigüedad permite identificar la madurez operativa del equipo. Una mayor concentración en rangos de servicio avanzados sugiere la presencia de personal con experiencia, cuya retención es vital para la transferencia de conocimiento y la seguridad del paciente."
+    elif any(x in col_lower for x in ['conocimiento', 'capacitacion', 'epp']):
+        analysis_text += "Esta distribución evidencia la adherencia a los estándares institucionales. Cualquier dispersión detectada señala una oportunidad para fortalecer los procesos de supervisión y capacitación continua."
     else:
-        analysis_text += "La distribución observada es consistente con las características estructurales de la muestra y permite definir el perfil de operación actual en la unidad."
-        
+        analysis_text += "Este resultado caracteriza la estructura operativa de la muestra, proporcionando una base clara para la interpretación del entorno hospitalario actual."
+    
     return analysis_text
 
 # --- INTERFAZ ---
@@ -60,23 +46,33 @@ if uploaded_file:
         st.write(f"### Variable: {col}")
         is_multi = df[col].astype(str).str.contains(',').any()
         
-        # Calcular proporciones
-        if is_multi:
+        # Lógica de agrupamiento para Anios_Servicio
+        if col == 'Anios_Servicio':
+            bins = [0, 5, 10, 15, 20, 25, 30, 100]
+            labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
+            df['Anios_Grupo'] = pd.cut(df[col], bins=bins, labels=labels)
+            plot_df = (df['Anios_Grupo'].value_counts(normalize=True, sort=False) * 100).reset_index()
+            plot_df.columns = ['Categoría', 'Porcentaje']
+        elif is_multi:
             porcentajes = (df[col].str.split(', ', expand=True).stack().value_counts(normalize=True) * 100).reset_index()
             porcentajes.columns = ['Categoría', 'Porcentaje']
+            plot_df = porcentajes
         else:
             porcentajes = (df[col].value_counts(normalize=True) * 100).reset_index()
             porcentajes.columns = ['Categoría', 'Porcentaje']
+            plot_df = porcentajes
         
-        # Gráfica
+        # Gráfica Profesional
         fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=porcentajes, x='Porcentaje', y='Categoría', palette="viridis", ax=ax)
+        sns.barplot(data=plot_df, x='Categoría', y='Porcentaje', palette="viridis", ax=ax)
+        
+        # Etiquetas en todas las barras
         ax.bar_label(ax.containers[0], fmt='%.1f%%', padding=3)
-        ax.set_ylabel("")
-        ax.set_xlabel("Frecuencia (%)")
+        ax.set_ylabel("Frecuencia (%)")
+        ax.set_xlabel("")
         st.pyplot(fig)
         
-        # Redacción inteligente, analítica y crítica
+        # Redacción inteligente
         st.markdown(generar_analisis_clinico(df, col, is_multi))
         st.write("---")
 
@@ -88,6 +84,6 @@ if uploaded_file:
         _, p, _, _ = chi2_contingency(tabla)
         
         if p < 0.05:
-            st.write("**Discusión:** Los hallazgos estadísticos confirman una correlación significativa (p < 0.05), lo que implica que el nivel de conocimiento técnico influye directamente en la adherencia operativa. Este resultado es un llamado a la estandarización de las competencias en el personal.")
+            st.write("**Discusión:** Existe una relación estadísticamente significativa (p < 0.05). Esto valida que el conocimiento normativo es un factor predictivo del cumplimiento técnico, reforzando la importancia de la educación continua.")
         else:
-            st.write("**Discusión:** La ausencia de una correlación estadísticamente significativa (p > 0.05) entre el nivel de conocimiento y la práctica clínica, pone en evidencia una desconexión crítica entre la teoría y la praxis hospitalaria, señalando fallas estructurales más que una falta de competencias individuales.")
+            st.write("**Discusión:** La aplicación técnica es independiente del nivel de conocimiento (p > 0.05), sugiriendo la presencia de barreras estructurales o una insuficiente integración de la teoría en la praxis asistencial cotidiana.")
