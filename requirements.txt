@@ -14,3 +14,4 @@ pdf2
 seaborn
 scipy
 matplotlib
+google-auth-oauthlib
