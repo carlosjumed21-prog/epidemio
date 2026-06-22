@@ -79,6 +79,11 @@ pg = st.navigation([
         title="Análisis Estadístico", 
         icon="📉"
     ),
+    st.Page(
+        "modulos/linea.py", 
+        title="Línea Cronológica", 
+        icon="⏳" 
+    ),
 ])
 
 # --- 4. EJECUCIÓN ---
