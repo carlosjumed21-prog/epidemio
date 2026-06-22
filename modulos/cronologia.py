@@ -2,15 +2,16 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 def mostrar_cronologia():
     st.title("⏳ Línea Cronológica Clínica")
     
-    # 1. Configuración de credenciales (asegúrate de que el archivo .json esté en la raíz)
+    # 1. Configuración moderna de credenciales
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/drive']
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name('credenciales.json', scope)
+        # Usamos la clase Credentials de google-auth
+        creds = Credentials.from_service_account_file('credenciales.json', scopes=scope)
         client = gspread.authorize(creds)
         
         # 2. Conexión al Sheet
@@ -21,13 +22,8 @@ def mostrar_cronologia():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # Asegurar formato de fecha (ajusta 'Fecha' al nombre exacto de tu columna A)
         df['Fecha'] = pd.to_datetime(df['Fecha'])
         df = df.sort_values('Fecha')
-        
-        # 4. Filtro por paciente (opcional, si tienes una columna para ello)
-        # paciente = st.selectbox("Seleccionar paciente:", df['Nombre'].unique())
-        # df_filtrado = df[df['Nombre'] == paciente]
         
         # 5. Gráfico de línea de tiempo
         fig = px.timeline(
@@ -43,9 +39,8 @@ def mostrar_cronologia():
         st.plotly_chart(fig, use_container_width=True)
         
     except Exception as e:
-        st.error(f"No se pudo cargar la hoja: {e}")
-        st.write("Verifica que tu `credenciales.json` tenga acceso al archivo.")
+        st.error(f"Error técnico: {e}")
+        st.write("Asegúrate de que 'credenciales.json' esté en la carpeta raíz y tenga los permisos correctos.")
 
-# Llamada a la función principal
 if __name__ == "__main__":
     mostrar_cronologia()
