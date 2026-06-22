@@ -3,15 +3,12 @@ import pandas as pd
 import plotly.express as px
 
 def app():
-    st.title("📊 Cronología de Eventos Clínicos")
-    st.markdown("Carga tu archivo Excel para visualizar la línea de tiempo.")
-
-    # 1. Carga del archivo Excel
-    archivo_subido = st.file_uploader("Selecciona tu archivo Excel", type=["xlsx"])
+    st.title("📊 Línea de Tiempo de Eventos Clínicos")
+    
+    archivo_subido = st.file_uploader("Carga tu archivo Excel", type=["xlsx"])
 
     if archivo_subido is not None:
         try:
-            # Leemos el archivo
             xls = pd.ExcelFile(archivo_subido)
             lista_df = []
             
@@ -22,45 +19,31 @@ def app():
             
             df = pd.concat(lista_df, ignore_index=True)
             
-            # 2. LIMPIEZA DE FECHAS (Corrección del error 21-22/06/2026)
-            # Convertimos a string primero
-            df['Fecha_str'] = df['Fecha'].astype(str)
+            # --- LIMPIEZA DE FECHAS PARA INICIO Y FIN ---
+            # Asegúrate de que en tu Excel existan las columnas 'Fecha_Inicio' y 'Fecha_Fin'
+            for col in ['Fecha_Inicio', 'Fecha_Fin']:
+                df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
             
-            # Si el formato contiene un rango (ej: "21-22/06/2026"), extraemos solo la parte del inicio
-            # Esto toma el texto antes de un guion que no sea separador de fecha estándar
-            df['Fecha_procesada'] = df['Fecha_str'].apply(lambda x: x.split('-')[0] if '-' in x.split('/')[0] else x)
+            # Eliminamos filas sin fechas válidas
+            df = df.dropna(subset=['Fecha_Inicio', 'Fecha_Fin'])
             
-            # Convertimos a formato datetime
-            df['Fecha'] = pd.to_datetime(df['Fecha_procesada'], dayfirst=True, errors='coerce')
-            
-            # Eliminamos filas que no pudieron convertirse (datos basura)
-            df = df.dropna(subset=['Fecha'])
-            
-            # 3. Gráfico
-            st.success("Archivo procesado con éxito")
-            
+            # --- GRÁFICO DE LÍNEA DE TIEMPO CON DURACIÓN ---
             fig = px.timeline(
                 df, 
-                x_start="Fecha", 
-                x_end="Fecha", 
+                x_start="Fecha_Inicio", 
+                x_end="Fecha_Fin", 
                 y="Paciente", 
-                color="Procedimientos",
-                hover_data=['Dispositivos Invasivos', 'Cultivos / Fiebre / Antibióticos', 'Servicio', 'Cama'],
-                title="Línea Cronológica de Pacientes"
+                color="Procedimientos", # La categoría de evento
+                hover_data=['Dispositivos Invasivos', 'Cultivos / Fiebre / Antibióticos', 'Servicio'],
+                title="Duración de Intervenciones y Estancia"
             )
             
             fig.update_yaxes(autorange="reversed")
             st.plotly_chart(fig, use_container_width=True)
             
-            # 4. Tabla de datos
-            with st.expander("Ver datos procesados"):
-                st.dataframe(df.drop(columns=['Fecha_str', 'Fecha_procesada']))
-
         except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
-            st.info("Asegúrate de que la columna 'Fecha' tenga un formato compatible (DD/MM/AAAA).")
-    else:
-        st.info("Por favor, carga un archivo Excel para comenzar.")
+            st.error(f"Error: {e}")
+            st.info("Asegúrate de que tu archivo tenga las columnas: 'Fecha_Inicio' y 'Fecha_Fin'.")
 
 if __name__ == "__main__":
     app()
