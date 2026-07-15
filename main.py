@@ -1,90 +1,56 @@
 import streamlit as st
 
-# --- 1. CONFIGURACIÓN GLOBAL ---
-st.set_page_config(
-    page_title="EpidemioManager - CMN 20 de Noviembre", 
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+def render():
+    st.title("Unidad Notificante")
+    st.markdown("---")
 
-# --- 2. BARRA LATERAL (SIDEBAR) ---
-st.sidebar.header("⚙️ Configuración")
+    # CSS para convertir los botones de formularios en color rojo
+    st.markdown("""
+        <style>
+        div.stButton > button:first-child {
+            background-color: #FF4B4B;
+            color: white;
+            border: none;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #FF2B2B;
+            color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-# Selector de archivos para el Censo HTML
-archivo_subido = st.sidebar.file_uploader(
-    "Subir Censo HTML", 
-    type=["html", "htm"],
-    help="Arrastra aquí el archivo generado por el sistema del hospital."
-)
+    # Lógica de datos predeterminados
+    tlahuac_data = {
+        "Entidad": "CDMX", "Jurisdicción": "Tlahuac", 
+        "CLUES": "DFIST00053", "Municipio": "Tlahuac", "Localidad": "Tlahuac"
+    }
 
-if archivo_subido:
-    st.session_state['archivo_compartido'] = archivo_subido
-    st.sidebar.success("✅ Censo cargado")
-else:
-    st.sidebar.info("👋 Por favor, sube un censo para comenzar.")
+    opcion_unidad = st.selectbox("Seleccione la Unidad Notificante:", ["Seleccione...", "Tlahuac", "Otro"])
+    
+    disabled = (opcion_unidad == "Tlahuac")
+    datos = tlahuac_data if opcion_unidad == "Tlahuac" else {"Entidad": "", "Jurisdicción": "", "CLUES": "", "Municipio": "", "Localidad": ""}
 
-st.sidebar.divider()
-
-# --- 3. NAVEGACIÓN Y ESTRUCTURA DE PÁGINAS ---
-pg = st.navigation([
-    st.Page(
-        "modulos/censo_diario.py", 
-        title="Censo Epidemiológico", 
-        icon="📋", 
-        default=True
-    ),
-    st.Page(
-        "modulos/filtrado_pacientes.py", 
-        title="Filtrado de Pacientes", 
-        icon="🔍"
-    ),
-    st.Page(
-        "modulos/hojadiaria.py", 
-        title="Hoja Diaria Piso", 
-        icon="📝" 
-    ),
-    st.Page(
-        "modulos/insumos.py", 
-        title="Censo de Insumos", 
-        icon="📦"
-    ),
-    st.Page(
-        "modulos/aislamientos.py", 
-        title="Aislamientos", 
-        icon="🦠"
-    ),
-    st.Page(
-        "modulos/piso.py", 
-        title="Seguimiento de Piso", 
-        icon="🏥"
-    ),
-    st.Page(
-        "modulos/vigilancia_piso.py", 
-        title="Vigilancia Activa de Piso", 
-        icon="🛡️" 
-    ),
-    st.Page(
-        "modulos/estadisticas_iaas.py", 
-        title="Estadísticas IAAS", 
-        icon="📊"
-    ),
-    st.Page(
-        "modulos/Formulario_VIH.py", 
-        title="Formulario VIH", 
-        icon="📝"
-    ),
-    st.Page(
-        "modulos/analisis_datos.py", 
-        title="Análisis Estadístico", 
-        icon="📉"
-    ),
-    st.Page(
-        "modulos/Captura de IAAS.py", 
-        title="Captura de IAAAS", 
-        icon="📝" 
-    ),
-])
-
-# --- 4. EJECUCIÓN ---
-pg.run()
+    with st.form("form_unidad"):
+        col1, col2 = st.columns(2)
+        with col1:
+            entidad = st.text_input("Entidad", value=datos["Entidad"], disabled=disabled)
+            jurisdiccion = st.text_input("Jurisdicción", value=datos["Jurisdicción"], disabled=disabled)
+            clues = st.text_input("CLUES", value=datos["CLUES"], disabled=disabled)
+        with col2:
+            municipio = st.text_input("Municipio", value=datos["Municipio"], disabled=disabled)
+            localidad = st.text_input("Localidad", value=datos["Localidad"], disabled=disabled)
+        
+        # Botón rojo
+        submit = st.form_submit_button("Guardar Registro y Continuar")
+        
+        if submit:
+            # Guardamos los datos en el session_state para persistirlos
+            st.session_state.datos_unidad = {
+                "Entidad": entidad, "Jurisdicción": jurisdiccion, 
+                "CLUES": clues, "Municipio": municipio, "Localidad": localidad
+            }
+            
+            st.success("Datos guardados. Ya puedes avanzar a la siguiente ventana.")
+            
+            # Opcional: Esto te permite saber qué datos se guardaron para tu lógica de gspread futura
+            st.write("Datos en memoria:", st.session_state.datos_unidad)
