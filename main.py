@@ -80,9 +80,9 @@ pg = st.navigation([
         icon="📉"
     ),
     st.Page(
-        "modulos/cronologia.py", 
-        title="Línea Cronológica", 
-        icon="⏳" 
+        "modulos/Captura de IAAS.py", 
+        title="Captura de IAAAS", 
+        icon="📝" 
     ),
 ])
 
