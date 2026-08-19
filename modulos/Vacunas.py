@@ -36,6 +36,34 @@ if not fecha_nacimiento or not sexo:
     st.info("👋 **Ingresa la fecha de nacimiento y selecciona el sexo** del paciente para calcular automáticamente el esquema y las recomendaciones de vacunación.")
     st.stop()
 
+# Variables condicionales al inicio
+es_mujer = (sexo == "Mujer")
+
+col_cond1, col_cond2 = st.columns([1, 1])
+
+with col_cond1:
+    if es_mujer:
+        embarazo_resp = st.radio(
+            "🤰 ¿Embarazo?",
+            options=["No", "Sí"],
+            index=0,
+            horizontal=True,
+            help="Selecciona si la paciente se encuentra actualmente en periodo de gestación"
+        )
+        esta_embarazada = (embarazo_resp == "Sí")
+    else:
+        esta_embarazada = False
+
+with col_cond2:
+    personal_salud_resp = st.radio(
+        "🩺 ¿Personal de salud?",
+        options=["No", "Sí"],
+        index=0,
+        horizontal=True,
+        help="Selecciona si el paciente es personal de salud activo o en formación clínica"
+    )
+    es_personal_salud = (personal_salud_resp == "Sí")
+
 # --- 3. CÁLCULO DE EDAD EXACTA ---
 hoy = date.today()
 dias_vida = (hoy - fecha_nacimiento).days
@@ -46,12 +74,6 @@ meses = edad_delta.months
 dias = edad_delta.days
 
 total_meses = (anios * 12) + meses
-es_mujer = (sexo == "Mujer")
-
-# Condición de embarazo: Solo seleccionable si es Mujer >= 10 años
-esta_embarazada = False
-if es_mujer and anios >= 10:
-    esta_embarazada = st.checkbox("🤰 ¿Se encuentra actualmente embarazada?", value=False)
 
 # --- 4. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
@@ -95,7 +117,13 @@ else:
 # --- 5. DISPLAY DE PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
-embarazo_tag = " &nbsp;|&nbsp; <strong style='color:#C2185B;'>Estado: Embarazada 🤰</strong>" if esta_embarazada else ""
+condiciones_tags = []
+if esta_embarazada:
+    condiciones_tags.append("<strong style='color:#C2185B;'>Embarazo 🤰</strong>")
+if es_personal_salud:
+    condiciones_tags.append("<strong style='color:#0277BD;'>Personal de Salud 🩺</strong>")
+
+extra_info = " &nbsp;|&nbsp; " + " &nbsp;|&nbsp; ".join(condiciones_tags) if condiciones_tags else ""
 
 tarjeta_html = (
     f'<div style="background-color:{color_fondo};border-left:8px solid {color_borde};border-radius:8px;padding:16px 20px;margin-top:10px;margin-bottom:25px;">'
@@ -103,7 +131,7 @@ tarjeta_html = (
     f'<div>'
     f'<span style="font-size:1.45rem;font-weight:700;color:{color_texto};">{icono} {tipo_paciente}</span>'
     f'<div style="font-size:0.95rem;color:#37474F;margin-top:4px;">'
-    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad calculada:</strong> {subcategoria}{embarazo_tag}'
+    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad calculada:</strong> {subcategoria}{extra_info}'
     f'</div>'
     f'</div>'
     f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:6px 14px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">'
@@ -126,12 +154,11 @@ if anios < 10:
     C_INFL = "#FADCE9"
     C_COVID = "#C8E6C9"
     C_SRP = "#FFF2CC"
-    C_DPT = "#FFE082"        # Ámbar cálido sin grises
+    C_DPT = "#FFE082"
     C_VARI = "#E1BEE7"
     C_HEPA = "#FFE0B2"
     C_INACTIVO = "#FBFBFB"
 
-    # Evaluaciones clínicas por edad cumplida
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
     act_m2 = (total_meses >= 2) or (dias_vida >= 60)
@@ -227,11 +254,11 @@ else:
 
     es_adulto_mayor = (anios >= 60)
 
-    act_td = (anios >= 15)
-    act_sr = (10 <= anios <= 39)
-    act_hepb = (anios >= 11)
-    act_vph = (10 <= anios <= 49)
-    act_tdpa = esta_embarazada or ((15 <= anios <= 49) and es_mujer)
+    act_td = (anios >= 15) or es_personal_salud
+    act_sr = (10 <= anios <= 39) or (es_personal_salud and not esta_embarazada)
+    act_hepb = (anios >= 11) or es_personal_salud
+    act_vph = (10 <= anios <= 49) and not esta_embarazada
+    act_tdpa = esta_embarazada or ((15 <= anios <= 49) and es_mujer) or es_personal_salud
     act_neumo = es_adulto_mayor
     act_infl = True
 
@@ -668,6 +695,97 @@ if anios < 10:
             
             st.markdown("".join(badges_html), unsafe_allow_html=True)
 
+elif esta_embarazada:
+    # --- PANEL EXCLUSIVO PARA EMBARAZO ---
+    st.subheader("🤰 Biológicos Recomendados durante el Embarazo")
+    st.caption("Lineamiento Oficial de Vacunación en Personas Embarazadas:")
+
+    # 1. Tdpa
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#2E7D32;margin:0;'>Tdpa (Tétanos, Difteria, Tos Ferina acelular)</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Indicación:** **En cada embarazo**, independientemente del antecedente de vacunación previa.
+        * **Momento de aplicación:** A partir de la **semana 20 de gestación** (preferentemente entre las semanas 27 y 36).
+        * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea.
+        * **Objetivo:** Transferencia transplacentaria masiva de anticuerpos contra pertussis para proteger al recién nacido durante sus primeros meses de vida.
+        """)
+
+    # 2. VSR
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#00897B;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Indicación:** Personas embarazadas entre las **semanas 32 a 36 de gestación**.
+        * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea del brazo no dominante.
+        * **Revacunación:** No se requiere revacunación.
+        * **Objetivo:** Prevenir infecciones respiratorias agudas graves (bronquiolitis y neumonía) en el lactante.
+        """)
+
+    # 3. Influenza y COVID-19
+    col_emb1, col_emb2 = st.columns(2)
+    with col_emb1:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** En **cualquier trimestre** del embarazo durante la temporada invernal.
+            * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
+            """)
+    with col_emb2:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#1B5E20;margin:0;'>Anti COVID-19</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** A partir del **segundo trimestre** de gestación o según campaña invernal activa.
+            * **Dosis y Vía:** Intramuscular en región deltoidea.
+            """)
+
+    st.warning("⛔ **Contraindicación estricta en el embarazo:** Vacunas de virus vivos atenuados como **SR, SRP, Varicela y Fiebre Amarilla** están contraindicadas durante toda la gestación.")
+
+elif es_personal_salud:
+    # --- PANEL EXCLUSIVO PARA PERSONAL DE SALUD ---
+    st.subheader("🩺 Esquema de Inmunización para Personal de Salud")
+    st.caption("Lineamientos de bioseguridad ocupacional y protección al trabajador de la salud:")
+
+    # 1. Hepatitis B (Ocupacional)
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B (Protección Ocupacional Obligatoria)</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Esquema:** 
+          - Presentación de 20 µg (1.0 mL): **2 dosis** con intervalo mínimo de 4 semanas.
+          - Presentación de 10 µg (0.5 mL): **3 dosis** con esquema 0, 1 y 6 meses.
+        * **Verificación serológica:** Determinación de anticuerpos Anti-HBs entre 1 y 2 meses después de la última dosis. Título protector: **≥ 10 mUI/mL**.
+        """)
+
+    # 2. Influenza y COVID-19 Anual
+    col_ps1, col_ps2 = st.columns(2)
+    with col_ps1:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** **Dosis anual obligatoria** al inicio de cada temporada invernal (octubre a marzo).
+            * **Dosis y Vía:** 0.5 mL intramuscular en deltoides.
+            """)
+    with col_ps2:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#1B5E20;margin:0;'>Anti COVID-19</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** **Refuerzo anual sectorial** con biológicos actualizados de nueva generación.
+            * **Dosis y Vía:** Intramuscular en región deltoidea.
+            """)
+
+    # 3. Td/Tdpa y SR
+    col_ps3, col_ps4 = st.columns(2)
+    with col_ps3:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** Refuerzo cada **10 años** (se recomienda que al menos una de las dosis sea **Tdpa** para protección contra tos ferina en áreas de pediatría/neonatología/urgencias).
+            """)
+    with col_ps4:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** **2 dosis** con intervalo de 4 semanas en personal sin antecedente vacunal verificable o sin serología positiva para sarampión/rubéola.
+            """)
+
 elif es_adulto_mayor:
     # --- PANEL EXCLUSIVO PARA ADULTO MAYOR (>= 60 AÑOS) ---
     st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente} ({subcategoria})")
@@ -703,21 +821,9 @@ elif es_adulto_mayor:
         """)
 
 else:
-    # --- PANEL PARA POBLACIÓN 10 A 59 AÑOS ---
+    # --- PANEL PARA POBLACIÓN GENERAL 10 A 59 AÑOS ---
     st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos ({subcategoria})")
     st.caption("Recomendaciones normativas, grupos blanco, dosificación y compatibilidades:")
-
-    # 0. VSR (EXCLUSIVO EMBARAZO)
-    if esta_embarazada:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#00897B;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
-            st.caption("Lineamiento Oficial de Vacunación Materna")
-            st.markdown("""
-            * **Población blanco:** Personas embarazadas entre las **semanas 32 a 36 de gestación**.
-            * **Dosis y Vía:** Dosis única de **0.5 mL**, vía intramuscular en la región deltoidea del brazo de menor uso (no dominante).
-            * **Revacunación:** **No se requiere revacunación**.
-            * **Objetivo clínico:** Protección del lactante contra bronquiolitis y neumonía grave por VSR durante los primeros 6 meses de vida mediante anticuerpos maternos.
-            """)
 
     # 1. Anti Hepatitis B (>10 años)
     if act_hepb:
@@ -742,7 +848,7 @@ else:
                 """)
 
     # 2. VPH
-    if act_vph and not esta_embarazada:
+    if act_vph:
         with st.container(border=True):
             st.markdown("<h4 style='color:#F57F17;margin:0;'>VPH (Virus del Papiloma Humano)</h4>", unsafe_allow_html=True)
             col_vph1, col_vph2 = st.columns(2)
@@ -764,20 +870,13 @@ else:
     if act_td or act_tdpa:
         with st.container(border=True):
             st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa (Tétanos, Difteria, Tos Ferina)</h4>", unsafe_allow_html=True)
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                st.markdown("""
-                **🔹 Td:**
-                * A partir de los 15 años de edad. Refuerzo cada 10 años (o esquema 0, 1, 12 meses sin antecedente).
-                """)
-            with col_t2:
-                st.markdown("""
-                **🔹 Tdpa:**
-                * **Mujeres embarazadas:** En cada embarazo a partir de la **semana 20 de gestación**.
-                """)
+            st.markdown("""
+            * **Población:** A partir de los 15 años de edad. Refuerzo cada 10 años (o esquema 0, 1, 12 meses sin antecedente).
+            * **Dosis:** 0.5 mL intramuscular en región deltoidea.
+            """)
 
     # 4. SR
-    if act_sr and not esta_embarazada:
+    if act_sr:
         with st.container(border=True):
             st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
             st.markdown("""
@@ -790,5 +889,5 @@ else:
     with st.container(border=True):
         st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
         st.markdown("""
-        * **Población de 10 a 59 años:** Indicada en presencia de factores de riesgo (embarazo, asma, diabetes, cardiopatías, obesidad mórbida, VIH, personal de salud).
+        * **Población de 10 a 59 años:** Indicada en presencia de factores de riesgo (asma, diabetes, cardiopatías, obesidad mórbida, VIH).
         """)
