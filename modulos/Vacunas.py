@@ -45,10 +45,11 @@ anios = edad_delta.years
 meses = edad_delta.months
 dias = edad_delta.days
 
+# Total de meses cumplidos
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
-# Condición de embarazo: Solo seleccionable si es Mujer
+# Condición de embarazo: Solo seleccionable si es Mujer >= 10 años
 esta_embarazada = False
 if es_mujer and anios >= 10:
     esta_embarazada = st.checkbox("🤰 ¿Se encuentra actualmente embarazada?", value=False)
@@ -128,19 +129,23 @@ if anios < 10:
     C_DPT = "#E2E3E5"
     C_INACTIVO = "#EEEEEE"
 
+    # Evaluaciones directas y robustas por edad cumplida (meses o años)
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
-    act_m2 = total_meses >= 2
-    act_m4 = total_meses >= 4
-    act_m6 = total_meses >= 6
-    act_m7 = total_meses >= 7
-    act_m12 = total_meses >= 12
-    act_m18 = total_meses >= 18
-    act_m24 = total_meses >= 24
-    act_m36 = total_meses >= 36
-    act_m48 = total_meses >= 48
-    act_m59 = total_meses >= 59
-    act_m72 = total_meses >= 72
+    act_m2 = (total_meses >= 2) or (dias_vida >= 60)
+    act_m4 = (total_meses >= 4) or (dias_vida >= 120)
+    act_m6 = (total_meses >= 6) or (dias_vida >= 180)
+    act_m7 = (total_meses >= 7) or (dias_vida >= 210)
+    act_m12 = (total_meses >= 12) or (anios >= 1)
+    act_m18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
+    act_m24 = (total_meses >= 24) or (anios >= 2)
+    act_m36 = (total_meses >= 36) or (anios >= 3)
+    act_m48 = (total_meses >= 48) or (anios >= 4)   # Activa DPT a los 4 y 5 años
+    act_m59 = (total_meses >= 59) or (anios >= 5)
+    act_m72 = (total_meses >= 72) or (anios >= 6)
+
+    # Color dinámico de DPT (48 meses)
+    bg_dpt_48 = C_DPT if act_m48 else C_INACTIVO
 
     tabla_pediatrica_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -199,7 +204,7 @@ if anios < 10:
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">48 meses (4 años)</td>
 <td colspan="3" style="background-color:{C_INFL if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza refuerzo anual</td>
-<td colspan="3" style="background-color:{C_DPT if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">DPT</td>
+<td colspan="3" style="background-color:{bg_dpt_48};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">DPT</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">59 meses (5 años)</td>
@@ -229,7 +234,6 @@ else:
 
     es_adulto_mayor = (anios >= 60)
 
-    # Reglas de activación
     act_td = (anios >= 15)
     act_sr = (10 <= anios <= 39)
     act_hepb = (anios >= 11)
@@ -562,7 +566,7 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "Posterior a la aplicación del esquema primario con hexavalente acelular (4 dosis), se aplica una dosis de 0.5 mL de vacuna DPT, vía intramuscular en la región deltoidea o tricipital del brazo izquierdo, a los 4 años de edad.",
+        "tecnica_aplicacion": "Posterior a la aplicación del esquema primario con la vacuna hexavalente acelular, se aplica una dosis de 0.5 mL de la vacuna DPT, vía intramuscular en la región deltoidea o tricipital del brazo izquierdo, a los 4 años de edad.",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["SRP", "SR"],
         "intervalo_especial": [],
@@ -608,6 +612,15 @@ if anios < 10:
     
     if dias_vida <= 28:
         hito_objetivo = 0
+    elif anios == 4:
+        # A los 4 años muestra DPT e Influenza de 48 meses
+        hito_objetivo = 48
+    elif anios == 5:
+        # A los 5 años muestra el refuerzo de 59 meses
+        hito_objetivo = 59
+    elif anios >= 6:
+        # A partir de los 6 años muestra SRP
+        hito_objetivo = 72
     else:
         hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
         hito_objetivo = hitos_pendientes[0] if hitos_pendientes else 72
@@ -615,7 +628,7 @@ if anios < 10:
     vacunas_a_mostrar = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
     texto_hito = vacunas_a_mostrar[0]["edad_rec_str"] if vacunas_a_mostrar else "Etapa actual"
     
-    st.subheader(f"🎯 Vacunas a aplicar en la siguiente etapa ({texto_hito})")
+    st.subheader(f"🎯 Vacunas a aplicar en la etapa actual / siguiente ({texto_hito})")
     st.caption(f"Sugerencias técnicas y compatibilidades para el paciente con edad calculada de {subcategoria}:")
 
     for v in vacunas_a_mostrar:
@@ -628,7 +641,7 @@ if anios < 10:
 
             st.write("")
             
-            # Criterio técnico y vía
+            # Indicación técnica y vía
             if "tecnica_aplicacion" in v:
                 st.markdown(f"**📌 Indicación y Vía de Aplicación:** {v['tecnica_aplicacion']}")
             
@@ -661,7 +674,7 @@ elif es_adulto_mayor:
     st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente} ({subcategoria})")
     st.caption("Lineamientos de vacunación del adulto mayor en México:")
 
-    # 1. Neumococo 23V (Prioridad)
+    # 1. Neumococo 23V
     with st.container(border=True):
         st.markdown("<h4 style='color:#00838F;margin:0;'>Anti Neumocócica Polisacárida 23 Valente</h4>", unsafe_allow_html=True)
         st.markdown("""
