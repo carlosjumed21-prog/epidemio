@@ -9,7 +9,7 @@ st.caption("Evaluación etaria y perfil de vacunación epidemiológica.")
 
 st.divider()
 
-# --- 1. ENTRADA DE DATOS DEL PACIENTE ---
+# --- 1. ENTRADA DE DATOS DEL PACIENTE (SIN VALORES POR DEFAULT) ---
 col_form1, col_form2 = st.columns([1, 1])
 
 with col_form1:
@@ -77,7 +77,7 @@ elif 18 <= anios < 60:
     tipo_paciente = "Mujer adulta" if es_mujer else "Hombre adulto"
     subcategoria = f"{anios} años cumplidos"
     icono = "👩" if es_mujer else "👨"
-else:
+else:  # anios >= 60
     tipo_paciente = "Adulta mayor" if es_mujer else "Adulto mayor"
     subcategoria = f"{anios} años cumplidos"
     icono = "👵" if es_mujer else "👴"
@@ -208,60 +208,73 @@ if anios < 10:
     st.markdown(tabla_pediatrica_html, unsafe_allow_html=True)
 
 else:
-    # --- ESQUEMA 10 A 19 AÑOS Y ADULTOS (CON 3 COLUMNAS COMPLETAS) ---
+    # --- ESQUEMA >= 10 AÑOS Y ADULTOS (FILTRADO EXACTO POR EDAD Y SEXO) ---
     st.markdown("### 📋 Esquema Oficial de Vacunación (10 a 19 años y Adultos)")
-    tabla_adultos_html = """
+    
+    C_TD = "#D2D4EA"
+    C_SR = "#F8E5DB"
+    C_HEPB_AD = "#F9CCA7"
+    C_VPH = "#FEF9BE"
+    C_TDPA = "#DCEBD6"
+    C_NEUMO_AD = "#DCECF9"
+    C_INFL_AD = "#FAD6E6"
+    C_INACTIVO = "#EEEEEE"
+
+    es_adulto_mayor = (anios >= 60)
+
+    # Condiciones biológicas de activación
+    act_td = (anios >= 15)
+    act_sr = (10 <= anios <= 39)
+    act_hepb = (11 <= anios <= 59)
+    act_vph = (10 <= anios <= 49)
+    act_tdpa = (15 <= anios <= 49) and es_mujer
+    act_neumo = es_adulto_mayor
+    act_infl = True  # Aplica para todos los >= 10 años (por riesgo o universal >=60)
+
+    tabla_adultos_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
 <thead>
-<tr><th colspan="3" style="color:#A07248;font-size:1.55rem;font-weight:800;text-align:center;padding-bottom:12px;">Esquema de vacunación para población de 10 a 19 años y adultos a partir de los 20 años</th></tr>
+<tr><th colspan="2" style="color:#A07248;font-size:1.55rem;font-weight:800;text-align:center;padding-bottom:12px;">Esquema de vacunación para población de 10 a 19 años y adultos a partir de los 20 años</th></tr>
 <tr>
-<th style="background-color:#555;color:#FFF;font-weight:700;font-size:1rem;text-align:center;padding:10px;border-radius:3px;width:25%;">Vacunas</th>
-<th style="background-color:#555;color:#FFF;font-weight:700;font-size:1rem;text-align:center;padding:10px;border-radius:3px;width:30%;">Enfermedad que previene</th>
-<th style="background-color:#555;color:#FFF;font-weight:700;font-size:1rem;text-align:center;padding:10px;border-radius:3px;width:45%;">Edad</th>
+<th style="background-color:#555;color:#FFF;font-weight:700;font-size:1.05rem;text-align:center;padding:12px;border-radius:3px;width:45%;">Vacunas</th>
+<th style="background-color:#555;color:#FFF;font-weight:700;font-size:1.05rem;text-align:center;padding:12px;border-radius:3px;width:55%;">Enfermedad que previene</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="background-color:#D2D4EA;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">Td</td>
-<td style="background-color:#D2D4EA;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Tétanos, difteria</td>
-<td style="background-color:#D2D4EA;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">A partir de los 15 años de edad, con esquema completo<br>Refuerzo cada 10 años</td>
+<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Td</td>
+<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tétanos, difteria</td>
 </tr>
 <tr>
-<td style="background-color:#F8E5DB;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">SR</td>
-<td style="background-color:#F8E5DB;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Sarampión, rubéola</td>
-<td style="background-color:#F8E5DB;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">A partir de los 10 años de edad, en quienes no tengan dos dosis de SRP o SR</td>
+<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">SR</td>
+<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Sarampión, rubéola</td>
 </tr>
 <tr>
-<td style="background-color:#F9CCA7;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">Anti hepatitis B</td>
-<td style="background-color:#F9CCA7;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Hepatitis B</td>
-<td style="background-color:#F9CCA7;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Adolescentes de ≥ 11 años que no cuenten con el antecedente vacunal</td>
+<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti hepatitis B</td>
+<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Hepatitis B</td>
 </tr>
 <tr>
-<td style="background-color:#FEF9BE;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">VPH</td>
-<td style="background-color:#FEF9BE;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Infección por Virus del Papiloma Humano</td>
-<td style="background-color:#FEF9BE;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Niñas en 5º grado de primaria o de 11 años de edad NO escolarizadas<br>Mujeres cisgénero y transgénero que viven con VIH de 11 a 45 años de edad</td>
+<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">VPH</td>
+<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Infección por Virus del Papiloma Humano</td>
 </tr>
 <tr>
-<td style="background-color:#DCEBD6;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">Tdpa</td>
-<td style="background-color:#DCEBD6;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Tétanos, difteria, tos ferina</td>
-<td style="background-color:#DCEBD6;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">En cada embarazo a partir de la semana 20 de gestación</td>
+<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tdpa</td>
+<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tétanos, difteria, tos ferina</td>
 </tr>
 <tr>
-<td style="background-color:#DCECF9;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">Anti neumocócica polisacárida 23 valente</td>
-<td style="background-color:#DCECF9;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Infección por neumococo</td>
-<td style="background-color:#DCECF9;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Población de 65 años de edad<br>Población de 60-64 años con factores de riesgo</td>
+<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti neumocócica polisacárida 23 valente</td>
+<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Infección por neumococo</td>
 </tr>
 <tr>
-<td style="background-color:#FAD6E6;font-size:0.92rem;font-weight:600;text-align:center;padding:10px;border-radius:3px;color:#212121;">Anti influenza</td>
-<td style="background-color:#FAD6E6;font-size:0.92rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Influenza</td>
-<td style="background-color:#FAD6E6;font-size:0.9rem;font-weight:500;text-align:center;padding:10px;border-radius:3px;color:#212121;">Población de 10 a 59 años de edad considerada con factores de riesgo<br>Toda la población de 60 años y más</td>
+<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti influenza</td>
+<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Influenza</td>
 </tr>
 </tbody>
 </table>
 """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 7. CATÁLOGO TÉCNICO COMPLETO (< 10 AÑOS Y ADULTOS) ---
+# --- 7. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) ---
 CATALOGO_PEDIATRICO = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
@@ -611,88 +624,103 @@ if anios < 10:
             
             st.markdown("".join(badges_html), unsafe_allow_html=True)
 
+elif es_adulto_mayor:
+    # --- PANEL EXCLUSIVO PARA ADULTO MAYOR (>= 60 AÑOS) ---
+    st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente} ({subcategoria})")
+    st.caption("Lineamientos de vacunación del adulto mayor en México:")
+
+    # 1. Neumococo 23V (Prioridad)
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#00838F;margin:0;'>Anti Neumocócica Polisacárida 23 Valente</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Criterio Oficial:**
+          * **Población de 65 años y más:** Aplicación universal (Dosis única).
+          * **Población de 60 a 64 años con factores de riesgo:** Aplicación indicada en pacientes con diabetes mellitus, EPOC, cardiopatías, nefropatías, hepatopatías crónicas o tabaquismo.
+        * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
+        * **Revacunación:** Dosis única de revacunación a los 5 años únicamente en personas con asplenia anatómica/funcional o inmunocomprometidas.
+        """)
+
+    # 2. Influenza Estacional
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Criterio Oficial:** Toda la población de **60 años y más**.
+        * **Frecuencia:** **Dosis anual de refuerzo** al inicio de la temporada invernal (octubre a marzo).
+        * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
+        """)
+
+    # 3. Td Refuerzo decenal
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#3949AB;margin:0;'>Td (Tétanos y Difteria)</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Criterio Oficial:** Refuerzo cada **10 años** en personas con esquema previo completo.
+        * **Sin antecedente verificable:** Esquema primario de 3 dosis (0, 1 y 12 meses).
+        * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
+        """)
+
 else:
-    # --- EVALUACIÓN TÉCNICA PARA >= 10 AÑOS Y ADULTOS ---
+    # --- PANEL PARA POBLACIÓN 10 A 59 AÑOS ---
     st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos ({subcategoria})")
     st.caption("Recomendaciones normativas, grupos blanco, dosificación y compatibilidades:")
 
-    # 1. VPH (Detalle Normativo Completo)
-    if anios <= 49:
+    # 1. VPH
+    if act_vph:
         with st.container(border=True):
             st.markdown("<h4 style='color:#F57F17;margin:0;'>VPH (Virus del Papiloma Humano)</h4>", unsafe_allow_html=True)
-            st.caption("Norma Oficial y Lineamiento Sectorial de Vacunación")
-            
             col_vph1, col_vph2 = st.columns(2)
             with col_vph1:
                 st.markdown("""
                 **🎯 Población Objetivo:**
-                * Niñas y niños que cursan el **quinto año escolar de primaria** o de **11 años no escolarizados**.
-                * **Dosis / Vía:** 0.5 mL, intramuscular en la región deltoidea del brazo no dominante.
-                * **Número de dosis:** **Única**.
+                * Niñas y niños en **5º de primaria** o de **11 años no escolarizados**.
+                * **Dosis:** Única (0.5 mL IM).
                 """)
             with col_vph2:
                 st.markdown("""
-                **⚠️ Población en Riesgo:**
-                * Mujeres y hombres cisgénero y transgénero de **11 a 49 años que viven con VIH**.
-                * Mujeres de **9 a 19 años** atendidas dentro del protocolo de violación sexual.
-                * **Dosis / Vía:** 0.5 mL intramuscular (deltoides).
-                * **Número de dosis:** **Tres dosis** con intervalo de **0 - 2 - 6 meses**.
+                **⚠️ Población en Riesgo (11 a 49 años):**
+                * Personas viviendo con VIH y protocolo de violación sexual (9 a 19 años).
+                * **Esquema:** 3 dosis (0 - 2 - 6 meses).
                 """)
-            
-            st.info("💡 **Nota clínica:** No se requiere realizar la prueba de detección de VPH previa a la vacunación. Debe aclararse que la vacunación no sustituye el tamizaje ni la detección oportuna de cáncer.")
+            st.info("💡 **Nota clínica:** No se requiere prueba de VPH previa. La vacunación no sustituye el tamizaje citológico.")
 
     # 2. Td / Tdpa
-    with st.container(border=True):
-        st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa (Tétanos, Difteria, Tos Ferina)</h4>", unsafe_allow_html=True)
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            st.markdown("""
-            **🔹 Td (Toxoide Tetánico y Diftérico):**
-            * **Población:** A partir de los 15 años de edad con esquema primario completo.
-            * **Esquema:** Refuerzo cada 10 años (en heridas con riesgo tetánico aplicar si han pasado >5 años).
-            * **Sin antecedente:** Esquema de 3 dosis (0, 1 y 12 meses).
-            """)
-        with col_t2:
-            st.markdown("""
-            **🔹 Tdpa (Acelular):**
-            * **Población:** Mujeres embarazadas.
-            * **Momento de aplicación:** **En cada embarazo**, preferentemente a partir de la **semana 20 de gestación**.
-            * **Objetivo:** Protección contra tos ferina neonatal vía transferencia transplacentaria de anticuerpos.
-            """)
+    if act_td or act_tdpa:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa (Tétanos, Difteria, Tos Ferina)</h4>", unsafe_allow_html=True)
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                st.markdown("""
+                **🔹 Td:**
+                * A partir de los 15 años de edad. Refuerzo cada 10 años (o esquema 0, 1, 12 meses sin antecedente).
+                """)
+            with col_t2:
+                st.markdown("""
+                **🔹 Tdpa:**
+                * **Mujeres embarazadas:** En cada embarazo a partir de la semana 20 de gestación.
+                """)
 
     # 3. SR y Hepatitis B
-    col_ab1, col_ab2 = st.columns(2)
-    with col_ab1:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** A partir de los 10 años en personas sin esquema previo verificable o incompleto.
-            * **Sin dosis previas:** 2 dosis con intervalo mínimo de **4 semanas** entre cada una.
-            * **Con 1 dosis previa:** Aplicar 1 dosis de refuerzo.
-            * **Contraindicación:** Embarazo e inmunosupresión grave.
-            """)
-    with col_ab2:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B Adulto</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** Adolescentes $\ge$ 11 años y adultos sin antecedente vacunal, personal de salud y grupos con riesgo.
-            * **Esquema:** 3 dosis (0, 1 y 6 meses) con presentación de 20 mcg (1.0 mL IM en deltoides).
-            """)
+    if act_sr or act_hepb:
+        col_ab1, col_ab2 = st.columns(2)
+        with col_ab1:
+            if act_sr:
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
+                    st.markdown("""
+                    * Población de 10 a 39 años sin esquema verificable.
+                    * **Dosis:** 2 dosis con intervalo de 4 semanas.
+                    """)
+        with col_ab2:
+            if act_hepb:
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B</h4>", unsafe_allow_html=True)
+                    st.markdown("""
+                    * Adolescentes $\ge$ 11 años y adultos sin esquema, personal de salud o riesgo.
+                    * **Esquema:** 3 dosis (0, 1, 6 meses).
+                    """)
 
-    # 4. Neumococo 23 e Influenza Estacional
-    col_cd1, col_cd2 = st.columns(2)
-    with col_cd1:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#00838F;margin:0;'>Neumocócica Polisacárida 23V</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Universal:** Toda la población de **65 años de edad y más** (Dosis única).
-            * **Riesgo (60-64 años):** Pacientes con diabetes, EPOC, cardiopatías, nefropatías, hepatopatías crónicas o tabaquismo.
-            * **Revacunación:** Dosis única de revacunación a los 5 años únicamente en pacientes con asplenia anatómica o inmunocomprometidos.
-            """)
-    with col_cd2:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Universal:** Toda la población de **60 años y más** (Refuerzo anual).
-            * **Población 10 a 59 años:** Con factores de riesgo (asma, obesidad mórbida, diabetes, cardiopatías, VIH, inmunocompromiso, personal de salud y embarazo).
-            """)
+    # 4. Influenza por factores de riesgo
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Población de 10 a 59 años:** Indicada en presencia de factores de riesgo (asma, diabetes, cardiopatías, obesidad, VIH, inmunosupresión, personal de salud y embarazo).
+        """)
