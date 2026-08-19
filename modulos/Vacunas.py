@@ -36,34 +36,6 @@ if not fecha_nacimiento or not sexo:
     st.info("👋 **Ingresa la fecha de nacimiento y selecciona el sexo** del paciente para calcular automáticamente el esquema y las recomendaciones de vacunación.")
     st.stop()
 
-# Variables condicionales al inicio
-es_mujer = (sexo == "Mujer")
-
-col_cond1, col_cond2 = st.columns([1, 1])
-
-with col_cond1:
-    if es_mujer:
-        embarazo_resp = st.radio(
-            "🤰 ¿Embarazo?",
-            options=["No", "Sí"],
-            index=0,
-            horizontal=True,
-            help="Selecciona si la paciente se encuentra actualmente en periodo de gestación"
-        )
-        esta_embarazada = (embarazo_resp == "Sí")
-    else:
-        esta_embarazada = False
-
-with col_cond2:
-    personal_salud_resp = st.radio(
-        "🩺 ¿Personal de salud?",
-        options=["No", "Sí"],
-        index=0,
-        horizontal=True,
-        help="Selecciona si el paciente es personal de salud activo o en formación clínica"
-    )
-    es_personal_salud = (personal_salud_resp == "Sí")
-
 # --- 3. CÁLCULO DE EDAD EXACTA ---
 hoy = date.today()
 dias_vida = (hoy - fecha_nacimiento).days
@@ -74,11 +46,40 @@ meses = edad_delta.months
 dias = edad_delta.days
 
 total_meses = (anios * 12) + meses
+es_mujer = (sexo == "Mujer")
 
 # Condición de cohorte SRP: Corte en julio de 2020
 es_nacido_pre_julio_2020 = (fecha_nacimiento < date(2020, 7, 1))
 
-# --- 4. CLASIFICACIÓN CLÍNICA ---
+# --- 4. CONDICIONALES DE SALUD (SOLO HABILITADOS EN >= 10 AÑOS) ---
+esta_embarazada = False
+es_personal_salud = False
+
+if anios >= 10:
+    col_cond1, col_cond2 = st.columns([1, 1])
+
+    with col_cond1:
+        if es_mujer:
+            embarazo_resp = st.radio(
+                "🤰 ¿Embarazo?",
+                options=["No", "Sí"],
+                index=0,
+                horizontal=True,
+                help="Selecciona si la paciente se encuentra actualmente en periodo de gestación"
+            )
+            esta_embarazada = (embarazo_resp == "Sí")
+
+    with col_cond2:
+        personal_salud_resp = st.radio(
+            "🩺 ¿Personal de salud?",
+            options=["No", "Sí"],
+            index=0,
+            horizontal=True,
+            help="Selecciona si el paciente es personal de salud activo o en formación clínica"
+        )
+        es_personal_salud = (personal_salud_resp == "Sí")
+
+# --- 5. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
     tipo_paciente = "Recién nacida (Neonata)" if es_mujer else "Recién nacido (Neonato)"
     subcategoria = f"{dias_vida} días de vida"
@@ -117,7 +118,7 @@ if es_mujer:
 else:
     color_fondo, color_borde, color_texto, badge_bg = "#E3F2FD", "#1976D2", "#0D47A1", "#1565C0"
 
-# --- 5. DISPLAY DE PERFIL ---
+# --- 6. DISPLAY DE PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
 condiciones_tags = []
@@ -145,7 +146,7 @@ tarjeta_html = (
 )
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# --- 6. TABLAS DE ESQUEMAS VISUALES ---
+# --- 7. TABLAS DE ESQUEMAS VISUALES ---
 if anios < 10:
     st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
     
@@ -173,13 +174,11 @@ if anios < 10:
     act_m48 = (total_meses >= 48) or (anios >= 4)
     act_m59 = (total_meses >= 59) or (anios >= 5)
 
-    # Condición SRP: Dependiente de la fecha de nacimiento (julio 2020)
+    # Condición SRP según fecha de nacimiento (corte julio 2020)
     if es_nacido_pre_julio_2020:
-        # Nacidos ANTES de julio 2020: 2da dosis a los 6 años
         act_srp_18 = False
         act_srp_72 = (total_meses >= 72) or (anios >= 6)
     else:
-        # Nacidos A PARTIR de julio 2020: 2da dosis a los 18 meses
         act_srp_18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
         act_srp_72 = False
 
@@ -330,7 +329,7 @@ else:
 """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 7. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) ---
+# --- 8. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) ---
 CATALOGO_PEDIATRICO = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
@@ -656,7 +655,7 @@ CATALOGO_PEDIATRICO = [
     }
 ]
 
-# --- 8. PANEL INFERIOR DINÁMICO ---
+# --- 9. PANEL INFERIOR DINÁMICO ---
 st.divider()
 
 if anios < 10:
@@ -674,19 +673,16 @@ if anios < 10:
         hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
         hito_objetivo = hitos_pendientes[0] if hitos_pendientes else 72
 
-    # Filtrar catálogo base
     candidatas = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
     
-    # Filtrar según la cohorte SRP
     vacunas_a_mostrar = []
     for v in candidatas:
         if "SRP" in v["nombre"] and v["hito_meses"] == 18 and es_nacido_pre_julio_2020:
-            continue  # No mostrar SRP de 18m para nacidos antes de julio 2020
+            continue
         if "SRP" in v["nombre"] and v["hito_meses"] == 72 and not es_nacido_pre_julio_2020:
-            continue  # No mostrar SRP de 6 años para nacidos post-julio 2020
+            continue
         vacunas_a_mostrar.append(v)
 
-    # Mantener DPT en la lista de revisión si el niño tiene entre 4 y 6 años
     dpt_obj = next((v for v in CATALOGO_PEDIATRICO if "DPT" in v["nombre"]), None)
     if (4 <= anios <= 6) and dpt_obj and (dpt_obj not in vacunas_a_mostrar):
         vacunas_a_mostrar.append(dpt_obj)
