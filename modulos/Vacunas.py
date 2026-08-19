@@ -9,7 +9,7 @@ st.caption("Evaluación etaria y perfil de vacunación epidemiológica.")
 
 st.divider()
 
-# --- 1. ENTRADA DE DATOS DEL PACIENTE (SIN VALORES POR DEFAULT) ---
+# --- 1. ENTRADA DE DATOS DEL PACIENTE ---
 col_form1, col_form2 = st.columns([1, 1])
 
 with col_form1:
@@ -47,6 +47,11 @@ dias = edad_delta.days
 
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
+
+# Condición de embarazo: Solo seleccionable si es Mujer
+esta_embarazada = False
+if es_mujer and anios >= 10:
+    esta_embarazada = st.checkbox("🤰 ¿Se encuentra actualmente embarazada?", value=False)
 
 # --- 4. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
@@ -90,13 +95,15 @@ else:
 # --- 5. DISPLAY DE PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
+embarazo_tag = " &nbsp;|&nbsp; <strong style='color:#C2185B;'>Estado: Embarazada 🤰</strong>" if esta_embarazada else ""
+
 tarjeta_html = (
     f'<div style="background-color:{color_fondo};border-left:8px solid {color_borde};border-radius:8px;padding:16px 20px;margin-top:10px;margin-bottom:25px;">'
     f'<div style="display:flex;justify-content:space-between;align-items:center;">'
     f'<div>'
     f'<span style="font-size:1.45rem;font-weight:700;color:{color_texto};">{icono} {tipo_paciente}</span>'
     f'<div style="font-size:0.95rem;color:#37474F;margin-top:4px;">'
-    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad calculada:</strong> {subcategoria}'
+    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad calculada:</strong> {subcategoria}{embarazo_tag}'
     f'</div>'
     f'</div>'
     f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:6px 14px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">'
@@ -208,7 +215,7 @@ if anios < 10:
     st.markdown(tabla_pediatrica_html, unsafe_allow_html=True)
 
 else:
-    # --- ESQUEMA >= 10 AÑOS Y ADULTOS (FILTRADO EXACTO POR EDAD Y SEXO) ---
+    # --- ESQUEMA >= 10 AÑOS Y ADULTOS ---
     st.markdown("### 📋 Esquema Oficial de Vacunación (10 a 19 años y Adultos)")
     
     C_TD = "#D2D4EA"
@@ -222,14 +229,14 @@ else:
 
     es_adulto_mayor = (anios >= 60)
 
-    # Condiciones biológicas de activación
+    # Reglas de activación
     act_td = (anios >= 15)
     act_sr = (10 <= anios <= 39)
-    act_hepb = (11 <= anios <= 59)
+    act_hepb = (anios >= 11)
     act_vph = (10 <= anios <= 49)
-    act_tdpa = (15 <= anios <= 49) and es_mujer
+    act_tdpa = esta_embarazada or ((15 <= anios <= 49) and es_mujer)
     act_neumo = es_adulto_mayor
-    act_infl = True  # Aplica para todos los >= 10 años (por riesgo o universal >=60)
+    act_infl = True
 
     tabla_adultos_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -635,7 +642,7 @@ elif es_adulto_mayor:
         st.markdown("""
         * **Criterio Oficial:**
           * **Población de 65 años y más:** Aplicación universal (Dosis única).
-          * **Población de 60 a 64 años con factores de riesgo:** Aplicación indicada en pacientes con diabetes mellitus, EPOC, cardiopatías, nefropatías, hepatopatías crónicas o tabaquismo.
+          * **Población de 60 a 64 años con factores de riesgo:** Pacientes con diabetes mellitus, EPOC, cardiopatías, nefropatías, hepatopatías crónicas o tabaquismo.
         * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
         * **Revacunación:** Dosis única de revacunación a los 5 años únicamente en personas con asplenia anatómica/funcional o inmunocomprometidas.
         """)
@@ -663,8 +670,42 @@ else:
     st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos ({subcategoria})")
     st.caption("Recomendaciones normativas, grupos blanco, dosificación y compatibilidades:")
 
-    # 1. VPH
-    if act_vph:
+    # 0. VSR (EXCLUSIVO EMBARAZO)
+    if esta_embarazada:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#00897B;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
+            st.caption("Lineamiento Oficial de Vacunación Materna")
+            st.markdown("""
+            * **Población blanco:** Personas embarazadas entre las **semanas 32 a 36 de gestación**.
+            * **Dosis y Vía:** Dosis única de **0.5 mL**, vía intramuscular en la región deltoidea del brazo de menor uso (no dominante).
+            * **Revacunación:** **No se requiere revacunación**.
+            * **Objetivo clínico:** Protección del lactante contra bronquiolitis y neumonía grave por VSR durante los primeros 6 meses de vida mediante anticuerpos maternos.
+            """)
+
+    # 1. Anti Hepatitis B (>10 años)
+    if act_hepb:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#E65100;margin:0;'>Vacuna Anti Hepatitis B (Población $\ge$ 11 años y Adultos)</h4>", unsafe_allow_html=True)
+            st.caption("Población de 11 años y más sin esquema previo (HB y/o Hexavalente antes de los 5 años)")
+            
+            col_hb1, col_hb2 = st.columns(2)
+            with col_hb1:
+                st.markdown("""
+                **🔹 Presentación de 20 µg (1.0 mL):**
+                * **Número de dosis:** **2 dosis**.
+                * **Vía:** Intramuscular (región deltoidea).
+                * **Intervalo:** Intervalo mínimo de **4 semanas** entre la primera y segunda dosis.
+                """)
+            with col_hb2:
+                st.markdown("""
+                **🔹 Presentación de 10 µg (0.5 mL):**
+                * **Número de dosis:** **3 dosis**.
+                * **Vía:** Intramuscular (región deltoidea).
+                * **Esquema:** **0, 1 y 6 meses** (después de la dosis inicial).
+                """)
+
+    # 2. VPH
+    if act_vph and not esta_embarazada:
         with st.container(border=True):
             st.markdown("<h4 style='color:#F57F17;margin:0;'>VPH (Virus del Papiloma Humano)</h4>", unsafe_allow_html=True)
             col_vph1, col_vph2 = st.columns(2)
@@ -672,7 +713,7 @@ else:
                 st.markdown("""
                 **🎯 Población Objetivo:**
                 * Niñas y niños en **5º de primaria** o de **11 años no escolarizados**.
-                * **Dosis:** Única (0.5 mL IM).
+                * **Dosis:** Única (0.5 mL IM en deltoides).
                 """)
             with col_vph2:
                 st.markdown("""
@@ -682,7 +723,7 @@ else:
                 """)
             st.info("💡 **Nota clínica:** No se requiere prueba de VPH previa. La vacunación no sustituye el tamizaje citológico.")
 
-    # 2. Td / Tdpa
+    # 3. Td / Tdpa
     if act_td or act_tdpa:
         with st.container(border=True):
             st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa (Tétanos, Difteria, Tos Ferina)</h4>", unsafe_allow_html=True)
@@ -695,32 +736,22 @@ else:
             with col_t2:
                 st.markdown("""
                 **🔹 Tdpa:**
-                * **Mujeres embarazadas:** En cada embarazo a partir de la semana 20 de gestación.
+                * **Mujeres embarazadas:** En cada embarazo a partir de la **semana 20 de gestación**.
                 """)
 
-    # 3. SR y Hepatitis B
-    if act_sr or act_hepb:
-        col_ab1, col_ab2 = st.columns(2)
-        with col_ab1:
-            if act_sr:
-                with st.container(border=True):
-                    st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
-                    st.markdown("""
-                    * Población de 10 a 39 años sin esquema verificable.
-                    * **Dosis:** 2 dosis con intervalo de 4 semanas.
-                    """)
-        with col_ab2:
-            if act_hepb:
-                with st.container(border=True):
-                    st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B</h4>", unsafe_allow_html=True)
-                    st.markdown("""
-                    * Adolescentes $\ge$ 11 años y adultos sin esquema, personal de salud o riesgo.
-                    * **Esquema:** 3 dosis (0, 1, 6 meses).
-                    """)
+    # 4. SR
+    if act_sr and not esta_embarazada:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * Población de 10 a 39 años sin esquema verificable de dos dosis de SRP o SR.
+            * **Dosis:** 2 dosis con intervalo de 4 semanas.
+            * **Contraindicación:** Embarazo e inmunocompromiso severo.
+            """)
 
-    # 4. Influenza por factores de riesgo
+    # 5. Influenza por factores de riesgo
     with st.container(border=True):
         st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
         st.markdown("""
-        * **Población de 10 a 59 años:** Indicada en presencia de factores de riesgo (asma, diabetes, cardiopatías, obesidad, VIH, inmunosupresión, personal de salud y embarazo).
+        * **Población de 10 a 59 años:** Indicada en presencia de factores de riesgo (embarazo, asma, diabetes, cardiopatías, obesidad mórbida, VIH, personal de salud).
         """)
