@@ -248,6 +248,7 @@ else:
     C_HEPB_AD = "#F9CCA7"
     C_VPH = "#FEF9BE"
     C_TDPA = "#DCEBD6"
+    C_VSR = "#B2DFDB"        # Verde azulado/turquesa suave para VSR
     C_NEUMO_AD = "#DCECF9"
     C_INFL_AD = "#FAD6E6"
     C_INACTIVO = "#F5F5F5"
@@ -261,6 +262,16 @@ else:
     act_tdpa = esta_embarazada or ((15 <= anios <= 49) and es_mujer) or es_personal_salud
     act_neumo = es_adulto_mayor
     act_infl = True
+
+    # Fila condicional de VSR si se filtra Embarazo
+    fila_vsr_html = ""
+    if esta_embarazada:
+        fila_vsr_html = f"""
+<tr>
+<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:700;text-align:center;padding:12px;border-radius:3px;color:#004D40;">Vacuna contra el Virus Sincitial Respiratorio (VSR)</td>
+<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#004D40;">Infecciones respiratorias agudas bajas en el lactante por VSR</td>
+</tr>
+"""
 
     tabla_adultos_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -292,6 +303,7 @@ else:
 <td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_tdpa else '#9E9E9E'};">Tdpa</td>
 <td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_tdpa else '#9E9E9E'};">Tétanos, difteria, tos ferina</td>
 </tr>
+{fila_vsr_html}
 <tr>
 <td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Anti neumocócica polisacárida 23 valente</td>
 <td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Infección por neumococo</td>
@@ -712,12 +724,12 @@ elif esta_embarazada:
 
     # 2. VSR
     with st.container(border=True):
-        st.markdown("<h4 style='color:#00897B;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#004D40;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
         st.markdown("""
         * **Indicación:** Personas embarazadas entre las **semanas 32 a 36 de gestación**.
         * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea del brazo no dominante.
         * **Revacunación:** No se requiere revacunación.
-        * **Objetivo:** Prevenir infecciones respiratorias agudas graves (bronquiolitis y neumonía) en el lactante.
+        * **Objetivo:** Prevenir infecciones respiratorias agudas graves (bronquiolitis y neumonía) en el recién nacido y lactante menor.
         """)
 
     # 3. Influenza y COVID-19
@@ -726,7 +738,7 @@ elif esta_embarazada:
         with st.container(border=True):
             st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
             st.markdown("""
-            * **Indicación:** En **cualquier trimestre** del embarazo durante la temporada invernal.
+            * **Indicación:** En **cualquier trimestre** del embarazo durante la temporada invernal activa.
             * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
             """)
     with col_emb2:
