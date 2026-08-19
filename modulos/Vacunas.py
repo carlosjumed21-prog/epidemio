@@ -105,7 +105,7 @@ tarjeta_html = f"""
 """
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# --- 5. ESQUEMAS VISUALES CONDICIONALES ---
+# --- 5. ESQUEMAS VISUALES (< 10 AÑOS Y >= 10 AÑOS) ---
 if anios < 10:
     st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
     
@@ -360,20 +360,15 @@ else:
     """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 6. MOTOR DE DECISIÓN CLÍNICA Y COADMINISTRACIÓN VISUAL ---
-st.divider()
-st.subheader("🎯 Evaluación Epidemiológica: Biológicos Correspondientes")
-
-# Base de datos estructurada con desglose de compatibilidades
+# --- 6. CATALOGO TÉCNICO COMPLETO (CUADRO 7.1) ---
 CATALOGO_CUADRO_71 = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
         "dosis": "Dosis única contra formas graves de Tuberculosis",
-        "edad_rec_meses": 0,
+        "hito_meses": 0,
         "edad_rec_str": "Al nacer",
         "edad_min_dias": 0,
         "edad_min_str": "Al nacer",
-        "edad_max_meses": 59,
         "edad_max_str": "< 5 años (Excepcionalmente < 14 años)",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
@@ -385,12 +380,10 @@ CATALOGO_CUADRO_71 = [
     {
         "nombre": "Hepatitis B",
         "dosis": "Dosis al nacimiento",
-        "edad_rec_meses": 0,
+        "hito_meses": 0,
         "edad_rec_str": "Al nacer o a los 7 días de vida",
         "edad_min_dias": 0,
         "edad_min_str": "Al nacer",
-        "edad_max_dias": 7,
-        "edad_max_meses": 0.25,
         "edad_max_str": "Preferentemente no después de los 7 días de vida",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
@@ -402,11 +395,10 @@ CATALOGO_CUADRO_71 = [
     {
         "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
         "dosis": "1ª Dosis",
-        "edad_rec_meses": 2,
+        "hito_meses": 2,
         "edad_rec_str": "2 meses",
         "edad_min_dias": 42,
         "edad_min_str": "6 semanas",
-        "edad_max_meses": 59,
         "edad_max_str": "< 5 años",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
@@ -416,61 +408,27 @@ CATALOGO_CUADRO_71 = [
         "color": "#0277BD"
     },
     {
-        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
-        "dosis": "2ª Dosis",
-        "edad_rec_meses": 4,
-        "edad_rec_str": "4 meses",
-        "edad_min_dias": 70,
-        "edad_min_str": "10 semanas",
-        "edad_max_meses": 59,
-        "edad_max_str": "< 5 años",
+        "nombre": "Antirrotavirus (Rv1)",
+        "dosis": "1ª Dosis",
+        "hito_meses": 2,
+        "edad_rec_str": "2 meses",
+        "edad_min_dias": 42,
+        "edad_min_str": "6 semanas",
+        "edad_max_str": "7 meses 29 días",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
-        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
-        "cualquier_intervalo": ["BCG", "SRP", "SR"],
-        "intervalo_especial": [("Varicela", "4 semanas de separación")],
-        "color": "#0277BD"
-    },
-    {
-        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
-        "dosis": "3ª Dosis",
-        "edad_rec_meses": 6,
-        "edad_rec_str": "6 meses",
-        "edad_min_dias": 98,
-        "edad_min_str": "14 semanas",
-        "edad_max_meses": 59,
-        "edad_max_str": "< 5 años",
-        "intervalo_rec": "12 semanas",
-        "intervalo_min": "6 semanas",
-        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
-        "cualquier_intervalo": ["BCG", "SRP", "SR"],
-        "intervalo_especial": [("Varicela", "4 semanas de separación")],
-        "color": "#0277BD"
-    },
-    {
-        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
-        "dosis": "4ª Dosis (Refuerzo)",
-        "edad_rec_meses": 18,
-        "edad_rec_str": "18 meses",
-        "edad_min_dias": 365,
-        "edad_min_str": "12 meses",
-        "edad_max_meses": 59,
-        "edad_max_str": "< 5 años",
-        "intervalo_rec": "No Aplica",
-        "intervalo_min": "No Aplica",
-        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
-        "cualquier_intervalo": ["BCG", "SRP", "SR"],
-        "intervalo_especial": [("Varicela", "4 semanas de separación")],
-        "color": "#0277BD"
+        "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
+        "cualquier_intervalo": ["BCG"],
+        "intervalo_especial": [],
+        "color": "#2E7D32"
     },
     {
         "nombre": "Neumocócica conjugada (VCN)",
         "dosis": "1ª Dosis",
-        "edad_rec_meses": 2,
+        "hito_meses": 2,
         "edad_rec_str": "2 meses",
         "edad_min_dias": 42,
         "edad_min_str": "6 semanas",
-        "edad_max_meses": 59,
         "edad_max_str": "59 meses de edad",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 a 8 semanas",
@@ -480,13 +438,42 @@ CATALOGO_CUADRO_71 = [
         "color": "#00838F"
     },
     {
-        "nombre": "Neumocócica conjugada (VCN)",
+        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
         "dosis": "2ª Dosis",
-        "edad_rec_meses": 4,
+        "hito_meses": 4,
         "edad_rec_str": "4 meses",
         "edad_min_dias": 70,
         "edad_min_str": "10 semanas",
-        "edad_max_meses": 59,
+        "edad_max_str": "< 5 años",
+        "intervalo_rec": "8 semanas",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
+        "cualquier_intervalo": ["BCG", "SRP", "SR"],
+        "intervalo_especial": [("Varicela", "4 semanas de separación")],
+        "color": "#0277BD"
+    },
+    {
+        "nombre": "Antirrotavirus (Rv1)",
+        "dosis": "2ª Dosis",
+        "hito_meses": 4,
+        "edad_rec_str": "4 meses",
+        "edad_min_dias": 70,
+        "edad_min_str": "10 semanas",
+        "edad_max_str": "7 meses 29 días",
+        "intervalo_rec": "No Aplica",
+        "intervalo_min": "No Aplica",
+        "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
+        "cualquier_intervalo": ["BCG"],
+        "intervalo_especial": [],
+        "color": "#2E7D32"
+    },
+    {
+        "nombre": "Neumocócica conjugada (VCN)",
+        "dosis": "2ª Dosis",
+        "hito_meses": 4,
+        "edad_rec_str": "4 meses",
+        "edad_min_dias": 70,
+        "edad_min_str": "10 semanas",
         "edad_max_str": "59 meses de edad",
         "intervalo_rec": "8 meses",
         "intervalo_min": "8 semanas",
@@ -496,63 +483,27 @@ CATALOGO_CUADRO_71 = [
         "color": "#00838F"
     },
     {
-        "nombre": "Neumocócica conjugada (VCN)",
-        "dosis": "3ª Dosis (Refuerzo)",
-        "edad_rec_meses": 12,
-        "edad_rec_str": "12 meses",
-        "edad_min_dias": 84,
-        "edad_min_str": "12 semanas",
-        "edad_max_meses": 59,
-        "edad_max_str": "59 meses de edad",
-        "intervalo_rec": "No Aplica",
-        "intervalo_min": "No Aplica",
-        "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
-        "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
-        "intervalo_especial": [],
-        "color": "#00838F"
-    },
-    {
-        "nombre": "Antirrotavirus (Rv1)",
-        "dosis": "1ª Dosis",
-        "edad_rec_meses": 2,
-        "edad_rec_str": "2 meses",
-        "edad_min_dias": 42,
-        "edad_min_str": "6 semanas",
-        "edad_max_dias": 239,
-        "edad_max_meses": 7.9,
-        "edad_max_str": "7 meses 29 días",
-        "intervalo_rec": "8 semanas",
-        "intervalo_min": "4 semanas",
-        "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
-        "cualquier_intervalo": ["BCG"],
-        "intervalo_especial": [],
-        "color": "#2E7D32"
-    },
-    {
-        "nombre": "Antirrotavirus (Rv1)",
-        "dosis": "2ª Dosis",
-        "edad_rec_meses": 4,
-        "edad_rec_str": "4 meses",
-        "edad_min_dias": 70,
-        "edad_min_str": "10 semanas",
-        "edad_max_dias": 239,
-        "edad_max_meses": 7.9,
-        "edad_max_str": "7 meses 29 días",
-        "intervalo_rec": "No Aplica",
-        "intervalo_min": "No Aplica",
-        "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
-        "cualquier_intervalo": ["BCG"],
-        "intervalo_especial": [],
-        "color": "#2E7D32"
+        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
+        "dosis": "3ª Dosis",
+        "hito_meses": 6,
+        "edad_rec_str": "6 meses",
+        "edad_min_dias": 98,
+        "edad_min_str": "14 semanas",
+        "edad_max_str": "< 5 años",
+        "intervalo_rec": "12 semanas",
+        "intervalo_min": "6 semanas",
+        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
+        "cualquier_intervalo": ["BCG", "SRP", "SR"],
+        "intervalo_especial": [("Varicela", "4 semanas de separación")],
+        "color": "#0277BD"
     },
     {
         "nombre": "Influenza Estacional",
         "dosis": "1ª Dosis (Primovacunación)",
-        "edad_rec_meses": 6,
+        "hito_meses": 6,
         "edad_rec_str": "6 meses",
         "edad_min_dias": 180,
         "edad_min_str": "6 meses",
-        "edad_max_meses": 59,
         "edad_max_str": "59 meses",
         "intervalo_rec": "4 semanas",
         "intervalo_min": "4 semanas",
@@ -564,11 +515,10 @@ CATALOGO_CUADRO_71 = [
     {
         "nombre": "Influenza Estacional",
         "dosis": "2ª Dosis (Primovacunación)",
-        "edad_rec_meses": 7,
+        "hito_meses": 7,
         "edad_rec_str": "7 meses",
         "edad_min_dias": 210,
         "edad_min_str": "7 meses",
-        "edad_max_meses": 59,
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
@@ -579,12 +529,11 @@ CATALOGO_CUADRO_71 = [
     },
     {
         "nombre": "Triple Viral (SRP)",
-        "dosis": "1ª Dosis (Sarampión, rubéola y parotiditis)",
-        "edad_rec_meses": 12,
-        "edad_rec_str": "12 meses",
+        "dosis": "1ª Dosis (Sarampión, rubéola, parotiditis)",
+        "hito_meses": 12,
+        "edad_rec_str": "12 meses (1 año)",
         "edad_min_dias": 365,
         "edad_min_str": "12 meses",
-        "edad_max_meses": 119,
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "5 años (o a los 18 meses si nació post-2020)",
         "intervalo_min": "4 semanas",
@@ -594,13 +543,42 @@ CATALOGO_CUADRO_71 = [
         "color": "#F57F17"
     },
     {
+        "nombre": "Neumocócica conjugada (VCN)",
+        "dosis": "3ª Dosis (Refuerzo)",
+        "hito_meses": 12,
+        "edad_rec_str": "12 meses (1 año)",
+        "edad_min_dias": 84,
+        "edad_min_str": "12 semanas",
+        "edad_max_str": "59 meses de edad",
+        "intervalo_rec": "No Aplica",
+        "intervalo_min": "No Aplica",
+        "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
+        "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
+        "intervalo_especial": [],
+        "color": "#00838F"
+    },
+    {
+        "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
+        "dosis": "4ª Dosis (Refuerzo)",
+        "hito_meses": 18,
+        "edad_rec_str": "18 meses",
+        "edad_min_dias": 365,
+        "edad_min_str": "12 meses",
+        "edad_max_str": "< 5 años",
+        "intervalo_rec": "No Aplica",
+        "intervalo_min": "No Aplica",
+        "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
+        "cualquier_intervalo": ["BCG", "SRP", "SR"],
+        "intervalo_especial": [("Varicela", "4 semanas de separación")],
+        "color": "#0277BD"
+    },
+    {
         "nombre": "Triple Viral (SRP)",
-        "dosis": "2ª Dosis (Sarampión, rubéola y parotiditis)",
-        "edad_rec_meses": 18,
-        "edad_rec_str": "18 meses (nacidos a partir de 2022) o 6 años",
+        "dosis": "2ª Dosis (Nacidos después de 2020)",
+        "hito_meses": 18,
+        "edad_rec_str": "18 meses",
         "edad_min_dias": 540,
-        "edad_min_str": "18 meses / 6 años",
-        "edad_max_meses": 119,
+        "edad_min_str": "18 meses",
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
@@ -608,86 +586,195 @@ CATALOGO_CUADRO_71 = [
         "cualquier_intervalo": [],
         "intervalo_especial": [("SR", "Intervalo de 4 semanas")],
         "color": "#F57F17"
+    },
+    {
+        "nombre": "Influenza Estacional",
+        "dosis": "Refuerzo Anual (2 años)",
+        "hito_meses": 24,
+        "edad_rec_str": "24 meses (2 años)",
+        "edad_min_dias": 730,
+        "edad_min_str": "24 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["Neumococo", "Hepatitis A", "COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR", "Varicela"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Influenza Estacional",
+        "dosis": "Refuerzo Anual (3 años)",
+        "hito_meses": 36,
+        "edad_rec_str": "36 meses (3 años)",
+        "edad_min_dias": 1095,
+        "edad_min_str": "36 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["Neumococo", "Hepatitis A", "COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR", "Varicela"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Influenza Estacional",
+        "dosis": "Refuerzo Anual (4 años)",
+        "hito_meses": 48,
+        "edad_rec_str": "48 meses (4 años)",
+        "edad_min_dias": 1460,
+        "edad_min_str": "48 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["DPT", "Neumococo", "COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "DPT (Difteria, Tos ferina, Tétanos)",
+        "dosis": "Refuerzo a los 4 años",
+        "hito_meses": 48,
+        "edad_rec_str": "48 meses (4 años)",
+        "edad_min_dias": 1460,
+        "edad_min_str": "4 años",
+        "edad_max_str": "< 5 años",
+        "intervalo_rec": "No Aplica",
+        "intervalo_min": "No Aplica",
+        "simultaneas": ["Influenza", "Neumococo", "Hepatitis A"],
+        "cualquier_intervalo": ["SRP", "SR"],
+        "intervalo_especial": [],
+        "color": "#546E7A"
+    },
+    {
+        "nombre": "Influenza Estacional",
+        "dosis": "Refuerzo Anual (5 años)",
+        "hito_meses": 59,
+        "edad_rec_str": "59 meses (5 años)",
+        "edad_min_dias": 1795,
+        "edad_min_str": "59 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Triple Viral (SRP)",
+        "dosis": "2ª Dosis (Nacidos antes de 2020)",
+        "hito_meses": 72,
+        "edad_rec_str": "72 meses (6 años)",
+        "edad_min_dias": 2190,
+        "edad_min_str": "6 años",
+        "edad_max_str": "Menores de 10 años",
+        "intervalo_rec": "No Aplica",
+        "intervalo_min": "No Aplica",
+        "simultaneas": ["Influenza", "COVID-19"],
+        "cualquier_intervalo": [],
+        "intervalo_especial": [("SR", "Intervalo de 4 semanas")],
+        "color": "#F57F17"
     }
 ]
 
+# --- 7. PANEL DINÁMICO: SÓLO LAS VACUNAS QUE CORRESPONDEN CONTINUAR ---
+st.divider()
+
 if anios < 10:
-    vacunas_actuales = []
-    for v in CATALOGO_CUADRO_71:
-        if dias_vida >= v["edad_min_dias"]:
-            if dias_vida <= v.get("edad_max_dias", v["edad_max_meses"] * 30.5 + 30):
-                vacunas_actuales.append(v)
-
-    if vacunas_actuales:
-        st.markdown(f"#### 📍 Biológicos indicados para la edad del paciente ({subcategoria}):")
-        
-        for v in vacunas_actuales:
-            # Generador de Badges HTML para Coadministración
-            badges_simultaneas = "".join([
-                f'<span style="background-color: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; margin-right: 4px; margin-bottom: 4px; display: inline-block;">💉 {sim}</span>'
-                for sim in v["simultaneas"]
-            ])
-
-            badges_cualquier_intervalo = "".join([
-                f'<span style="background-color: #E0F2F1; color: #004D40; border: 1px solid #80CBC4; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; margin-right: 4px; margin-bottom: 4px; display: inline-block;">⏱️ {ci} (Cualquier intervalo)</span>'
-                for ci in v["cualquier_intervalo"]
-            ])
-
-            badges_intervalo_especial = "".join([
-                f'<span style="background-color: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; margin-right: 4px; margin-bottom: 4px; display: inline-block;">⚠️ {ie[0]}: {ie[1]}</span>'
-                for ie in v["intervalo_especial"]
-            ])
-
-            st.markdown(f"""
-            <div style="
-                border: 1px solid #CFD8DC;
-                border-left: 6px solid {v['color']};
-                border-radius: 8px;
-                padding: 14px 18px;
-                margin-bottom: 15px;
-                background-color: #FFFFFF;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-size: 1.15rem; font-weight: 700; color: {v['color']};">
-                        {v['nombre']} — <span style="font-weight: 600; color: #37474F;">{v['dosis']}</span>
-                    </span>
-                    <span style="background-color: #ECEFF1; color: #37474F; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
-                        Recomendada: {v['edad_rec_str']}
-                    </span>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 0.85rem; color: #424242; margin-bottom: 12px; background-color: #F8F9FA; padding: 8px 12px; border-radius: 6px;">
-                    <div><strong>🔹 Edad mínima:</strong> {v['edad_min_str']}</div>
-                    <div><strong>🔸 Edad máxima permitida:</strong> {v['edad_max_str']}</div>
-                    <div><strong>⏱️ Intervalo recomendado:</strong> {v['intervalo_rec']}</div>
-                    <div><strong>⚠️ Intervalo mínimo:</strong> {v['intervalo_min']}</div>
-                </div>
-
-                <div style="font-size: 0.84rem; font-weight: 700; color: #455A64; margin-bottom: 6px;">
-                    🔗 Aplicación y Compatibilidad entre Biológicos:
-                </div>
-                
-                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
-                    {badges_simultaneas}
-                    {badges_cualquier_intervalo}
-                    {badges_intervalo_especial}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Determinamos los hitos etarios de la tabla
+    hitos_disponibles = [0, 2, 4, 6, 7, 12, 18, 24, 36, 48, 59, 72]
+    
+    # Encontramos el hito actual (si coincide exactamente o está en el rango inmediato) o el próximo inmediato
+    # Si dias_vida <= 28 -> hito 0
+    if dias_vida <= 28:
+        hito_objetivo = 0
     else:
-        st.success("✅ El paciente ha superado el rango de primovacunación de este cuadro pediátrico.")
+        # Busca el primer hito que el paciente tiene pendiente o el que le corresponde en esta etapa
+        hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
+        if hitos_pendientes:
+            hito_objetivo = hitos_pendientes[0]
+        else:
+            hito_objetivo = 72
+
+    # Filtramos SOLO las vacunas de ese hito de aplicación
+    vacunas_a_mostrar = [v for v in CATALOGO_CUADRO_71 if v["hito_meses"] == hito_objetivo]
+
+    texto_hito = f"Etapa: {vacunas_a_mostrar[0]['edad_rec_str']}" if vacunas_a_mostrar else "Etapa actual"
+    st.subheader(f"🎯 Vacunas a aplicar para continuar el esquema ({texto_hito})")
+    st.caption(f"Sugerencias técnicas y compatibilidades para el paciente con edad calculada de {subcategoria}:")
+
+    for v in vacunas_a_mostrar:
+        # Generar los recuadros visuales de coadministración (Badges)
+        badges_simultaneas = "".join([
+            f'<span style="background-color: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; margin-right: 5px; margin-bottom: 4px; display: inline-block;">💉 {sim}</span>'
+            for sim in v["simultaneas"]
+        ])
+
+        badges_cualquier_intervalo = "".join([
+            f'<span style="background-color: #E0F2F1; color: #004D40; border: 1px solid #80CBC4; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; margin-right: 5px; margin-bottom: 4px; display: inline-block;">⏱️ {ci} (Cualquier intervalo)</span>'
+            for ci in v["cualquier_intervalo"]
+        ])
+
+        badges_intervalo_especial = "".join([
+            f'<span style="background-color: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; margin-right: 5px; margin-bottom: 4px; display: inline-block;">⚠️ {ie[0]}: {ie[1]}</span>'
+            for ie in v["intervalo_especial"]
+        ])
+
+        st.markdown(f"""
+        <div style="
+            border: 1px solid #D0D7DE;
+            border-left: 7px solid {v['color']};
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            background-color: #FFFFFF;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        ">
+            <!-- Título y dosis -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 1.2rem; font-weight: 700; color: {v['color']};">
+                    {v['nombre']} — <span style="font-weight: 600; color: #37474F;">{v['dosis']}</span>
+                </span>
+                <span style="background-color: #ECEFF1; color: #37474F; padding: 4px 12px; border-radius: 12px; font-size: 0.82rem; font-weight: 600;">
+                    Edad recomendada: {v['edad_rec_str']}
+                </span>
+            </div>
+            
+            <!-- Columnas de sugerencias técnicas del Cuadro 7.1 -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; font-size: 0.86rem; color: #333333; margin-bottom: 14px; background-color: #F8F9FA; padding: 10px 14px; border-radius: 6px; border: 1px solid #EEEEEE;">
+                <div><strong>🔹 Edad mínima permitida:</strong><br><span style="color: #0D47A1;">{v['edad_min_str']}</span></div>
+                <div><strong>🔸 Edad máxima permitida:</strong><br><span style="color: #B71C1C;">{v['edad_max_str']}</span></div>
+                <div><strong>⏱️ Intervalo recomendado sig. dosis:</strong><br>{v['intervalo_rec']}</div>
+                <div><strong>⚠️ Intervalo mínimo sig. dosis:</strong><br>{v['intervalo_min']}</div>
+            </div>
+
+            <!-- Aplicación entre biológicos ejemplificada -->
+            <div style="font-size: 0.85rem; font-weight: 700; color: #455A64; margin-bottom: 6px;">
+                🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):
+            </div>
+            
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
+                {badges_simultaneas if badges_simultaneas else '<span style="font-size: 0.8rem; color: #757575;">Sin datos simultáneos específicos</span>'}
+                {badges_cualquier_intervalo}
+                {badges_intervalo_especial}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
 else:
-    st.markdown(f"#### 📍 Biológicos indicados para población de 10 a 19 años y adultos ({subcategoria}):")
+    st.subheader(f"🎯 Biológicos indicados para población de 10 a 19 años y adultos ({subcategoria})")
+    
     st.markdown("""
-    <div style="border: 1px solid #CFD8DC; border-left: 6px solid #1976D2; border-radius: 6px; padding: 14px 18px; background-color: #FAFAFA; margin-bottom: 12px;">
-        <span style="font-size: 1.1rem; font-weight: 700; color: #0D47A1;">Esquema Integral para el Adulto</span>
-        <div style="font-size: 0.9rem; color: #37474F; margin-top: 6px;">
+    <div style="border: 1px solid #CFD8DC; border-left: 6px solid #1976D2; border-radius: 6px; padding: 16px 20px; background-color: #FFFFFF; margin-bottom: 15px;">
+        <span style="font-size: 1.15rem; font-weight: 700; color: #0D47A1;">Esquema Integral para el Adulto y Adolescente</span>
+        <div style="font-size: 0.9rem; color: #37474F; margin-top: 8px; line-height: 1.6;">
             - <strong>Td / Tdpa:</strong> Refuerzo cada 10 años (1 dosis de Tdpa en embarazadas a partir de la semana 20).<br>
-            - <strong>SR:</strong> 2 dosis si no cuenta con antecedente vacunal previo en personas de 10 a 39 años.<br>
-            - <strong>Anti Hepatitis B:</strong> Esquema de 3 dosis (0, 1, 6 meses) en grupos de riesgo o personal de salud.<br>
-            - <strong>VPH:</strong> Mujeres y personas en edad blanco institucional según lineamiento sectorial.<br>
-            - <strong>Anti neumocócica 23 valente:</strong> Indicada a partir de los 60 años o con comorbilidades.<br>
+            - <strong>SR:</strong> 2 dosis con intervalo de 4 semanas si no cuenta con antecedente vacunal previo en personas de 10 a 39 años.<br>
+            - <strong>Anti Hepatitis B:</strong> Esquema de 3 dosis (0, 1, 6 meses) en personal de salud o factores de riesgo.<br>
+            - <strong>VPH:</strong> Mujeres de 10 a 14 años / rezago institucional escolar según lineamiento nacional.<br>
+            - <strong>Anti neumocócica 23 valente:</strong> Indicada a partir de los 60 años o pacientes con comorbilidades (dosis única / revacunación a los 5 años en inmunocomprometidos).<br>
             - <strong>Anti Influenza:</strong> Dosis anual de refuerzo en temporada invernal.
         </div>
     </div>
