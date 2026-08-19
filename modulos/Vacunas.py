@@ -45,7 +45,6 @@ anios = edad_delta.years
 meses = edad_delta.months
 dias = edad_delta.days
 
-# Total de meses cumplidos
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
@@ -129,7 +128,7 @@ if anios < 10:
     C_DPT = "#E2E3E5"
     C_INACTIVO = "#EEEEEE"
 
-    # Evaluaciones directas y robustas por edad cumplida (meses o años)
+    # Evaluaciones clínicas por edad cumplida
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
     act_m2 = (total_meses >= 2) or (dias_vida >= 60)
@@ -140,12 +139,16 @@ if anios < 10:
     act_m18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
     act_m24 = (total_meses >= 24) or (anios >= 2)
     act_m36 = (total_meses >= 36) or (anios >= 3)
-    act_m48 = (total_meses >= 48) or (anios >= 4)   # Activa DPT a los 4 y 5 años
+    
+    # DPT: Activa a partir de los 4 años y hasta los 6 años 11 meses 29 días (< 7 años)
+    act_m48 = (total_meses >= 48) or (anios >= 4)
+    act_dpt = (4 <= anios <= 6) or (48 <= total_meses < 84)
+
     act_m59 = (total_meses >= 59) or (anios >= 5)
     act_m72 = (total_meses >= 72) or (anios >= 6)
 
     # Color dinámico de DPT (48 meses)
-    bg_dpt_48 = C_DPT if act_m48 else C_INACTIVO
+    bg_dpt_48 = C_DPT if (act_m48 or act_dpt) else C_INACTIVO
 
     tabla_pediatrica_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -561,12 +564,12 @@ CATALOGO_PEDIATRICO = [
         "nombre": "DPT (Difteria, Tos ferina, Tétanos)",
         "dosis": "Refuerzo a los 4 años",
         "hito_meses": 48,
-        "edad_rec_str": "48 meses (4 años)",
+        "edad_rec_str": "4 años (48 meses)",
         "edad_min_str": "4 años",
-        "edad_max_str": "< 5 años",
-        "intervalo_rec": "No Aplica",
-        "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "Posterior a la aplicación del esquema primario con la vacuna hexavalente acelular, se aplica una dosis de 0.5 mL de la vacuna DPT, vía intramuscular en la región deltoidea o tricipital del brazo izquierdo, a los 4 años de edad.",
+        "edad_max_str": "6 años, 11 meses y 29 días (< 7 años)",
+        "intervalo_rec": "Posterior al esquema primario de Hexavalente",
+        "intervalo_min": "6 semanas (posteriores a la 4ª dosis de Hexavalente)",
+        "tecnica_aplicacion": "Posterior a la aplicación del esquema primario con la vacuna hexavalente acelular, se aplica una dosis de 0.5 mL de la vacuna DPT, vía intramuscular en la región deltoidea o tricipital del brazo izquierdo, a los 4 años de edad. En aquellos casos en los que no se reciba a los 4 años, la edad de aplicación no debe sobrepasar los 6 años, 11 meses y 29 días.",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["SRP", "SR"],
         "intervalo_especial": [],
@@ -612,20 +615,23 @@ if anios < 10:
     
     if dias_vida <= 28:
         hito_objetivo = 0
-    elif anios == 4:
-        # A los 4 años muestra DPT e Influenza de 48 meses
-        hito_objetivo = 48
-    elif anios == 5:
-        # A los 5 años muestra el refuerzo de 59 meses
-        hito_objetivo = 59
+    elif anios in [4, 5]:
+        # A los 4 y 5 años muestra las vacunas correspondientes (incluyendo DPT e Influenza)
+        hito_objetivo = 48 if anios == 4 else 59
     elif anios >= 6:
-        # A partir de los 6 años muestra SRP
         hito_objetivo = 72
     else:
         hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
         hito_objetivo = hitos_pendientes[0] if hitos_pendientes else 72
 
+    # Obtener vacunas de la etapa seleccionada
     vacunas_a_mostrar = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
+    
+    # Si el paciente tiene entre 4 y 6 años y DPT no está en la lista inmediata, se añade como biológico aplicable
+    dpt_obj = next((v for v in CATALOGO_PEDIATRICO if "DPT" in v["nombre"]), None)
+    if (4 <= anios <= 6) and dpt_obj and (dpt_obj not in vacunas_a_mostrar):
+        vacunas_a_mostrar.append(dpt_obj)
+
     texto_hito = vacunas_a_mostrar[0]["edad_rec_str"] if vacunas_a_mostrar else "Etapa actual"
     
     st.subheader(f"🎯 Vacunas a aplicar en la etapa actual / siguiente ({texto_hito})")
@@ -641,7 +647,6 @@ if anios < 10:
 
             st.write("")
             
-            # Indicación técnica y vía
             if "tecnica_aplicacion" in v:
                 st.markdown(f"**📌 Indicación y Vía de Aplicación:** {v['tecnica_aplicacion']}")
             
@@ -649,11 +654,11 @@ if anios < 10:
             with c1:
                 st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
             with c2:
-                st.markdown(f"**🔸 Edad máxima:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
+                st.markdown(f"**🔸 Edad máxima permitida:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
             with c3:
-                st.markdown(f"**⏱️ Intervalo rec. sig. dosis:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
+                st.markdown(f"**⏱️ Intervalo recomendado:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
             with c4:
-                st.markdown(f"**⚠️ Intervalo mín. sig. dosis:**<br>{v['intervalo_min']}", unsafe_allow_html=True)
+                st.markdown(f"**⚠️ Intervalo mínimo:**<br><span style='color:#E65100;font-weight:600;'>{v['intervalo_min']}</span>", unsafe_allow_html=True)
 
             st.divider()
             
