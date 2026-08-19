@@ -15,7 +15,7 @@ col_form1, col_form2 = st.columns([1, 1])
 with col_form1:
     fecha_nacimiento = st.date_input(
         "📅 Fecha de nacimiento:",
-        value=date(2020, 1, 1),
+        value=date(2023, 6, 15),
         min_value=date(1900, 1, 1),
         max_value=date.today(),
         format="DD/MM/YYYY",
@@ -84,19 +84,17 @@ else:  # anios >= 60
 
 # --- 4. PALETA DE COLOR SEGÚN GÉNERO ---
 if es_mujer:
-    # Paleta Rosa
-    color_fondo = "#FCE4EC"      # Rosa muy suave
-    color_borde = "#D81B60"      # Rosa mexicano / magenta
-    color_texto = "#880E4F"      # Rosa profundo
+    color_fondo = "#FCE4EC"
+    color_borde = "#D81B60"
+    color_texto = "#880E4F"
     badge_bg = "#E91E63"
 else:
-    # Paleta Azul
-    color_fondo = "#E3F2FD"      # Azul claro suave
-    color_borde = "#1976D2"      # Azul rey
-    color_texto = "#0D47A1"      # Azul marino profundo
+    color_fondo = "#E3F2FD"
+    color_borde = "#1976D2"
+    color_texto = "#0D47A1"
     badge_bg = "#1565C0"
 
-# --- 5. DISPLAY VISUAL ---
+# --- 5. DISPLAY VISUAL DEL PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
 tarjeta_html = f"""
@@ -106,7 +104,7 @@ tarjeta_html = f"""
     border-radius: 8px;
     padding: 16px 20px;
     margin-top: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 ">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
@@ -134,5 +132,161 @@ tarjeta_html = f"""
     </div>
 </div>
 """
-
 st.markdown(tarjeta_html, unsafe_allow_html=True)
+
+# --- 6. ESQUEMA DE VACUNACIÓN (< 10 AÑOS) ---
+if anios < 10:
+    st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
+    
+    tabla_vacunas_html = """
+    <style>
+        .tabla-esquema {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 4px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin-top: 10px;
+        }
+        .th-titulo {
+            color: #A07248;
+            font-size: 1.6rem;
+            font-weight: 800;
+            text-align: center;
+            padding-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+        .th-col-edad {
+            background-color: #555555;
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-align: center;
+            padding: 10px;
+            width: 16%;
+            border-radius: 3px;
+        }
+        .th-col-vacunas {
+            background-color: #555555;
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-align: center;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .celda-edad {
+            background-color: #555555;
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: 0.88rem;
+            text-align: center;
+            padding: 10px 6px;
+            border-radius: 3px;
+        }
+        .celda-vacuna {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-align: center;
+            padding: 10px 8px;
+            border-radius: 3px;
+            color: #263238;
+        }
+        /* Paleta réplica exacta */
+        .color-bcg { background-color: #D9D2E9; }
+        .color-hepb { background-color: #F9CB9C; }
+        .color-hexavalente { background-color: #CFE2F3; }
+        .color-rotavirus { background-color: #D9EAD3; }
+        .color-neumococo { background-color: #E7F3FE; }
+        .color-influenza { background-color: #FCE5CD; } /* o rosa tenue #FAD2E1 */
+        .color-influenza-rosa { background-color: #FADCE9; }
+        .color-srp { background-color: #FFF2CC; }
+        .color-dpt { background-color: #E2E3E5; }
+    </style>
+
+    <table class="tabla-esquema">
+        <thead>
+            <tr>
+                <th colspan="7" class="th-titulo">Esquema de vacunación para menores de 10 años</th>
+            </tr>
+            <tr>
+                <th class="th-col-edad">Edad</th>
+                <th colspan="6" class="th-col-vacunas">Vacunas a aplicar</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Nacimiento -->
+            <tr>
+                <td class="celda-edad">Nacimiento</td>
+                <td colspan="2" class="celda-vacuna color-bcg">BCG</td>
+                <td colspan="4" class="celda-vacuna color-hepb">Hepatitis B</td>
+            </tr>
+            <!-- 2 meses -->
+            <tr>
+                <td class="celda-edad">2 meses</td>
+                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
+                <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
+                <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+            </tr>
+            <!-- 4 meses -->
+            <tr>
+                <td class="celda-edad">4 meses</td>
+                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
+                <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
+                <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+            </tr>
+            <!-- 6 meses -->
+            <tr>
+                <td class="celda-edad">6 meses</td>
+                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
+                <td colspan="4" class="celda-vacuna color-influenza-rosa">Influenza 1a dosis</td>
+            </tr>
+            <!-- 7 meses -->
+            <tr>
+                <td class="celda-edad">7 meses</td>
+                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza 2a dosis</td>
+            </tr>
+            <!-- 12 meses (1 año) -->
+            <tr>
+                <td class="celda-edad">12 meses (1 año)</td>
+                <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)**</td>
+                <td colspan="3" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+            </tr>
+            <!-- 18 meses -->
+            <tr>
+                <td class="celda-edad">18 meses</td>
+                <td colspan="3" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
+                <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
+            </tr>
+            <!-- 24 meses (2 años) -->
+            <tr>
+                <td class="celda-edad">24 meses (2 años)</td>
+                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+            </tr>
+            <!-- 36 meses (3 años) -->
+            <tr>
+                <td class="celda-edad">36 meses (3 años)</td>
+                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+            </tr>
+            <!-- 48 meses (4 años) -->
+            <tr>
+                <td class="celda-edad">48 meses (4 años)</td>
+                <td colspan="3" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+                <td colspan="3" class="celda-vacuna color-dpt">DPT</td>
+            </tr>
+            <!-- 59 meses (5 años) -->
+            <tr>
+                <td class="celda-edad">59 meses (5 años)</td>
+                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+            </tr>
+            <!-- 72 meses (6 años) -->
+            <tr>
+                <td class="celda-edad">72 meses (6 años)</td>
+                <td colspan="6" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+    
+    st.markdown(tabla_vacunas_html, unsafe_allow_html=True)
+else:
+    st.info("ℹ️ El paciente tiene 10 años o más. El esquema pediátrico menor de 10 años no aplica para este grupo de edad.")
