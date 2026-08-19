@@ -722,7 +722,7 @@ else:
     # 1. Anti Hepatitis B (>10 años)
     if act_hepb:
         with st.container(border=True):
-            st.markdown("<h4 style='color:#E65100;margin:0;'>Vacuna Anti Hepatitis B (Población $\ge$ 11 años y Adultos)</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#E65100;margin:0;'>Vacuna Anti Hepatitis B (Población de 11 años y más / Adultos)</h4>", unsafe_allow_html=True)
             st.caption("Población de 11 años y más sin esquema previo (HB y/o Hexavalente antes de los 5 años)")
             
             col_hb1, col_hb2 = st.columns(2)
