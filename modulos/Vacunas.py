@@ -15,7 +15,7 @@ col_form1, col_form2 = st.columns([1, 1])
 with col_form1:
     fecha_nacimiento = st.date_input(
         "📅 Fecha de nacimiento:",
-        value=date(2023, 6, 15),
+        value=date(2010, 5, 20),
         min_value=date(1900, 1, 1),
         max_value=date.today(),
         format="DD/MM/YYYY",
@@ -134,11 +134,11 @@ tarjeta_html = f"""
 """
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# --- 6. ESQUEMA DE VACUNACIÓN (< 10 AÑOS) ---
+# --- 6. ESQUEMAS DE VACUNACIÓN CONDICIONALES ---
+
 if anios < 10:
-    st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
-    
-    tabla_vacunas_html = """
+    # --- ESQUEMA MENORES DE 10 AÑOS ---
+    tabla_pediatrica_html = """
     <style>
         .tabla-esquema {
             width: 100%;
@@ -149,7 +149,7 @@ if anios < 10:
         }
         .th-titulo {
             color: #A07248;
-            font-size: 1.6rem;
+            font-size: 1.55rem;
             font-weight: 800;
             text-align: center;
             padding-bottom: 12px;
@@ -191,13 +191,12 @@ if anios < 10:
             border-radius: 3px;
             color: #263238;
         }
-        /* Paleta réplica exacta */
+        /* Paleta Esquema <10 */
         .color-bcg { background-color: #D9D2E9; }
         .color-hepb { background-color: #F9CB9C; }
         .color-hexavalente { background-color: #CFE2F3; }
         .color-rotavirus { background-color: #D9EAD3; }
         .color-neumococo { background-color: #E7F3FE; }
-        .color-influenza { background-color: #FCE5CD; } /* o rosa tenue #FAD2E1 */
         .color-influenza-rosa { background-color: #FADCE9; }
         .color-srp { background-color: #FFF2CC; }
         .color-dpt { background-color: #E2E3E5; }
@@ -214,71 +213,59 @@ if anios < 10:
             </tr>
         </thead>
         <tbody>
-            <!-- Nacimiento -->
             <tr>
                 <td class="celda-edad">Nacimiento</td>
                 <td colspan="2" class="celda-vacuna color-bcg">BCG</td>
                 <td colspan="4" class="celda-vacuna color-hepb">Hepatitis B</td>
             </tr>
-            <!-- 2 meses -->
             <tr>
                 <td class="celda-edad">2 meses</td>
                 <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
                 <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
                 <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
             </tr>
-            <!-- 4 meses -->
             <tr>
                 <td class="celda-edad">4 meses</td>
                 <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
                 <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
                 <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
             </tr>
-            <!-- 6 meses -->
             <tr>
                 <td class="celda-edad">6 meses</td>
                 <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
                 <td colspan="4" class="celda-vacuna color-influenza-rosa">Influenza 1a dosis</td>
             </tr>
-            <!-- 7 meses -->
             <tr>
                 <td class="celda-edad">7 meses</td>
                 <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza 2a dosis</td>
             </tr>
-            <!-- 12 meses (1 año) -->
             <tr>
                 <td class="celda-edad">12 meses (1 año)</td>
                 <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)**</td>
                 <td colspan="3" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
             </tr>
-            <!-- 18 meses -->
             <tr>
                 <td class="celda-edad">18 meses</td>
                 <td colspan="3" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
                 <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
             </tr>
-            <!-- 24 meses (2 años) -->
             <tr>
                 <td class="celda-edad">24 meses (2 años)</td>
                 <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
             </tr>
-            <!-- 36 meses (3 años) -->
             <tr>
                 <td class="celda-edad">36 meses (3 años)</td>
                 <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
             </tr>
-            <!-- 48 meses (4 años) -->
             <tr>
                 <td class="celda-edad">48 meses (4 años)</td>
                 <td colspan="3" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
                 <td colspan="3" class="celda-vacuna color-dpt">DPT</td>
             </tr>
-            <!-- 59 meses (5 años) -->
             <tr>
                 <td class="celda-edad">59 meses (5 años)</td>
                 <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
             </tr>
-            <!-- 72 meses (6 años) -->
             <tr>
                 <td class="celda-edad">72 meses (6 años)</td>
                 <td colspan="6" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
@@ -286,7 +273,106 @@ if anios < 10:
         </tbody>
     </table>
     """
-    
-    st.markdown(tabla_vacunas_html, unsafe_allow_html=True)
+    st.markdown(tabla_pediatrica_html, unsafe_allow_html=True)
+
 else:
-    st.info("ℹ️ El paciente tiene 10 años o más. El esquema pediátrico menor de 10 años no aplica para este grupo de edad.")
+    # --- ESQUEMA 10 A 19 AÑOS Y ADULTOS (>= 10 AÑOS) ---
+    tabla_adultos_html = """
+    <style>
+        .tabla-adultos {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 4px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin-top: 10px;
+        }
+        .th-titulo-adulto {
+            color: #A07248;
+            font-size: 1.55rem;
+            font-weight: 800;
+            text-align: center;
+            padding-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+        .th-encabezado-adulto {
+            background-color: #555555;
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: 1.05rem;
+            text-align: center;
+            padding: 12px;
+            border-radius: 3px;
+        }
+        .celda-vacuna-adulto {
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-align: center;
+            padding: 12px 14px;
+            border-radius: 3px;
+            color: #212121;
+            width: 45%;
+        }
+        .celda-prevencion {
+            font-size: 0.95rem;
+            font-weight: 500;
+            text-align: center;
+            padding: 12px 14px;
+            border-radius: 3px;
+            color: #212121;
+            width: 55%;
+        }
+        /* Paleta Adultos réplica exacta */
+        .color-fila-td { background-color: #D2D4EA; }
+        .color-fila-sr { background-color: #F8E5DB; }
+        .color-fila-hepb { background-color: #F9CCA7; }
+        .color-fila-vph { background-color: #FEF9BE; }
+        .color-fila-tdpa { background-color: #DCEBD6; }
+        .color-fila-neumo { background-color: #DCECF9; }
+        .color-fila-influenza { background-color: #FAD6E6; }
+    </style>
+
+    <table class="tabla-adultos">
+        <thead>
+            <tr>
+                <th colspan="2" class="th-titulo-adulto">
+                    Esquema de vacunación para población de 10 a 19 años y adultos a partir de los 20 años
+                </th>
+            </tr>
+            <tr>
+                <th class="th-encabezado-adulto">Vacunas</th>
+                <th class="th-encabezado-adulto">Enfermedad que previene</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-td">Td</td>
+                <td class="celda-prevencion color-fila-td">Tétanos, difteria</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-sr">SR</td>
+                <td class="celda-prevencion color-fila-sr">Sarampión, rubéola</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-hepb">Anti hepatitis B</td>
+                <td class="celda-prevencion color-fila-hepb">Hepatitis B</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-vph">VPH</td>
+                <td class="celda-prevencion color-fila-vph">Infección por Virus del Papiloma Humano</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-tdpa">Tdpa</td>
+                <td class="celda-prevencion color-fila-tdpa">Tétanos, difteria, tos ferina</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-neumo">Anti neumocócica polisacárida 23 valente</td>
+                <td class="celda-prevencion color-fila-neumo">Infección por neumococo</td>
+            </tr>
+            <tr>
+                <td class="celda-vacuna-adulto color-fila-influenza">Anti influenza</td>
+                <td class="celda-prevencion color-fila-influenza">Influenza</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+    st.markdown(tabla_adultos_html, unsafe_allow_html=True)
