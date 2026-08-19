@@ -125,8 +125,8 @@ if anios < 10:
     C_NEUMO = "#E7F3FE"
     C_INFL = "#FADCE9"
     C_SRP = "#FFF2CC"
-    C_DPT = "#E2E3E5"
-    C_INACTIVO = "#EEEEEE"
+    C_DPT = "#B0BEC5"      # Gris azulado nítido para resaltar DPT activo
+    C_INACTIVO = "#F5F5F5"  # Gris neutro tenue inactivo
 
     # Evaluaciones clínicas por edad cumplida
     act_bcg = dias_vida >= 0
@@ -139,16 +139,13 @@ if anios < 10:
     act_m18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
     act_m24 = (total_meses >= 24) or (anios >= 2)
     act_m36 = (total_meses >= 36) or (anios >= 3)
-    
-    # DPT: Activa a partir de los 4 años y hasta los 6 años 11 meses 29 días (< 7 años)
     act_m48 = (total_meses >= 48) or (anios >= 4)
-    act_dpt = (4 <= anios <= 6) or (48 <= total_meses < 84)
-
     act_m59 = (total_meses >= 59) or (anios >= 5)
     act_m72 = (total_meses >= 72) or (anios >= 6)
 
-    # Color dinámico de DPT (48 meses)
-    bg_dpt_48 = C_DPT if (act_m48 or act_dpt) else C_INACTIVO
+    # Color dinámico de DPT (se ilumina si anios >= 4)
+    bg_dpt_48 = C_DPT if act_m48 else C_INACTIVO
+    txt_dpt_48 = "#212121" if act_m48 else "#9E9E9E"
 
     tabla_pediatrica_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -162,60 +159,60 @@ if anios < 10:
 <tbody>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">Nacimiento</td>
-<td colspan="2" style="background-color:{C_BCG if act_bcg else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">BCG</td>
-<td colspan="4" style="background-color:{C_HEPB if act_hepb else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Hepatitis B</td>
+<td colspan="2" style="background-color:{C_BCG if act_bcg else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_bcg else '#9E9E9E'};">BCG</td>
+<td colspan="4" style="background-color:{C_HEPB if act_hepb else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_hepb else '#9E9E9E'};">Hepatitis B</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">2 meses</td>
-<td colspan="2" style="background-color:{C_HEXA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Hexavalente acelular*</td>
-<td colspan="2" style="background-color:{C_ROTA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Rotavirus</td>
-<td colspan="2" style="background-color:{C_NEUMO if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Neumococo conjugada 13 valente</td>
+<td colspan="2" style="background-color:{C_HEXA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#9E9E9E'};">Hexavalente acelular*</td>
+<td colspan="2" style="background-color:{C_ROTA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#9E9E9E'};">Rotavirus</td>
+<td colspan="2" style="background-color:{C_NEUMO if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#9E9E9E'};">Neumococo conjugada 13 valente</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">4 meses</td>
-<td colspan="2" style="background-color:{C_HEXA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Hexavalente acelular*</td>
-<td colspan="2" style="background-color:{C_ROTA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Rotavirus</td>
-<td colspan="2" style="background-color:{C_NEUMO if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Neumococo conjugada 13 valente</td>
+<td colspan="2" style="background-color:{C_HEXA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#9E9E9E'};">Hexavalente acelular*</td>
+<td colspan="2" style="background-color:{C_ROTA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#9E9E9E'};">Rotavirus</td>
+<td colspan="2" style="background-color:{C_NEUMO if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#9E9E9E'};">Neumococo conjugada 13 valente</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">6 meses</td>
-<td colspan="2" style="background-color:{C_HEXA if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Hexavalente acelular*</td>
-<td colspan="4" style="background-color:{C_INFL if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza 1a dosis</td>
+<td colspan="2" style="background-color:{C_HEXA if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m6 else '#9E9E9E'};">Hexavalente acelular*</td>
+<td colspan="4" style="background-color:{C_INFL if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m6 else '#9E9E9E'};">Influenza 1a dosis</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">7 meses</td>
-<td colspan="6" style="background-color:{C_INFL if act_m7 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza 2a dosis</td>
+<td colspan="6" style="background-color:{C_INFL if act_m7 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m7 else '#9E9E9E'};">Influenza 2a dosis</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses (1 año)</td>
-<td colspan="3" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Triple viral (SRP)**</td>
-<td colspan="3" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Neumococo conjugada 13 valente</td>
+<td colspan="3" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#9E9E9E'};">Triple viral (SRP)**</td>
+<td colspan="3" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#9E9E9E'};">Neumococo conjugada 13 valente</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">18 meses</td>
-<td colspan="3" style="background-color:{C_HEXA if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Hexavalente acelular*</td>
-<td colspan="3" style="background-color:{C_SRP if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
+<td colspan="3" style="background-color:{C_HEXA if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18 else '#9E9E9E'};">Hexavalente acelular*</td>
+<td colspan="3" style="background-color:{C_SRP if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18 else '#9E9E9E'};">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">24 meses (2 años)</td>
-<td colspan="6" style="background-color:{C_INFL if act_m24 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza refuerzo anual</td>
+<td colspan="6" style="background-color:{C_INFL if act_m24 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m24 else '#9E9E9E'};">Influenza refuerzo anual</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">36 meses (3 años)</td>
-<td colspan="6" style="background-color:{C_INFL if act_m36 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza refuerzo anual</td>
+<td colspan="6" style="background-color:{C_INFL if act_m36 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m36 else '#9E9E9E'};">Influenza refuerzo anual</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">48 meses (4 años)</td>
-<td colspan="3" style="background-color:{C_INFL if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza refuerzo anual</td>
-<td colspan="3" style="background-color:{bg_dpt_48};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">DPT</td>
+<td colspan="3" style="background-color:{C_INFL if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m48 else '#9E9E9E'};">Influenza refuerzo anual</td>
+<td colspan="3" style="background-color:{bg_dpt_48};font-size:0.85rem;font-weight:700;text-align:center;padding:10px 8px;border-radius:3px;color:{txt_dpt_48};">DPT</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">59 meses (5 años)</td>
-<td colspan="6" style="background-color:{C_INFL if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Influenza refuerzo anual</td>
+<td colspan="6" style="background-color:{C_INFL if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m59 else '#9E9E9E'};">Influenza refuerzo anual</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">72 meses (6 años)</td>
-<td colspan="6" style="background-color:{C_SRP if act_m72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:#263238;">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
+<td colspan="6" style="background-color:{C_SRP if act_m72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m72 else '#9E9E9E'};">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
 </tr>
 </tbody>
 </table>
@@ -233,7 +230,7 @@ else:
     C_TDPA = "#DCEBD6"
     C_NEUMO_AD = "#DCECF9"
     C_INFL_AD = "#FAD6E6"
-    C_INACTIVO = "#EEEEEE"
+    C_INACTIVO = "#F5F5F5"
 
     es_adulto_mayor = (anios >= 60)
 
@@ -256,32 +253,32 @@ else:
 </thead>
 <tbody>
 <tr>
-<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Td</td>
-<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tétanos, difteria</td>
+<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_td else '#9E9E9E'};">Td</td>
+<td style="background-color:{C_TD if act_td else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_td else '#9E9E9E'};">Tétanos, difteria</td>
 </tr>
 <tr>
-<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">SR</td>
-<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Sarampión, rubéola</td>
+<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_sr else '#9E9E9E'};">SR</td>
+<td style="background-color:{C_SR if act_sr else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_sr else '#9E9E9E'};">Sarampión, rubéola</td>
 </tr>
 <tr>
-<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti hepatitis B</td>
-<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Hepatitis B</td>
+<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_hepb else '#9E9E9E'};">Anti hepatitis B</td>
+<td style="background-color:{C_HEPB_AD if act_hepb else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_hepb else '#9E9E9E'};">Hepatitis B</td>
 </tr>
 <tr>
-<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">VPH</td>
-<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Infección por Virus del Papiloma Humano</td>
+<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_vph else '#9E9E9E'};">VPH</td>
+<td style="background-color:{C_VPH if act_vph else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_vph else '#9E9E9E'};">Infección por Virus del Papiloma Humano</td>
 </tr>
 <tr>
-<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tdpa</td>
-<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Tétanos, difteria, tos ferina</td>
+<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_tdpa else '#9E9E9E'};">Tdpa</td>
+<td style="background-color:{C_TDPA if act_tdpa else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_tdpa else '#9E9E9E'};">Tétanos, difteria, tos ferina</td>
 </tr>
 <tr>
-<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti neumocócica polisacárida 23 valente</td>
-<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Infección por neumococo</td>
+<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Anti neumocócica polisacárida 23 valente</td>
+<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Infección por neumococo</td>
 </tr>
 <tr>
-<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#212121;">Anti influenza</td>
-<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#212121;">Influenza</td>
+<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_infl else '#9E9E9E'};">Anti influenza</td>
+<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_infl else '#9E9E9E'};">Influenza</td>
 </tr>
 </tbody>
 </table>
@@ -299,7 +296,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años (Excepcionalmente < 14 años)",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.1 mL intradérmica estricta en la región deltoidea del brazo derecho.",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Neumococo", "Hepatitis A", "Hepatitis B"],
         "cualquier_intervalo": ["SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -314,7 +310,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "Preferentemente no después de los 7 días de vida",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.5 mL (10 µg) intramuscular en el tercio medio de la cara anterolateral externa del muslo izquierdo.",
         "simultaneas": ["Rotavirus", "Neumococo", "BCG", "Hexavalente (en ausencia de monovalente)"],
         "cualquier_intervalo": [],
         "intervalo_especial": [],
@@ -329,7 +324,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR"],
         "intervalo_especial": [("Varicela", "4 semanas de separación")],
@@ -344,7 +338,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "7 meses 29 días",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "1.5 mL vía oral.",
         "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
         "cualquier_intervalo": ["BCG"],
         "intervalo_especial": [],
@@ -359,7 +352,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses de edad",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 a 8 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -374,7 +366,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años",
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR"],
         "intervalo_especial": [("Varicela", "4 semanas de separación")],
@@ -389,7 +380,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "7 meses 29 días",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "1.5 mL vía oral.",
         "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
         "cualquier_intervalo": ["BCG"],
         "intervalo_especial": [],
@@ -404,7 +394,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses de edad",
         "intervalo_rec": "8 meses",
         "intervalo_min": "8 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -419,7 +408,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años",
         "intervalo_rec": "12 semanas",
         "intervalo_min": "6 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR"],
         "intervalo_especial": [("Varicela", "4 semanas de separación")],
@@ -434,7 +422,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "4 semanas",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.25 mL intramuscular en tercio medio de la cara anterolateral externa del muslo izquierdo.",
         "simultaneas": ["Hexavalente", "Rotavirus", "Neumococo", "Hepatitis A", "COVID-19"],
         "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -449,7 +436,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.25 mL intramuscular en muslo izquierdo.",
         "simultaneas": ["Hexavalente", "Rotavirus", "Neumococo", "Hepatitis A", "COVID-19"],
         "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -464,7 +450,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "5 años (o a los 18 meses si nació post-2020)",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL subcutánea en el área deltoidea del brazo izquierdo.",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "BCG", "Hexavalente"],
         "cualquier_intervalo": [],
         "intervalo_especial": [("SR", "Intervalo de 4 semanas")],
@@ -479,7 +464,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses de edad",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo derecho.",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -494,7 +478,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "< 5 años",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.5 mL intramuscular en tercio medio de la cara anterolateral externa del muslo izquierdo o deltoides izquierdo.",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["BCG", "SRP", "SR"],
         "intervalo_especial": [("Varicela", "4 semanas de separación")],
@@ -509,7 +492,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.5 mL subcutánea en deltoides izquierdo.",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "BCG", "Hexavalente"],
         "cualquier_intervalo": [],
         "intervalo_especial": [("SR", "Intervalo de 4 semanas")],
@@ -524,7 +506,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.25 mL intramuscular en deltoides izquierdo.",
         "simultaneas": ["Neumococo", "Hepatitis A", "COVID-19"],
         "cualquier_intervalo": ["SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -539,7 +520,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en deltoides izquierdo.",
         "simultaneas": ["Neumococo", "Hepatitis A", "COVID-19"],
         "cualquier_intervalo": ["SRP", "SR", "Varicela"],
         "intervalo_especial": [],
@@ -554,7 +534,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en deltoides izquierdo.",
         "simultaneas": ["DPT", "Neumococo", "COVID-19"],
         "cualquier_intervalo": ["SRP", "SR"],
         "intervalo_especial": [],
@@ -569,7 +548,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "6 años, 11 meses y 29 días (< 7 años)",
         "intervalo_rec": "Posterior al esquema primario de Hexavalente",
         "intervalo_min": "6 semanas (posteriores a la 4ª dosis de Hexavalente)",
-        "tecnica_aplicacion": "Posterior a la aplicación del esquema primario con la vacuna hexavalente acelular, se aplica una dosis de 0.5 mL de la vacuna DPT, vía intramuscular en la región deltoidea o tricipital del brazo izquierdo, a los 4 años de edad. En aquellos casos en los que no se reciba a los 4 años, la edad de aplicación no debe sobrepasar los 6 años, 11 meses y 29 días.",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A"],
         "cualquier_intervalo": ["SRP", "SR"],
         "intervalo_especial": [],
@@ -584,7 +562,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
-        "tecnica_aplicacion": "0.5 mL intramuscular en deltoides izquierdo.",
         "simultaneas": ["COVID-19"],
         "cualquier_intervalo": ["SRP", "SR"],
         "intervalo_especial": [],
@@ -599,7 +576,6 @@ CATALOGO_PEDIATRICO = [
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
-        "tecnica_aplicacion": "0.5 mL subcutánea en deltoides izquierdo.",
         "simultaneas": ["Influenza", "COVID-19"],
         "cualquier_intervalo": [],
         "intervalo_especial": [("SR", "Intervalo de 4 semanas")],
@@ -616,7 +592,6 @@ if anios < 10:
     if dias_vida <= 28:
         hito_objetivo = 0
     elif anios in [4, 5]:
-        # A los 4 y 5 años muestra las vacunas correspondientes (incluyendo DPT e Influenza)
         hito_objetivo = 48 if anios == 4 else 59
     elif anios >= 6:
         hito_objetivo = 72
@@ -624,10 +599,9 @@ if anios < 10:
         hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
         hito_objetivo = hitos_pendientes[0] if hitos_pendientes else 72
 
-    # Obtener vacunas de la etapa seleccionada
     vacunas_a_mostrar = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
     
-    # Si el paciente tiene entre 4 y 6 años y DPT no está en la lista inmediata, se añade como biológico aplicable
+    # Mantener DPT en la lista si tiene entre 4 y 6 años cumplidos
     dpt_obj = next((v for v in CATALOGO_PEDIATRICO if "DPT" in v["nombre"]), None)
     if (4 <= anios <= 6) and dpt_obj and (dpt_obj not in vacunas_a_mostrar):
         vacunas_a_mostrar.append(dpt_obj)
@@ -646,9 +620,6 @@ if anios < 10:
                 st.markdown(f"<div style='text-align:right;'><span style='background-color:#ECEFF1;color:#37474F;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:600;'>Recomendada: {v['edad_rec_str']}</span></div>", unsafe_allow_html=True)
 
             st.write("")
-            
-            if "tecnica_aplicacion" in v:
-                st.markdown(f"**📌 Indicación y Vía de Aplicación:** {v['tecnica_aplicacion']}")
             
             c1, c2, c3, c4 = st.columns(4)
             with c1:
