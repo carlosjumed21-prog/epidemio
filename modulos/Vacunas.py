@@ -9,13 +9,13 @@ st.caption("Evaluación etaria y perfil de vacunación epidemiológica.")
 
 st.divider()
 
-# --- 1. ENTRADA DE DATOS DEL PACIENTE ---
+# --- 1. ENTRADA DE DATOS DEL PACIENTE (SIN VALORES POR DEFAULT) ---
 col_form1, col_form2 = st.columns([1, 1])
 
 with col_form1:
     fecha_nacimiento = st.date_input(
         "📅 Fecha de nacimiento:",
-        value=date(2025, 3, 1),
+        value=None,
         min_value=date(1900, 1, 1),
         max_value=date.today(),
         format="DD/MM/YYYY",
@@ -26,11 +26,17 @@ with col_form2:
     sexo = st.radio(
         "⚧ Sexo:",
         options=["Hombre", "Mujer"],
+        index=None,
         horizontal=True,
         help="Selecciona el sexo del paciente"
     )
 
-# --- 2. CÁLCULO DE EDAD EXACTA ---
+# --- 2. CONTROL DE INTERFAZ EN BLANCO ---
+if not fecha_nacimiento or not sexo:
+    st.info("👋 **Ingresa la fecha de nacimiento y selecciona el sexo** del paciente para calcular automáticamente el esquema y las recomendaciones de vacunación.")
+    st.stop()
+
+# --- 3. CÁLCULO DE EDAD EXACTA ---
 hoy = date.today()
 dias_vida = (hoy - fecha_nacimiento).days
 edad_delta = relativedelta(hoy, fecha_nacimiento)
@@ -42,7 +48,7 @@ dias = edad_delta.days
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
-# --- 3. CLASIFICACIÓN CLÍNICA ---
+# --- 4. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
     tipo_paciente = "Recién nacida (Neonata)" if es_mujer else "Recién nacido (Neonato)"
     subcategoria = f"{dias_vida} días de vida"
@@ -81,7 +87,7 @@ if es_mujer:
 else:
     color_fondo, color_borde, color_texto, badge_bg = "#E3F2FD", "#1976D2", "#0D47A1", "#1565C0"
 
-# --- 4. DISPLAY DE PERFIL ---
+# --- 5. DISPLAY DE PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
 tarjeta_html = (
@@ -101,7 +107,7 @@ tarjeta_html = (
 )
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# --- 5. ESQUEMA PEDIÁTRICO (< 10 AÑOS) ---
+# --- 6. ESQUEMAS VISUALES CONDICIONALES ---
 if anios < 10:
     st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
     
@@ -225,7 +231,7 @@ else:
 """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 6. CATÁLOGO TÉCNICO CUADRO 7.1 ---
+# --- 7. CATÁLOGO TÉCNICO CUADRO 7.1 ---
 CATALOGO_CUADRO_71 = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
@@ -523,7 +529,7 @@ CATALOGO_CUADRO_71 = [
     }
 ]
 
-# --- 7. PANEL INFERIOR: VACUNAS QUE CORRESPONDE CONTINUAR ---
+# --- 8. PANEL INFERIOR: VACUNAS QUE CORRESPONDE CONTINUAR ---
 st.divider()
 
 if anios < 10:
@@ -543,7 +549,6 @@ if anios < 10:
 
     for v in vacunas_a_mostrar:
         with st.container(border=True):
-            # Encabezado con color
             col_t1, col_t2 = st.columns([3, 1])
             with col_t1:
                 st.markdown(f"<h4 style='color:{v['color']};margin:0;'>{v['nombre']} — <span style='color:#37474F;font-weight:500;'>{v['dosis']}</span></h4>", unsafe_allow_html=True)
@@ -552,7 +557,6 @@ if anios < 10:
 
             st.write("")
             
-            # Grid de sugerencias técnicas
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
@@ -565,7 +569,6 @@ if anios < 10:
 
             st.divider()
             
-            # Badges de Compatibilidad y Coadministración
             st.markdown("**🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):**")
             
             badges_html = []
