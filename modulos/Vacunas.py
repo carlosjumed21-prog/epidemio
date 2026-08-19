@@ -75,6 +75,9 @@ dias = edad_delta.days
 
 total_meses = (anios * 12) + meses
 
+# Condición de cohorte SRP: Corte en julio de 2020
+es_nacido_pre_julio_2020 = (fecha_nacimiento < date(2020, 7, 1))
+
 # --- 4. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
     tipo_paciente = "Recién nacida (Neonata)" if es_mujer else "Recién nacido (Neonato)"
@@ -159,6 +162,7 @@ if anios < 10:
     C_HEPA = "#FFE0B2"
     C_INACTIVO = "#FBFBFB"
 
+    # Evaluaciones clínicas por edad cumplida
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
     act_m2 = (total_meses >= 2) or (dias_vida >= 60)
@@ -166,10 +170,20 @@ if anios < 10:
     act_m6 = (total_meses >= 6) or (dias_vida >= 180)
     act_m7 = (total_meses >= 7) or (dias_vida >= 210)
     act_m12 = (total_meses >= 12) or (anios >= 1)
-    act_m18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
     act_m48 = (total_meses >= 48) or (anios >= 4)
     act_m59 = (total_meses >= 59) or (anios >= 5)
-    act_m72 = (total_meses >= 72) or (anios >= 6)
+
+    # Condición SRP: Dependiente de la fecha de nacimiento (julio 2020)
+    if es_nacido_pre_julio_2020:
+        # Nacidos ANTES de julio 2020: 2da dosis a los 6 años
+        act_srp_18 = False
+        act_srp_72 = (total_meses >= 72) or (anios >= 6)
+    else:
+        # Nacidos A PARTIR de julio 2020: 2da dosis a los 18 meses
+        act_srp_18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
+        act_srp_72 = False
+
+    act_m18_general = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
 
     tabla_pediatrica_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
@@ -211,15 +225,15 @@ if anios < 10:
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses (1 año)</td>
-<td colspan="2" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">SRP</td>
+<td colspan="2" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">SRP (1ª dosis)</td>
 <td colspan="2" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti neumocócica conjugada</td>
 <td colspan="2" style="background-color:{C_VARI if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#4A148C' if act_m12 else '#BDBDBD'};">Anti varicela</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">18 meses</td>
-<td colspan="2" style="background-color:{C_HEXA if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18 else '#BDBDBD'};">Hexavalente acelular</td>
-<td colspan="2" style="background-color:{C_SRP if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18 else '#BDBDBD'};">SRP (2ª dosis)</td>
-<td colspan="2" style="background-color:{C_HEPA if act_m18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#E65100' if act_m18 else '#BDBDBD'};">Anti hepatitis A</td>
+<td colspan="2" style="background-color:{C_HEXA if act_m18_general else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18_general else '#BDBDBD'};">Hexavalente acelular</td>
+<td colspan="2" style="background-color:{C_SRP if act_srp_18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_srp_18 else '#BDBDBD'};">SRP (2ª dosis)</td>
+<td colspan="2" style="background-color:{C_HEPA if act_m18_general else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#E65100' if act_m18_general else '#BDBDBD'};">Anti hepatitis A</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">48 meses<br><span style="font-size:0.78rem;">(4 años)</span></td>
@@ -232,7 +246,7 @@ if anios < 10:
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">72 meses<br><span style="font-size:0.78rem;">(6 años)</span></td>
-<td colspan="6" style="background-color:{C_SRP if act_m72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m72 else '#BDBDBD'};">SRP (2ª dosis)</td>
+<td colspan="6" style="background-color:{C_SRP if act_srp_72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_srp_72 else '#BDBDBD'};">SRP (2ª dosis - Nacidos antes de julio 2020)</td>
 </tr>
 </tbody>
 </table>
@@ -248,7 +262,7 @@ else:
     C_HEPB_AD = "#F9CCA7"
     C_VPH = "#FEF9BE"
     C_TDPA = "#DCEBD6"
-    C_VSR = "#B2DFDB"        # Verde azulado/turquesa suave para VSR
+    C_VSR = "#B2DFDB"
     C_NEUMO_AD = "#DCECF9"
     C_INFL_AD = "#FAD6E6"
     C_INACTIVO = "#F5F5F5"
@@ -263,7 +277,6 @@ else:
     act_neumo = es_adulto_mayor
     act_infl = True
 
-    # Fila condicional de VSR si se filtra Embarazo
     fila_vsr_html = ""
     if esta_embarazada:
         fila_vsr_html = f"""
@@ -508,7 +521,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "12 meses (1 año)",
         "edad_min_str": "12 meses",
         "edad_max_str": "Menores de 10 años",
-        "intervalo_rec": "A los 18 meses",
+        "intervalo_rec": "A los 18 meses (nacidos pos-julio 2020) o 6 años",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "BCG", "Varicela"],
         "cualquier_intervalo": [],
@@ -559,7 +572,7 @@ CATALOGO_PEDIATRICO = [
     },
     {
         "nombre": "Triple Viral (SRP)",
-        "dosis": "2ª Dosis",
+        "dosis": "2ª Dosis (Nacidos a partir de julio 2020)",
         "hito_meses": 18,
         "edad_rec_str": "18 meses",
         "edad_min_str": "18 meses",
@@ -629,7 +642,7 @@ CATALOGO_PEDIATRICO = [
     },
     {
         "nombre": "Triple Viral (SRP)",
-        "dosis": "2ª Dosis (Nacidos antes de 2020 / Rezago)",
+        "dosis": "2ª Dosis (Nacidos antes de julio 2020)",
         "hito_meses": 72,
         "edad_rec_str": "72 meses (6 años)",
         "edad_min_str": "6 años",
@@ -661,8 +674,18 @@ if anios < 10:
         hitos_pendientes = [h for h in hitos_disponibles if h >= total_meses]
         hito_objetivo = hitos_pendientes[0] if hitos_pendientes else 72
 
-    vacunas_a_mostrar = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
+    # Filtrar catálogo base
+    candidatas = [v for v in CATALOGO_PEDIATRICO if v["hito_meses"] == hito_objetivo]
     
+    # Filtrar según la cohorte SRP
+    vacunas_a_mostrar = []
+    for v in candidatas:
+        if "SRP" in v["nombre"] and v["hito_meses"] == 18 and es_nacido_pre_julio_2020:
+            continue  # No mostrar SRP de 18m para nacidos antes de julio 2020
+        if "SRP" in v["nombre"] and v["hito_meses"] == 72 and not es_nacido_pre_julio_2020:
+            continue  # No mostrar SRP de 6 años para nacidos post-julio 2020
+        vacunas_a_mostrar.append(v)
+
     # Mantener DPT en la lista de revisión si el niño tiene entre 4 y 6 años
     dpt_obj = next((v for v in CATALOGO_PEDIATRICO if "DPT" in v["nombre"]), None)
     if (4 <= anios <= 6) and dpt_obj and (dpt_obj not in vacunas_a_mostrar):
