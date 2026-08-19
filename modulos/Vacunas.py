@@ -15,7 +15,7 @@ col_form1, col_form2 = st.columns([1, 1])
 with col_form1:
     fecha_nacimiento = st.date_input(
         "📅 Fecha de nacimiento:",
-        value=date(2010, 5, 20),
+        value=date(2025, 8, 1),
         min_value=date(1900, 1, 1),
         max_value=date.today(),
         format="DD/MM/YYYY",
@@ -30,7 +30,7 @@ with col_form2:
         help="Selecciona el sexo del paciente"
     )
 
-# --- 2. CÁLCULO DE EDAD ---
+# --- 2. CÁLCULO DE EDAD EXACTA ---
 hoy = date.today()
 dias_vida = (hoy - fecha_nacimiento).days
 edad_delta = relativedelta(hoy, fecha_nacimiento)
@@ -39,73 +39,55 @@ anios = edad_delta.years
 meses = edad_delta.months
 dias = edad_delta.days
 
+# Total de meses equivalentes para cálculos rápidos
+total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
-# --- 3. CONCORDANCIA DE GÉNERO Y CATEGORIZACIÓN ---
+# --- 3. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
     tipo_paciente = "Recién nacida (Neonata)" if es_mujer else "Recién nacido (Neonato)"
     subcategoria = f"{dias_vida} días de vida"
     icono = "👶"
-
 elif anios < 1:
     tipo_paciente = "Lactante menor"
     subcategoria = f"{meses} meses, {dias} días"
     icono = "🍼"
-
 elif anios < 2:
     tipo_paciente = "Lactante mayor"
     subcategoria = f"1 año, {meses} meses"
     icono = "🍼"
-
 elif 2 <= anios <= 5:
     tipo_paciente = "Preescolar"
     subcategoria = f"{anios} años, {meses} meses"
     icono = "🧸"
-
 elif 6 <= anios <= 11:
     tipo_paciente = "Escolar (Niña)" if es_mujer else "Escolar (Niño)"
     subcategoria = f"{anios} años, {meses} meses"
     icono = "👧" if es_mujer else "👦"
-
 elif 12 <= anios < 18:
     tipo_paciente = "Adolescente"
     subcategoria = f"{anios} años, {meses} meses"
     icono = "👧" if es_mujer else "👦"
-
 elif 18 <= anios < 60:
     tipo_paciente = "Mujer adulta" if es_mujer else "Hombre adulto"
     subcategoria = f"{anios} años cumplidos"
     icono = "👩" if es_mujer else "👨"
-
-else:  # anios >= 60
+else:
     tipo_paciente = "Adulta mayor" if es_mujer else "Adulto mayor"
     subcategoria = f"{anios} años cumplidos"
     icono = "👵" if es_mujer else "👴"
 
-# --- 4. PALETA DE COLOR SEGÚN GÉNERO ---
+# Paleta de Perfil
 if es_mujer:
-    color_fondo = "#FCE4EC"
-    color_borde = "#D81B60"
-    color_texto = "#880E4F"
-    badge_bg = "#E91E63"
+    color_fondo, color_borde, color_texto, badge_bg = "#FCE4EC", "#D81B60", "#880E4F", "#E91E63"
 else:
-    color_fondo = "#E3F2FD"
-    color_borde = "#1976D2"
-    color_texto = "#0D47A1"
-    badge_bg = "#1565C0"
+    color_fondo, color_borde, color_texto, badge_bg = "#E3F2FD", "#1976D2", "#0D47A1", "#1565C0"
 
-# --- 5. DISPLAY VISUAL DEL PERFIL ---
+# --- 4. DISPLAY DE PERFIL ---
 st.markdown("### 🏷️ Perfil Detectado")
 
 tarjeta_html = f"""
-<div style="
-    background-color: {color_fondo};
-    border-left: 8px solid {color_borde};
-    border-radius: 8px;
-    padding: 16px 20px;
-    margin-top: 10px;
-    margin-bottom: 25px;
-">
+<div style="background-color: {color_fondo}; border-left: 8px solid {color_borde}; border-radius: 8px; padding: 16px 20px; margin-top: 10px; margin-bottom: 25px;">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
             <span style="font-size: 1.45rem; font-weight: 700; color: {color_texto};">
@@ -117,16 +99,7 @@ tarjeta_html = f"""
                 <strong>Edad calculada:</strong> {subcategoria}
             </div>
         </div>
-        <div style="
-            background-color: {badge_bg};
-            color: #FFFFFF;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        ">
+        <div style="background-color: {badge_bg}; color: #FFFFFF; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
             {dias_vida} días de vida
         </div>
     </div>
@@ -134,38 +107,86 @@ tarjeta_html = f"""
 """
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# --- 6. ESQUEMAS DE VACUNACIÓN CONDICIONALES ---
-
+# --- 5. LÓGICA DE COLORACIÓN DE VACUNAS (< 10 AÑOS) ---
 if anios < 10:
-    # --- ESQUEMA MENORES DE 10 AÑOS ---
-    tabla_pediatrica_html = """
+    st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
+    
+    # Paleta de colores oficial activa
+    C_BCG = "#D9D2E9"
+    C_HEPB = "#F9CB9C"
+    C_HEXA = "#CFE2F3"
+    C_ROTA = "#D9EAD3"
+    C_NEUMO = "#E7F3FE"
+    C_INFL = "#FADCE9"
+    C_SRP = "#FFF2CC"
+    C_DPT = "#E2E3E5"
+    C_INACTIVO = "#EEEEEE" # Celda atenuada cuando no corresponde por edad
+
+    # Evaluar si corresponde por edad (meses o días cumplidos)
+    act_bcg = dias_vida >= 0
+    act_hepb = dias_vida >= 0
+    act_m2 = total_meses >= 2
+    act_m4 = total_meses >= 4
+    act_m6 = total_meses >= 6
+    act_m7 = total_meses >= 7
+    act_m12 = total_meses >= 12
+    act_m18 = total_meses >= 18
+    act_m24 = total_meses >= 24
+    act_m36 = total_meses >= 36
+    act_m48 = total_meses >= 48
+    act_m59 = total_meses >= 59
+    act_m72 = total_meses >= 72
+
+    # Asignación de colores dinámicos
+    bg_bcg = C_BCG if act_bcg else C_INACTIVO
+    bg_hepb = C_HEPB if act_hepb else C_INACTIVO
+    bg_hex_2 = C_HEXA if act_m2 else C_INACTIVO
+    bg_rot_2 = C_ROTA if act_m2 else C_INACTIVO
+    bg_neu_2 = C_NEUMO if act_m2 else C_INACTIVO
+    bg_hex_4 = C_HEXA if act_m4 else C_INACTIVO
+    bg_rot_4 = C_ROTA if act_m4 else C_INACTIVO
+    bg_neu_4 = C_NEUMO if act_m4 else C_INACTIVO
+    bg_hex_6 = C_HEXA if act_m6 else C_INACTIVO
+    bg_inf_6 = C_INFL if act_m6 else C_INACTIVO
+    bg_inf_7 = C_INFL if act_m7 else C_INACTIVO
+    bg_srp_12 = C_SRP if act_m12 else C_INACTIVO
+    bg_neu_12 = C_NEUMO if act_m12 else C_INACTIVO
+    bg_hex_18 = C_HEXA if act_m18 else C_INACTIVO
+    bg_srp_18 = C_SRP if act_m18 else C_INACTIVO
+    bg_inf_24 = C_INFL if act_m24 else C_INACTIVO
+    bg_inf_36 = C_INFL if act_m36 else C_INACTIVO
+    bg_inf_48 = C_INFL if act_m48 else C_INACTIVO
+    bg_dpt_48 = C_DPT if act_m48 else C_INACTIVO
+    bg_inf_59 = C_INFL if act_m59 else C_INACTIVO
+    bg_srp_72 = C_SRP if act_m72 else C_INACTIVO
+
+    tabla_pediatrica_html = f"""
     <style>
-        .tabla-esquema {
+        .tabla-esquema {{
             width: 100%;
             border-collapse: separate;
             border-spacing: 4px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin-top: 10px;
-        }
-        .th-titulo {
+        }}
+        .th-titulo {{
             color: #A07248;
             font-size: 1.55rem;
             font-weight: 800;
             text-align: center;
             padding-bottom: 12px;
-            letter-spacing: -0.5px;
-        }
-        .th-col-edad {
+        }}
+        .th-col-edad {{
             background-color: #555555;
             color: #FFFFFF;
             font-weight: 700;
             font-size: 0.95rem;
             text-align: center;
             padding: 10px;
-            width: 16%;
+            width: 18%;
             border-radius: 3px;
-        }
-        .th-col-vacunas {
+        }}
+        .th-col-vacunas {{
             background-color: #555555;
             color: #FFFFFF;
             font-weight: 700;
@@ -173,8 +194,8 @@ if anios < 10:
             text-align: center;
             padding: 10px;
             border-radius: 3px;
-        }
-        .celda-edad {
+        }}
+        .celda-edad {{
             background-color: #555555;
             color: #FFFFFF;
             font-weight: 700;
@@ -182,24 +203,16 @@ if anios < 10:
             text-align: center;
             padding: 10px 6px;
             border-radius: 3px;
-        }
-        .celda-vacuna {
+        }}
+        .celda-vacuna {{
             font-size: 0.85rem;
             font-weight: 600;
             text-align: center;
             padding: 10px 8px;
             border-radius: 3px;
             color: #263238;
-        }
-        /* Paleta Esquema <10 */
-        .color-bcg { background-color: #D9D2E9; }
-        .color-hepb { background-color: #F9CB9C; }
-        .color-hexavalente { background-color: #CFE2F3; }
-        .color-rotavirus { background-color: #D9EAD3; }
-        .color-neumococo { background-color: #E7F3FE; }
-        .color-influenza-rosa { background-color: #FADCE9; }
-        .color-srp { background-color: #FFF2CC; }
-        .color-dpt { background-color: #E2E3E5; }
+            transition: all 0.3s ease;
+        }}
     </style>
 
     <table class="tabla-esquema">
@@ -215,60 +228,60 @@ if anios < 10:
         <tbody>
             <tr>
                 <td class="celda-edad">Nacimiento</td>
-                <td colspan="2" class="celda-vacuna color-bcg">BCG</td>
-                <td colspan="4" class="celda-vacuna color-hepb">Hepatitis B</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_bcg};">BCG</td>
+                <td colspan="4" class="celda-vacuna" style="background-color: {bg_hepb};">Hepatitis B</td>
             </tr>
             <tr>
                 <td class="celda-edad">2 meses</td>
-                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
-                <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
-                <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_hex_2};">Hexavalente acelular*</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_rot_2};">Rotavirus</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_neu_2};">Neumococo conjugada 13 valente</td>
             </tr>
             <tr>
                 <td class="celda-edad">4 meses</td>
-                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
-                <td colspan="2" class="celda-vacuna color-rotavirus">Rotavirus</td>
-                <td colspan="2" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_hex_4};">Hexavalente acelular*</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_rot_4};">Rotavirus</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_neu_4};">Neumococo conjugada 13 valente</td>
             </tr>
             <tr>
                 <td class="celda-edad">6 meses</td>
-                <td colspan="2" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
-                <td colspan="4" class="celda-vacuna color-influenza-rosa">Influenza 1a dosis</td>
+                <td colspan="2" class="celda-vacuna" style="background-color: {bg_hex_6};">Hexavalente acelular*</td>
+                <td colspan="4" class="celda-vacuna" style="background-color: {bg_inf_6};">Influenza 1a dosis</td>
             </tr>
             <tr>
                 <td class="celda-edad">7 meses</td>
-                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza 2a dosis</td>
+                <td colspan="6" class="celda-vacuna" style="background-color: {bg_inf_7};">Influenza 2a dosis</td>
             </tr>
             <tr>
                 <td class="celda-edad">12 meses (1 año)</td>
-                <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)**</td>
-                <td colspan="3" class="celda-vacuna color-neumococo">Neumococo conjugada 13 valente</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_srp_12};">Triple viral (SRP)**</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_neu_12};">Neumococo conjugada 13 valente</td>
             </tr>
             <tr>
                 <td class="celda-edad">18 meses</td>
-                <td colspan="3" class="celda-vacuna color-hexavalente">Hexavalente acelular*</td>
-                <td colspan="3" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_hex_18};">Hexavalente acelular*</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_srp_18};">Triple viral (SRP)** 2a dosis (Nacidos después de 2020)</td>
             </tr>
             <tr>
                 <td class="celda-edad">24 meses (2 años)</td>
-                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+                <td colspan="6" class="celda-vacuna" style="background-color: {bg_inf_24};">Influenza refuerzo anual</td>
             </tr>
             <tr>
                 <td class="celda-edad">36 meses (3 años)</td>
-                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+                <td colspan="6" class="celda-vacuna" style="background-color: {bg_inf_36};">Influenza refuerzo anual</td>
             </tr>
             <tr>
                 <td class="celda-edad">48 meses (4 años)</td>
-                <td colspan="3" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
-                <td colspan="3" class="celda-vacuna color-dpt">DPT</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_inf_48};">Influenza refuerzo anual</td>
+                <td colspan="3" class="celda-vacuna" style="background-color: {bg_dpt_48};">DPT</td>
             </tr>
             <tr>
                 <td class="celda-edad">59 meses (5 años)</td>
-                <td colspan="6" class="celda-vacuna color-influenza-rosa">Influenza refuerzo anual</td>
+                <td colspan="6" class="celda-vacuna" style="background-color: {bg_inf_59};">Influenza refuerzo anual</td>
             </tr>
             <tr>
                 <td class="celda-edad">72 meses (6 años)</td>
-                <td colspan="6" class="celda-vacuna color-srp">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
+                <td colspan="6" class="celda-vacuna" style="background-color: {bg_srp_72};">Triple viral (SRP)** 2a dosis (Nacidos antes de 2020)</td>
             </tr>
         </tbody>
     </table>
@@ -276,7 +289,7 @@ if anios < 10:
     st.markdown(tabla_pediatrica_html, unsafe_allow_html=True)
 
 else:
-    # --- ESQUEMA 10 A 19 AÑOS Y ADULTOS (>= 10 AÑOS) ---
+    # --- ESQUEMA >= 10 AÑOS ---
     tabla_adultos_html = """
     <style>
         .tabla-adultos {
@@ -292,7 +305,6 @@ else:
             font-weight: 800;
             text-align: center;
             padding-bottom: 12px;
-            letter-spacing: -0.5px;
         }
         .th-encabezado-adulto {
             background-color: #555555;
@@ -321,7 +333,6 @@ else:
             color: #212121;
             width: 55%;
         }
-        /* Paleta Adultos réplica exacta */
         .color-fila-td { background-color: #D2D4EA; }
         .color-fila-sr { background-color: #F8E5DB; }
         .color-fila-hepb { background-color: #F9CCA7; }
