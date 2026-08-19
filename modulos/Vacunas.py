@@ -118,19 +118,18 @@ st.markdown(tarjeta_html, unsafe_allow_html=True)
 if anios < 10:
     st.markdown("### 📋 Esquema Oficial de Vacunación (< 10 años)")
     
-    # Paleta de colores oficiales (sin grises para DPT)
     C_BCG = "#D9D2E9"
     C_HEPB = "#F9CB9C"
     C_HEXA = "#CFE2F3"
     C_ROTA = "#D9EAD3"
     C_NEUMO = "#E7F3FE"
     C_INFL = "#FADCE9"
-    C_COVID = "#C8E6C9"      # Verde menta suave para COVID-19
+    C_COVID = "#C8E6C9"
     C_SRP = "#FFF2CC"
-    C_DPT = "#FFE082"        # Ámbar/Mostaza cálido
-    C_VARI = "#E1BEE7"       # Lila suave para Varicela
-    C_HEPA = "#FFE0B2"       # Naranja pastel para Hepatitis A
-    C_INACTIVO = "#FBFBFB"   # Fondo neutro tenue inactivo
+    C_DPT = "#FFE082"        # Ámbar cálido sin grises
+    C_VARI = "#E1BEE7"
+    C_HEPA = "#FFE0B2"
+    C_INACTIVO = "#FBFBFB"
 
     # Evaluaciones clínicas por edad cumplida
     act_bcg = dias_vida >= 0
@@ -141,8 +140,6 @@ if anios < 10:
     act_m7 = (total_meses >= 7) or (dias_vida >= 210)
     act_m12 = (total_meses >= 12) or (anios >= 1)
     act_m18 = (total_meses >= 18) or (anios >= 2) or (anios == 1 and meses >= 6)
-    act_m24 = (total_meses >= 24) or (anios >= 2)
-    act_m36 = (total_meses >= 36) or (anios >= 3)
     act_m48 = (total_meses >= 48) or (anios >= 4)
     act_m59 = (total_meses >= 59) or (anios >= 5)
     act_m72 = (total_meses >= 72) or (anios >= 6)
@@ -150,7 +147,7 @@ if anios < 10:
     tabla_pediatrica_html = f"""
 <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-top:10px;">
 <thead>
-<tr><th colspan="7" style="color:#881337;background-color:#FCE4EC;font-size:1.45rem;font-weight:800;text-align:center;padding:12px;border-radius:4px;">Cuadro 6. Esquema de vacunación para niñas y niños de 0 a 9 años de edad</th></tr>
+<tr><th colspan="7" style="color:#881337;background-color:#FCE4EC;font-size:1.45rem;font-weight:800;text-align:center;padding:12px;border-radius:4px;">Esquema de vacunación para niñas y niños de 0 a 9 años de edad</th></tr>
 <tr>
 <th style="background-color:#795548;color:#FFF;font-weight:700;font-size:0.95rem;text-align:center;padding:10px;width:18%;border-radius:3px;">Edad</th>
 <th colspan="6" style="background-color:#795548;color:#FFF;font-weight:700;font-size:0.95rem;text-align:center;padding:10px;border-radius:3px;">Vacunas a aplicar</th>
@@ -182,11 +179,11 @@ if anios < 10:
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">7 meses</td>
-<td colspan="3" style="background-color:{C_INFL if act_m7 else C_INACTIVO};font-size:0.8rem;font-weight:600;text-align:center;padding:8px 6px;border-radius:3px;color:{'#263238' if act_m7 else '#BDBDBD'};">Anti influenza estacional (2ª dosis) en la misma temporada invernal, luego dosis anual hasta los 59 meses</td>
-<td colspan="3" style="background-color:{C_COVID if act_m7 else C_INACTIVO};font-size:0.8rem;font-weight:600;text-align:center;padding:8px 6px;border-radius:3px;color:{'#1B5E20' if act_m7 else '#BDBDBD'};">Anti COVID-19 (2ª dosis) en la misma temporada invernal, luego dosis anual hasta los 59 meses</td>
+<td colspan="3" style="background-color:{C_INFL if act_m7 else C_INACTIVO};font-size:0.8rem;font-weight:600;text-align:center;padding:8px 6px;border-radius:3px;color:{'#263238' if act_m7 else '#BDBDBD'};">Anti influenza estacional (2ª dosis) en la misma temporada invernal, luego refuerzo anual</td>
+<td colspan="3" style="background-color:{C_COVID if act_m7 else C_INACTIVO};font-size:0.8rem;font-weight:600;text-align:center;padding:8px 6px;border-radius:3px;color:{'#1B5E20' if act_m7 else '#BDBDBD'};">Anti COVID-19 (2ª dosis) en la misma temporada invernal, luego refuerzo anual</td>
 </tr>
 <tr>
-<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses</td>
+<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses (1 año)</td>
 <td colspan="2" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">SRP</td>
 <td colspan="2" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti neumocócica conjugada</td>
 <td colspan="2" style="background-color:{C_VARI if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#4A148C' if act_m12 else '#BDBDBD'};">Anti varicela</td>
@@ -202,12 +199,12 @@ if anios < 10:
 <td colspan="6" style="background-color:{C_DPT if act_m48 else C_INACTIVO};font-size:0.95rem;font-weight:700;text-align:center;padding:12px 8px;border-radius:3px;color:{'#5D4037' if act_m48 else '#BDBDBD'};">DPT (refuerzo)</td>
 </tr>
 <tr>
-<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">A partir de los 5 años</td>
-<td colspan="3" style="background-color:{C_INFL if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m59 else '#BDBDBD'};">Anti influenza estacional</td>
-<td colspan="3" style="background-color:{C_COVID if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#1B5E20' if act_m59 else '#BDBDBD'};">Anti COVID-19</td>
+<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">59 meses<br><span style="font-size:0.78rem;">(5 años)</span></td>
+<td colspan="3" style="background-color:{C_INFL if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m59 else '#BDBDBD'};">Anti influenza estacional (refuerzo anual)</td>
+<td colspan="3" style="background-color:{C_COVID if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#1B5E20' if act_m59 else '#BDBDBD'};">Anti COVID-19 (refuerzo anual)</td>
 </tr>
 <tr>
-<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">(6 años)</td>
+<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">72 meses<br><span style="font-size:0.78rem;">(6 años)</span></td>
 <td colspan="6" style="background-color:{C_SRP if act_m72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m72 else '#BDBDBD'};">SRP (2ª dosis)</td>
 </tr>
 </tbody>
@@ -565,11 +562,11 @@ CATALOGO_PEDIATRICO = [
     },
     {
         "nombre": "Anti Influenza Estacional",
-        "dosis": "Refuerzo Anual (A partir de los 5 años)",
+        "dosis": "Refuerzo anual",
         "hito_meses": 59,
-        "edad_rec_str": "A partir de los 5 años (59 meses)",
+        "edad_rec_str": "59 meses (5 años)",
         "edad_min_str": "5 años",
-        "edad_max_str": "59 meses / escolar",
+        "edad_max_str": "Escolar (< 10 años)",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
         "simultaneas": ["COVID-19"],
@@ -579,11 +576,11 @@ CATALOGO_PEDIATRICO = [
     },
     {
         "nombre": "Anti COVID-19",
-        "dosis": "Refuerzo Anual (A partir de los 5 años)",
+        "dosis": "Refuerzo anual",
         "hito_meses": 59,
-        "edad_rec_str": "A partir de los 5 años (59 meses)",
+        "edad_rec_str": "59 meses (5 años)",
         "edad_min_str": "5 años",
-        "edad_max_str": "59 meses / escolar",
+        "edad_max_str": "Escolar (< 10 años)",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza"],
@@ -595,7 +592,7 @@ CATALOGO_PEDIATRICO = [
         "nombre": "Triple Viral (SRP)",
         "dosis": "2ª Dosis (Nacidos antes de 2020 / Rezago)",
         "hito_meses": 72,
-        "edad_rec_str": "6 años (72 meses)",
+        "edad_rec_str": "72 meses (6 años)",
         "edad_min_str": "6 años",
         "edad_max_str": "Menores de 10 años",
         "intervalo_rec": "No Aplica",
