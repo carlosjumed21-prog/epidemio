@@ -344,7 +344,7 @@ else:
 """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 8. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) CON EVALUACIÓN DE EDAD MÁXIMA ---
+# --- 8. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) ---
 CATALOGO_PEDIATRICO = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
@@ -365,10 +365,10 @@ CATALOGO_PEDIATRICO = [
         "nombre": "Anti Hepatitis B",
         "dosis": "Dosis al nacimiento",
         "hito_meses": 0,
-        "edad_rec_str": "Al nacer o a los 7 días de vida",
+        "edad_rec_str": "Al nacer o dentro de los primeros días de vida",
         "edad_min_str": "Al nacer",
-        "edad_max_str": "Preferentemente no después de los 7 días de vida",
-        "es_candidato": lambda a, m, d, tm: (dias_vida <= 7),
+        "edad_max_str": "< 30 días de vida (monovalente antes de esquema hexavalente)",
+        "es_candidato": lambda a, m, d, tm: (dias_vida <= 30),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Rotavirus", "Neumococo", "BCG", "Hexavalente (en ausencia de monovalente)"],
@@ -810,59 +810,49 @@ if anios < 10:
     st.caption(f"Evaluación de candidatura y compatibilidades para la edad actual calculada ({edad_texto_grande}):")
 
     for v in vacunas_a_mostrar:
-        # Evaluación de candidatura según edad actual
         es_apto = v["es_candidato"](anios, meses, dias, total_meses)
         
-        # Estilos según estatus de edad máxima
-        if es_apto:
-            borde_tarjeta = "1px solid #CFD8DC"
-            fondo_tarjeta = "#FFFFFF"
-            status_badge = "<span style='background-color:#E8F5E9;color:#2E7D32;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>✅ CANDIDATO VIGENTE</span>"
-            advertencia_html = ""
-        else:
-            borde_tarjeta = "2px solid #EF5350"
-            fondo_tarjeta = "#FFEBEE"
-            status_badge = "<span style='background-color:#D32F2F;color:#FFFFFF;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>⛔ NO RECOMENDADA / FUERA DE RANGO</span>"
-            advertencia_html = f"""
-            <div style="background-color:#FFCDD2;color:#B71C1C;border-left:5px solid #D32F2F;padding:8px 12px;border-radius:4px;font-size:0.85rem;font-weight:600;margin-top:10px;margin-bottom:10px;">
-            ⚠️ <strong>Alerta epidemiológica:</strong> La edad actual del paciente ({edad_texto_grande}) <strong>sobrepasa la edad máxima permitida</strong> ({v['edad_max_str']}). No se recomienda su aplicación en este momento.
-            </div>
-            """
+        with st.container(border=True):
+            col_t1, col_t2 = st.columns([3, 2])
+            with col_t1:
+                st.markdown(f"<h4 style='color:{v['color']};margin:0;'>{v['nombre']} — <span style='color:#37474F;font-weight:500;'>{v['dosis']}</span></h4>", unsafe_allow_html=True)
+            with col_t2:
+                if es_apto:
+                    badge_status_html = "<span style='background-color:#E8F5E9;color:#2E7D32;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>✅ CANDIDATO VIGENTE</span>"
+                else:
+                    badge_status_html = "<span style='background-color:#D32F2F;color:#FFFFFF;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>⛔ FUERA DE RANGO</span>"
+                
+                badge_rec_html = f"<span style='background-color:#ECEFF1;color:#37474F;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:600;'>Recomendada: {v['edad_rec_str']}</span>"
+                st.markdown(f"<div style='text-align:right;'>{badge_status_html} &nbsp; {badge_rec_html}</div>", unsafe_allow_html=True)
 
-        contenedor_html = f"""
-        <div style="background-color:{fondo_tarjeta};border:{borde_tarjeta};border-radius:8px;padding:16px;margin-bottom:15px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                <h4 style="color:{v['color']};margin:0;font-size:1.15rem;">{v['nombre']} — <span style="color:#37474F;font-weight:500;">{v['dosis']}</span></h4>
-                <div>{status_badge} &nbsp;<span style="background-color:#ECEFF1;color:#37474F;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:600;">Recomendada: {v['edad_rec_str']}</span></div>
-            </div>
-            {advertencia_html}
-        """
-        st.markdown(contenedor_html, unsafe_allow_html=True)
-        
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"**🔸 Edad máxima permitida:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"**⏱️ Intervalo recomendado:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
-        with c4:
-            st.markdown(f"**⚠️ Intervalo mínimo:**<br><span style='color:#E65100;font-weight:600;'>{v['intervalo_min']}</span>", unsafe_allow_html=True)
+            if not es_apto:
+                st.error(f"⚠️ **Alerta epidemiológica:** La edad actual del paciente ({edad_texto_grande}) sobrepasa la **edad máxima permitida** ({v['edad_max_str']}). No se recomienda su aplicación en este momento.")
 
-        st.divider()
-        
-        st.markdown("**🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):**")
-        
-        badges_html = []
-        for sim in v["simultaneas"]:
-            badges_html.append(f"<span style='background-color:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>💉 {sim}</span>")
-        for ci in v["cualquier_intervalo"]:
-            badges_html.append(f"<span style='background-color:#E0F2F1;color:#004D40;border:1px solid #80CBC4;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⏱️ {ci} (Cualquier intervalo)</span>")
-        for ie in v["intervalo_especial"]:
-            badges_html.append(f"<span style='background-color:#FFF3E0;color:#BF360C;border:1px solid #FFCC80;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⚠️ {ie[0]}: {ie[1]}</span>")
-        
-        st.markdown("".join(badges_html), unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.write("")
+            
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"**🔸 Edad máxima permitida:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"**⏱️ Intervalo recomendado:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
+            with c4:
+                st.markdown(f"**⚠️ Intervalo mínimo:**<br><span style='color:#E65100;font-weight:600;'>{v['intervalo_min']}</span>", unsafe_allow_html=True)
+
+            st.divider()
+            
+            st.markdown("**🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):**")
+            
+            badges_html = []
+            for sim in v["simultaneas"]:
+                badges_html.append(f"<span style='background-color:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>💉 {sim}</span>")
+            for ci in v["cualquier_intervalo"]:
+                badges_html.append(f"<span style='background-color:#E0F2F1;color:#004D40;border:1px solid #80CBC4;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⏱️ {ci} (Cualquier intervalo)</span>")
+            for ie in v["intervalo_especial"]:
+                badges_html.append(f"<span style='background-color:#FFF3E0;color:#BF360C;border:1px solid #FFCC80;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⚠️ {ie[0]}: {ie[1]}</span>")
+            
+            st.markdown("".join(badges_html), unsafe_allow_html=True)
 
 elif esta_embarazada:
     # --- PANEL EXCLUSIVO PARA EMBARAZO ---
@@ -991,7 +981,7 @@ elif es_adulto_mayor:
 
 else:
     # --- PANEL PARA POBLACIÓN GENERAL 10 A 59 AÑOS ---
-    st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos")
+    st.subheader("🎯 Biológicos indicados y Criterios Clínicos")
     st.caption(f"Recomendaciones normativas, grupos blanco, dosificación y compatibilidades ({edad_texto_grande}):")
 
     # 1. Anti Hepatitis B (>10 años)
