@@ -48,27 +48,16 @@ dias = edad_delta.days
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
-# Construcción de la etiqueta exacta de edad (Años, Meses, Días)
-partes_edad = []
+# Construcción de la etiqueta destacada en grande
+partes_grandes = []
 if anios > 0:
-    partes_edad.append(f"{anios} a" if anios != 1 else "1 a")
+    partes_grandes.append(f"{anios} año{'s' if anios != 1 else ''}")
 if meses > 0:
-    partes_edad.append(f"{meses} m" if meses != 1 else "1 m")
-if dias > 0 or len(partes_edad) == 0:
-    partes_edad.append(f"{dias} d" if dias != 1 else "1 d")
+    partes_grandes.append(f"{meses} mes{'es' if meses != 1 else ''}")
+if dias > 0 or len(partes_grandes) == 0:
+    partes_grandes.append(f"{dias} día{'s' if dias != 1 else ''}")
 
-edad_badge_str = " ".join(partes_edad)
-
-# Desglose en texto completo para subtítulo
-partes_completas = []
-if anios > 0:
-    partes_completas.append(f"{anios} año{'s' if anios != 1 else ''}")
-if meses > 0:
-    partes_completas.append(f"{meses} mes{'es' if meses != 1 else ''}")
-if dias > 0 or len(partes_completas) == 0:
-    partes_completas.append(f"{dias} día{'s' if dias != 1 else ''}")
-
-subcategoria = ", ".join(partes_completas)
+edad_texto_grande = " / ".join(partes_grandes)
 
 # Condición de cohorte SRP: Corte en julio de 2020
 es_nacido_pre_julio_2020 = (fecha_nacimiento < date(2020, 7, 1))
@@ -128,7 +117,7 @@ else:  # anios >= 60
     icono = "👵" if es_mujer else "👴"
 
 if es_mujer:
-    color_fondo, color_borde, color_texto, badge_bg = "#FCE4EC", "#D81B60", "#880E4F", "#E91E63"
+    color_fondo, color_borde, color_texto, badge_bg = "#FCE4EC", "#D81B60", "#880E4F", "#C2185B"
 else:
     color_fondo, color_borde, color_texto, badge_bg = "#E3F2FD", "#1976D2", "#0D47A1", "#1565C0"
 
@@ -145,15 +134,15 @@ extra_info = " &nbsp;|&nbsp; " + " &nbsp;|&nbsp; ".join(condiciones_tags) if con
 
 tarjeta_html = (
     f'<div style="background-color:{color_fondo};border-left:8px solid {color_borde};border-radius:8px;padding:16px 20px;margin-top:10px;margin-bottom:25px;">'
-    f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+    f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">'
     f'<div>'
     f'<span style="font-size:1.45rem;font-weight:700;color:{color_texto};">{icono} {tipo_paciente}</span>'
     f'<div style="font-size:0.95rem;color:#37474F;margin-top:4px;">'
-    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad exacta:</strong> {subcategoria}{extra_info}'
+    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")}{extra_info}'
     f'</div>'
     f'</div>'
-    f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:6px 16px;border-radius:20px;font-size:0.9rem;font-weight:700;letter-spacing:0.5px;box-shadow: 0 1px 3px rgba(0,0,0,0.12);">'
-    f'⏱️ {edad_badge_str}'
+    f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:8px 20px;border-radius:24px;font-size:1.15rem;font-weight:800;letter-spacing:0.5px;box-shadow:0 2px 5px rgba(0,0,0,0.15);">'
+    f'Edad: {edad_texto_grande}'
     f'</div>'
     f'</div>'
     f'</div>'
@@ -177,7 +166,7 @@ if anios < 10:
     C_HEPA = "#FFE0B2"
     C_INACTIVO = "#FBFBFB"
 
-    # Evaluaciones clínicas completas por edad cumplida
+    # Evaluaciones clínicas completas
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
     act_m2 = (total_meses >= 2) or (dias_vida >= 60)
@@ -190,7 +179,6 @@ if anios < 10:
     act_m48 = (total_meses >= 48) or (anios >= 4)
     act_m59 = (total_meses >= 59) or (anios >= 5)
 
-    # Condición SRP según fecha de nacimiento (corte julio 2020)
     if es_nacido_pre_julio_2020:
         act_srp_18 = False
         act_srp_72 = (total_meses >= 72) or (anios >= 6)
@@ -356,7 +344,7 @@ else:
 """
     st.markdown(tabla_adultos_html, unsafe_allow_html=True)
 
-# --- 8. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) ---
+# --- 8. CATÁLOGO TÉCNICO PEDIÁTRICO (< 10 AÑOS) CON EVALUACIÓN DE EDAD MÁXIMA ---
 CATALOGO_PEDIATRICO = [
     {
         "nombre": "BCG (Bacilo de Calmette-Guérin)",
@@ -365,6 +353,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "Al nacer",
         "edad_min_str": "Al nacer",
         "edad_max_str": "< 5 años (Excepcionalmente < 14 años)",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Neumococo", "Hepatitis A", "Hepatitis B"],
@@ -379,6 +368,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "Al nacer o a los 7 días de vida",
         "edad_min_str": "Al nacer",
         "edad_max_str": "Preferentemente no después de los 7 días de vida",
+        "es_candidato": lambda a, m, d, tm: (dias_vida <= 7),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Rotavirus", "Neumococo", "BCG", "Hexavalente (en ausencia de monovalente)"],
@@ -393,6 +383,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "2 meses",
         "edad_min_str": "6 semanas",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
@@ -407,6 +398,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "2 meses",
         "edad_min_str": "6 semanas",
         "edad_max_str": "7 meses 29 días",
+        "es_candidato": lambda a, m, d, tm: (tm < 8),
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
@@ -421,6 +413,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "2 meses",
         "edad_min_str": "6 semanas",
         "edad_max_str": "59 meses de edad",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 a 8 semanas",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
@@ -435,6 +428,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "4 meses",
         "edad_min_str": "10 semanas",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "8 semanas",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
@@ -449,6 +443,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "4 meses",
         "edad_min_str": "10 semanas",
         "edad_max_str": "7 meses 29 días",
+        "es_candidato": lambda a, m, d, tm: (tm < 8),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Hexavalente", "Influenza", "Neumococo"],
@@ -463,6 +458,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "4 meses",
         "edad_min_str": "10 semanas",
         "edad_max_str": "59 meses de edad",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "8 meses",
         "intervalo_min": "8 semanas",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"],
@@ -477,6 +473,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "6 meses",
         "edad_min_str": "14 semanas",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "12 semanas",
         "intervalo_min": "6 semanas",
         "simultaneas": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"],
@@ -491,6 +488,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "6 meses",
         "edad_min_str": "6 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "4 semanas",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "Rotavirus", "Neumococo", "COVID-19"],
@@ -505,6 +503,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "6 meses",
         "edad_min_str": "6 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "4 semanas",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "Rotavirus", "Neumococo", "Influenza"],
@@ -519,6 +518,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "7 meses",
         "edad_min_str": "7 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "Neumococo", "COVID-19"],
@@ -533,6 +533,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "7 meses",
         "edad_min_str": "7 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "Neumococo", "Influenza"],
@@ -547,6 +548,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "12 meses (1 año)",
         "edad_min_str": "12 meses",
         "edad_max_str": "Menores de 10 años",
+        "es_candidato": lambda a, m, d, tm: (a < 10),
         "intervalo_rec": "A los 18 meses (nacidos pos-julio 2020) o 6 años",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "BCG", "Varicela"],
@@ -561,6 +563,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "12 meses (1 año)",
         "edad_min_str": "12 semanas",
         "edad_max_str": "59 meses de edad",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A", "Varicela"],
@@ -575,6 +578,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "12 meses (1 año)",
         "edad_min_str": "12 meses",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["SRP", "Neumococo", "Influenza"],
@@ -589,6 +593,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "12 meses (1 año)",
         "edad_min_str": "12 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["SRP", "Neumococo", "Varicela"],
@@ -603,6 +608,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "18 meses",
         "edad_min_str": "12 meses",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A"],
@@ -617,6 +623,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "18 meses",
         "edad_min_str": "18 meses",
         "edad_max_str": "Menores de 10 años",
+        "es_candidato": lambda a, m, d, tm: (a < 10),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "Hexavalente"],
@@ -631,6 +638,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "18 meses",
         "edad_min_str": "12 meses",
         "edad_max_str": "< 5 años",
+        "es_candidato": lambda a, m, d, tm: (a < 5),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Hexavalente", "SRP", "Influenza"],
@@ -645,6 +653,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "18 meses",
         "edad_min_str": "18 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Hexavalente", "SRP", "Hepatitis A"],
@@ -659,6 +668,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "24 meses (2 años)",
         "edad_min_str": "24 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["COVID-19"],
@@ -673,6 +683,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "36 meses (3 años)",
         "edad_min_str": "36 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual hasta los 59 meses",
         "intervalo_min": "4 semanas",
         "simultaneas": ["COVID-19"],
@@ -687,6 +698,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "48 meses (4 años)",
         "edad_min_str": "4 años",
         "edad_max_str": "6 años, 11 meses y 29 días (< 7 años)",
+        "es_candidato": lambda a, m, d, tm: (a < 7),
         "intervalo_rec": "Posterior al esquema primario de Hexavalente",
         "intervalo_min": "6 semanas (posteriores a la 4ª dosis de Hexavalente)",
         "simultaneas": ["Influenza", "Neumococo", "Hepatitis A", "COVID-19"],
@@ -701,6 +713,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "48 meses (4 años)",
         "edad_min_str": "48 meses",
         "edad_max_str": "59 meses",
+        "es_candidato": lambda a, m, d, tm: (tm <= 59),
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
         "simultaneas": ["DPT", "COVID-19"],
@@ -715,6 +728,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "59 meses (5 años)",
         "edad_min_str": "5 años",
         "edad_max_str": "Escolar (< 10 años)",
+        "es_candidato": lambda a, m, d, tm: (a < 10),
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
         "simultaneas": ["COVID-19"],
@@ -729,6 +743,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "59 meses (5 años)",
         "edad_min_str": "5 años",
         "edad_max_str": "Escolar (< 10 años)",
+        "es_candidato": lambda a, m, d, tm: (a < 10),
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
         "simultaneas": ["Influenza"],
@@ -743,6 +758,7 @@ CATALOGO_PEDIATRICO = [
         "edad_rec_str": "72 meses (6 años)",
         "edad_min_str": "6 años",
         "edad_max_str": "Menores de 10 años",
+        "es_candidato": lambda a, m, d, tm: (a < 10),
         "intervalo_rec": "No Aplica",
         "intervalo_min": "No Aplica",
         "simultaneas": ["Influenza", "COVID-19"],
@@ -790,42 +806,63 @@ if anios < 10:
 
     texto_hito = vacunas_a_mostrar[0]["edad_rec_str"] if vacunas_a_mostrar else "Etapa actual"
     
-    st.subheader(f"🎯 Vacunas a aplicar en la etapa actual / siguiente ({texto_hito})")
-    st.caption(f"Sugerencias técnicas y compatibilidades para el paciente con edad calculada de {subcategoria}:")
+    st.subheader(f"🎯 Vacunas a aplicar en la etapa evaluada ({texto_hito})")
+    st.caption(f"Evaluación de candidatura y compatibilidades para la edad actual calculada ({edad_texto_grande}):")
 
     for v in vacunas_a_mostrar:
-        with st.container(border=True):
-            col_t1, col_t2 = st.columns([3, 1])
-            with col_t1:
-                st.markdown(f"<h4 style='color:{v['color']};margin:0;'>{v['nombre']} — <span style='color:#37474F;font-weight:500;'>{v['dosis']}</span></h4>", unsafe_allow_html=True)
-            with col_t2:
-                st.markdown(f"<div style='text-align:right;'><span style='background-color:#ECEFF1;color:#37474F;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:600;'>Recomendada: {v['edad_rec_str']}</span></div>", unsafe_allow_html=True)
+        # Evaluación de candidatura según edad actual
+        es_apto = v["es_candidato"](anios, meses, dias, total_meses)
+        
+        # Estilos según estatus de edad máxima
+        if es_apto:
+            borde_tarjeta = "1px solid #CFD8DC"
+            fondo_tarjeta = "#FFFFFF"
+            status_badge = "<span style='background-color:#E8F5E9;color:#2E7D32;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>✅ CANDIDATO VIGENTE</span>"
+            advertencia_html = ""
+        else:
+            borde_tarjeta = "2px solid #EF5350"
+            fondo_tarjeta = "#FFEBEE"
+            status_badge = "<span style='background-color:#D32F2F;color:#FFFFFF;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;'>⛔ NO RECOMENDADA / FUERA DE RANGO</span>"
+            advertencia_html = f"""
+            <div style="background-color:#FFCDD2;color:#B71C1C;border-left:5px solid #D32F2F;padding:8px 12px;border-radius:4px;font-size:0.85rem;font-weight:600;margin-top:10px;margin-bottom:10px;">
+            ⚠️ <strong>Alerta epidemiológica:</strong> La edad actual del paciente ({edad_texto_grande}) <strong>sobrepasa la edad máxima permitida</strong> ({v['edad_max_str']}). No se recomienda su aplicación en este momento.
+            </div>
+            """
 
-            st.write("")
-            
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"**🔸 Edad máxima permitida:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
-            with c3:
-                st.markdown(f"**⏱️ Intervalo recomendado:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
-            with c4:
-                st.markdown(f"**⚠️ Intervalo mínimo:**<br><span style='color:#E65100;font-weight:600;'>{v['intervalo_min']}</span>", unsafe_allow_html=True)
+        contenedor_html = f"""
+        <div style="background-color:{fondo_tarjeta};border:{borde_tarjeta};border-radius:8px;padding:16px;margin-bottom:15px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <h4 style="color:{v['color']};margin:0;font-size:1.15rem;">{v['nombre']} — <span style="color:#37474F;font-weight:500;">{v['dosis']}</span></h4>
+                <div>{status_badge} &nbsp;<span style="background-color:#ECEFF1;color:#37474F;padding:4px 10px;border-radius:12px;font-size:0.8rem;font-weight:600;">Recomendada: {v['edad_rec_str']}</span></div>
+            </div>
+            {advertencia_html}
+        """
+        st.markdown(contenedor_html, unsafe_allow_html=True)
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{v['edad_min_str']}</span>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"**🔸 Edad máxima permitida:**<br><span style='color:#B71C1C;'>{v['edad_max_str']}</span>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"**⏱️ Intervalo recomendado:**<br>{v['intervalo_rec']}", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"**⚠️ Intervalo mínimo:**<br><span style='color:#E65100;font-weight:600;'>{v['intervalo_min']}</span>", unsafe_allow_html=True)
 
-            st.divider()
-            
-            st.markdown("**🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):**")
-            
-            badges_html = []
-            for sim in v["simultaneas"]:
-                badges_html.append(f"<span style='background-color:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>💉 {sim}</span>")
-            for ci in v["cualquier_intervalo"]:
-                badges_html.append(f"<span style='background-color:#E0F2F1;color:#004D40;border:1px solid #80CBC4;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⏱️ {ci} (Cualquier intervalo)</span>")
-            for ie in v["intervalo_especial"]:
-                badges_html.append(f"<span style='background-color:#FFF3E0;color:#BF360C;border:1px solid #FFCC80;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⚠️ {ie[0]}: {ie[1]}</span>")
-            
-            st.markdown("".join(badges_html), unsafe_allow_html=True)
+        st.divider()
+        
+        st.markdown("**🔗 Aplicación entre biológicos (Compatibilidades e Intervalos):**")
+        
+        badges_html = []
+        for sim in v["simultaneas"]:
+            badges_html.append(f"<span style='background-color:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>💉 {sim}</span>")
+        for ci in v["cualquier_intervalo"]:
+            badges_html.append(f"<span style='background-color:#E0F2F1;color:#004D40;border:1px solid #80CBC4;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⏱️ {ci} (Cualquier intervalo)</span>")
+        for ie in v["intervalo_especial"]:
+            badges_html.append(f"<span style='background-color:#FFF3E0;color:#BF360C;border:1px solid #FFCC80;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⚠️ {ie[0]}: {ie[1]}</span>")
+        
+        st.markdown("".join(badges_html), unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 elif esta_embarazada:
     # --- PANEL EXCLUSIVO PARA EMBARAZO ---
@@ -920,8 +957,8 @@ elif es_personal_salud:
 
 elif es_adulto_mayor:
     # --- PANEL EXCLUSIVO PARA ADULTO MAYOR (>= 60 AÑOS) ---
-    st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente} ({subcategoria})")
-    st.caption("Lineamientos de vacunación del adulto mayor en México:")
+    st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente}")
+    st.caption(f"Lineamientos de vacunación del adulto mayor en México (Edad actual: {edad_texto_grande}):")
 
     # 1. Neumococo 23V
     with st.container(border=True):
@@ -954,8 +991,8 @@ elif es_adulto_mayor:
 
 else:
     # --- PANEL PARA POBLACIÓN GENERAL 10 A 59 AÑOS ---
-    st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos ({subcategoria})")
-    st.caption("Recomendaciones normativas, grupos blanco, dosificación y compatibilidades:")
+    st.subheader(f"🎯 Biológicos indicados y Criterios Clínicos")
+    st.caption(f"Recomendaciones normativas, grupos blanco, dosificación y compatibilidades ({edad_texto_grande}):")
 
     # 1. Anti Hepatitis B (>10 años)
     if act_hepb:
