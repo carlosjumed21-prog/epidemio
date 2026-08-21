@@ -48,6 +48,28 @@ dias = edad_delta.days
 total_meses = (anios * 12) + meses
 es_mujer = (sexo == "Mujer")
 
+# Construcción de la etiqueta exacta de edad (Años, Meses, Días)
+partes_edad = []
+if anios > 0:
+    partes_edad.append(f"{anios} a" if anios != 1 else "1 a")
+if meses > 0:
+    partes_edad.append(f"{meses} m" if meses != 1 else "1 m")
+if dias > 0 or len(partes_edad) == 0:
+    partes_edad.append(f"{dias} d" if dias != 1 else "1 d")
+
+edad_badge_str = " ".join(partes_edad)
+
+# Desglose en texto completo para subtítulo
+partes_completas = []
+if anios > 0:
+    partes_completas.append(f"{anios} año{'s' if anios != 1 else ''}")
+if meses > 0:
+    partes_completas.append(f"{meses} mes{'es' if meses != 1 else ''}")
+if dias > 0 or len(partes_completas) == 0:
+    partes_completas.append(f"{dias} día{'s' if dias != 1 else ''}")
+
+subcategoria = ", ".join(partes_completas)
+
 # Condición de cohorte SRP: Corte en julio de 2020
 es_nacido_pre_julio_2020 = (fecha_nacimiento < date(2020, 7, 1))
 
@@ -82,35 +104,27 @@ if anios >= 10:
 # --- 5. CLASIFICACIÓN CLÍNICA ---
 if dias_vida <= 28:
     tipo_paciente = "Recién nacida (Neonata)" if es_mujer else "Recién nacido (Neonato)"
-    subcategoria = f"{dias_vida} días de vida"
     icono = "👶"
 elif anios < 1:
     tipo_paciente = "Lactante menor"
-    subcategoria = f"{meses} meses, {dias} días"
     icono = "🍼"
 elif anios < 2:
     tipo_paciente = "Lactante mayor"
-    subcategoria = f"1 año, {meses} meses"
     icono = "🍼"
 elif 2 <= anios <= 5:
     tipo_paciente = "Preescolar"
-    subcategoria = f"{anios} años, {meses} meses"
     icono = "🧸"
 elif 6 <= anios <= 11:
     tipo_paciente = "Escolar (Niña)" if es_mujer else "Escolar (Niño)"
-    subcategoria = f"{anios} años, {meses} meses"
     icono = "👧" if es_mujer else "👦"
 elif 12 <= anios < 18:
     tipo_paciente = "Adolescente"
-    subcategoria = f"{anios} años, {meses} meses"
     icono = "👧" if es_mujer else "👦"
 elif 18 <= anios < 60:
     tipo_paciente = "Mujer adulta" if es_mujer else "Hombre adulto"
-    subcategoria = f"{anios} años cumplidos"
     icono = "👩" if es_mujer else "👨"
 else:  # anios >= 60
     tipo_paciente = "Adulta mayor" if es_mujer else "Adulto mayor"
-    subcategoria = f"{anios} años cumplidos"
     icono = "👵" if es_mujer else "👴"
 
 if es_mujer:
@@ -135,11 +149,11 @@ tarjeta_html = (
     f'<div>'
     f'<span style="font-size:1.45rem;font-weight:700;color:{color_texto};">{icono} {tipo_paciente}</span>'
     f'<div style="font-size:0.95rem;color:#37474F;margin-top:4px;">'
-    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad calculada:</strong> {subcategoria}{extra_info}'
+    f'<strong>Sexo:</strong> {sexo} &nbsp;|&nbsp; <strong>Fecha de Nacimiento:</strong> {fecha_nacimiento.strftime("%d/%m/%Y")} &nbsp;|&nbsp; <strong>Edad exacta:</strong> {subcategoria}{extra_info}'
     f'</div>'
     f'</div>'
-    f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:6px 14px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">'
-    f'{dias_vida} días de vida'
+    f'<div style="background-color:{badge_bg};color:#FFFFFF;padding:6px 16px;border-radius:20px;font-size:0.9rem;font-weight:700;letter-spacing:0.5px;box-shadow: 0 1px 3px rgba(0,0,0,0.12);">'
+    f'⏱️ {edad_badge_str}'
     f'</div>'
     f'</div>'
     f'</div>'
@@ -226,17 +240,28 @@ if anios < 10:
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses (1 año)</td>
 <td colspan="2" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">SRP (1ª dosis)</td>
 <td colspan="2" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti neumocócica conjugada</td>
-<td colspan="2" style="background-color:{C_VARI if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#4A148C' if act_m12 else '#BDBDBD'};">Anti varicela</td>
+<td colspan="1" style="background-color:{C_VARI if act_m12 else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#4A148C' if act_m12 else '#BDBDBD'};">Anti varicela</td>
+<td colspan="1" style="background-color:{C_INFL if act_m12 else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti influenza (refuerzo anual)</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">18 meses</td>
 <td colspan="2" style="background-color:{C_HEXA if act_m18_general else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m18_general else '#BDBDBD'};">Hexavalente acelular</td>
 <td colspan="2" style="background-color:{C_SRP if act_srp_18 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_srp_18 else '#BDBDBD'};">SRP (2ª dosis)</td>
-<td colspan="2" style="background-color:{C_HEPA if act_m18_general else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#E65100' if act_m18_general else '#BDBDBD'};">Anti hepatitis A</td>
+<td colspan="1" style="background-color:{C_HEPA if act_m18_general else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#E65100' if act_m18_general else '#BDBDBD'};">Anti hepatitis A</td>
+<td colspan="1" style="background-color:{C_INFL if act_m18_general else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#263238' if act_m18_general else '#BDBDBD'};">Anti influenza (refuerzo anual)</td>
+</tr>
+<tr>
+<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">24 meses<br><span style="font-size:0.78rem;">(2 años)</span></td>
+<td colspan="6" style="background-color:{C_INFL if act_m24 else C_INACTIVO};font-size:0.88rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m24 else '#BDBDBD'};">Anti influenza estacional (refuerzo anual)</td>
+</tr>
+<tr>
+<td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">36 meses<br><span style="font-size:0.78rem;">(3 años)</span></td>
+<td colspan="6" style="background-color:{C_INFL if act_m36 else C_INACTIVO};font-size:0.88rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m36 else '#BDBDBD'};">Anti influenza estacional (refuerzo anual)</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">48 meses<br><span style="font-size:0.78rem;">(4 años)</span></td>
-<td colspan="6" style="background-color:{C_DPT if act_m48 else C_INACTIVO};font-size:0.95rem;font-weight:700;text-align:center;padding:12px 8px;border-radius:3px;color:{'#5D4037' if act_m48 else '#BDBDBD'};">DPT (refuerzo)</td>
+<td colspan="3" style="background-color:{C_INFL if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m48 else '#BDBDBD'};">Anti influenza estacional (refuerzo anual)</td>
+<td colspan="3" style="background-color:{C_DPT if act_m48 else C_INACTIVO};font-size:0.95rem;font-weight:700;text-align:center;padding:10px 8px;border-radius:3px;color:{'#5D4037' if act_m48 else '#BDBDBD'};">DPT (refuerzo)</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">59 meses<br><span style="font-size:0.78rem;">(5 años)</span></td>
@@ -556,6 +581,20 @@ CATALOGO_PEDIATRICO = [
         "color": "#6A1B9A"
     },
     {
+        "nombre": "Anti Influenza Estacional",
+        "dosis": "Refuerzo anual (12 meses)",
+        "hito_meses": 12,
+        "edad_rec_str": "12 meses (1 año)",
+        "edad_min_str": "12 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual hasta los 59 meses",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["SRP", "Neumococo", "Varicela"],
+        "cualquier_intervalo": ["BCG"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
         "nombre": "Hexavalente acelular *(DPaT+IPV+HB+Hib)",
         "dosis": "4ª Dosis (Refuerzo)",
         "hito_meses": 18,
@@ -598,6 +637,48 @@ CATALOGO_PEDIATRICO = [
         "color": "#EF6C00"
     },
     {
+        "nombre": "Anti Influenza Estacional",
+        "dosis": "Refuerzo anual (18 meses)",
+        "hito_meses": 18,
+        "edad_rec_str": "18 meses",
+        "edad_min_str": "18 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual hasta los 59 meses",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["Hexavalente", "SRP", "Hepatitis A"],
+        "cualquier_intervalo": ["BCG"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Anti Influenza Estacional",
+        "dosis": "Refuerzo anual (2 años)",
+        "hito_meses": 24,
+        "edad_rec_str": "24 meses (2 años)",
+        "edad_min_str": "24 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual hasta los 59 meses",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR", "Varicela"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Anti Influenza Estacional",
+        "dosis": "Refuerzo anual (3 años)",
+        "hito_meses": 36,
+        "edad_rec_str": "36 meses (3 años)",
+        "edad_min_str": "36 meses",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual hasta los 59 meses",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR", "Varicela"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
         "nombre": "DPT (Difteria, Tos ferina, Tétanos)",
         "dosis": "Refuerzo a los 4 años",
         "hito_meses": 48,
@@ -613,7 +694,21 @@ CATALOGO_PEDIATRICO = [
     },
     {
         "nombre": "Anti Influenza Estacional",
-        "dosis": "Refuerzo anual",
+        "dosis": "Refuerzo anual (4 años)",
+        "hito_meses": 48,
+        "edad_rec_str": "48 meses (4 años)",
+        "edad_min_str": "4 años",
+        "edad_max_str": "59 meses",
+        "intervalo_rec": "Anual",
+        "intervalo_min": "4 semanas",
+        "simultaneas": ["DPT", "COVID-19"],
+        "cualquier_intervalo": ["SRP", "SR"],
+        "intervalo_especial": [],
+        "color": "#AD1457"
+    },
+    {
+        "nombre": "Anti Influenza Estacional",
+        "dosis": "Refuerzo anual (5 años)",
         "hito_meses": 59,
         "edad_rec_str": "59 meses (5 años)",
         "edad_min_str": "5 años",
@@ -659,10 +754,14 @@ CATALOGO_PEDIATRICO = [
 st.divider()
 
 if anios < 10:
-    hitos_disponibles = [0, 2, 4, 6, 7, 12, 18, 48, 59, 72]
+    hitos_disponibles = [0, 2, 4, 6, 7, 12, 18, 24, 36, 48, 59, 72]
     
     if dias_vida <= 28:
         hito_objetivo = 0
+    elif anios == 2:
+        hito_objetivo = 24
+    elif anios == 3:
+        hito_objetivo = 36
     elif anios == 4:
         hito_objetivo = 48
     elif anios == 5:
