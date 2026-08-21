@@ -177,7 +177,7 @@ if anios < 10:
     C_HEPA = "#FFE0B2"
     C_INACTIVO = "#FBFBFB"
 
-    # Evaluaciones clínicas por edad cumplida
+    # Evaluaciones clínicas completas por edad cumplida
     act_bcg = dias_vida >= 0
     act_hepb = dias_vida >= 0
     act_m2 = (total_meses >= 2) or (dias_vida >= 60)
@@ -185,6 +185,8 @@ if anios < 10:
     act_m6 = (total_meses >= 6) or (dias_vida >= 180)
     act_m7 = (total_meses >= 7) or (dias_vida >= 210)
     act_m12 = (total_meses >= 12) or (anios >= 1)
+    act_m24 = (total_meses >= 24) or (anios >= 2)
+    act_m36 = (total_meses >= 36) or (anios >= 3)
     act_m48 = (total_meses >= 48) or (anios >= 4)
     act_m59 = (total_meses >= 59) or (anios >= 5)
 
@@ -697,7 +699,7 @@ CATALOGO_PEDIATRICO = [
         "dosis": "Refuerzo anual (4 años)",
         "hito_meses": 48,
         "edad_rec_str": "48 meses (4 años)",
-        "edad_min_str": "4 años",
+        "edad_min_str": "48 meses",
         "edad_max_str": "59 meses",
         "intervalo_rec": "Anual",
         "intervalo_min": "4 semanas",
