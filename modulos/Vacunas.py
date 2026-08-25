@@ -10,35 +10,30 @@ st.caption("Evaluación etaria y perfil de vacunación epidemiológica.")
 st.divider()
 
 # --- 1. ENTRADA DE DATOS DEL PACIENTE ---
-# Agrupamos en un formulario para habilitar la captura con la tecla "Enter"
-with st.form("form_paciente"):
-    col_form1, col_form2 = st.columns([1, 1])
+col_form1, col_form2 = st.columns([1, 1])
 
-    with col_form1:
-        fecha_nacimiento = st.date_input(
-            "📅 Fecha de nacimiento:",
-            value=None,
-            min_value=date(1900, 1, 1),
-            max_value=date.today(),
-            format="DD/MM/YYYY",
-            help="Escribe la fecha (dd/mm/aaaa) y presiona Enter, o usa el calendario"
-        )
+with col_form1:
+    fecha_nacimiento = st.date_input(
+        "📅 Fecha de nacimiento:",
+        value=None,
+        min_value=date(1900, 1, 1),
+        max_value=date.today(),
+        format="DD/MM/YYYY",
+        help="Escribe la fecha (dd/mm/aaaa) y presiona Enter, o usa el calendario"
+    )
 
-    with col_form2:
-        sexo = st.radio(
-            "⚧ Sexo:",
-            options=["Hombre", "Mujer"],
-            index=None,
-            horizontal=True,
-            help="Selecciona el sexo del paciente"
-        )
-    
-    # Este botón o la tecla Enter activarán el cálculo
-    submit_btn = st.form_submit_button("Evaluar Paciente")
+with col_form2:
+    sexo = st.radio(
+        "⚧ Sexo:",
+        options=["Hombre", "Mujer"],
+        index=None,
+        horizontal=True,
+        help="Selecciona el sexo del paciente"
+    )
 
 # --- 2. CONTROL DE INTERFAZ EN BLANCO ---
 if not fecha_nacimiento or not sexo:
-    st.info("👋 **Ingresa la fecha de nacimiento y selecciona el sexo** del paciente. Si escribes la fecha manualmente, presiona **Enter** o haz clic en 'Evaluar Paciente' para capturar los datos.")
+    st.info("👋 **Ingresa la fecha de nacimiento y selecciona el sexo** del paciente para calcular automáticamente el esquema y las recomendaciones de vacunación.")
     st.stop()
 
 # --- 3. CÁLCULO DE EDAD EXACTA ---
