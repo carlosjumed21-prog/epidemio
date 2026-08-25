@@ -207,13 +207,13 @@ if anios < 10:
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">2 meses</td>
 <td colspan="2" style="background-color:{C_HEXA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#BDBDBD'};">Hexavalente acelular</td>
 <td colspan="2" style="background-color:{C_ROTA if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#BDBDBD'};">Anti rotavirus</td>
-<td colspan="2" style="background-color:{C_NEUMO if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#BDBDBD'};">Anti neumocócica conjugada</td>
+<td colspan="2" style="background-color:{C_NEUMO if act_m2 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m2 else '#BDBDBD'};">Anti neumocócica conjugada 20 valente</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">4 meses</td>
 <td colspan="2" style="background-color:{C_HEXA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#BDBDBD'};">Hexavalente acelular</td>
 <td colspan="2" style="background-color:{C_ROTA if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#BDBDBD'};">Anti rotavirus</td>
-<td colspan="2" style="background-color:{C_NEUMO if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#BDBDBD'};">Anti neumocócica conjugada</td>
+<td colspan="2" style="background-color:{C_NEUMO if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m4 else '#BDBDBD'};">Anti neumocócica conjugada 20 valente</td>
 </tr>
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">6 meses</td>
@@ -229,7 +229,7 @@ if anios < 10:
 <tr>
 <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:10px 6px;border-radius:3px;">12 meses (1 año)</td>
 <td colspan="2" style="background-color:{C_SRP if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">SRP (1ª dosis)</td>
-<td colspan="2" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti neumocócica conjugada</td>
+<td colspan="2" style="background-color:{C_NEUMO if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:10px 8px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti neumocócica conjugada 20 valente</td>
 <td colspan="1" style="background-color:{C_VARI if act_m12 else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#4A148C' if act_m12 else '#BDBDBD'};">Anti varicela</td>
 <td colspan="1" style="background-color:{C_INFL if act_m12 else C_INACTIVO};font-size:0.82rem;font-weight:600;text-align:center;padding:10px 6px;border-radius:3px;color:{'#263238' if act_m12 else '#BDBDBD'};">Anti influenza (refuerzo anual)</td>
 </tr>
@@ -287,7 +287,7 @@ else:
     act_sr = (10 <= anios <= 39) or (es_personal_salud and not esta_embarazada)
     act_hepb = (anios >= 11) or es_personal_salud
     act_vph = (10 <= anios <= 49) and not esta_embarazada
-    act_tdpa = esta_embarazada or ((15 <= anios <= 49) and es_mujer) or es_personal_salud
+    act_tdpa = esta_embarazada or es_personal_salud
     act_neumo = es_adulto_mayor
     act_infl = True
 
@@ -295,8 +295,8 @@ else:
     if esta_embarazada:
         fila_vsr_html = f"""
 <tr>
-<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:700;text-align:center;padding:12px;border-radius:3px;color:#004D40;">Vacuna contra el Virus Sincitial Respiratorio (VSR)</td>
-<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:#004D40;">Infecciones respiratorias agudas bajas en el lactante por VSR</td>
+<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:700;text-align:center;padding:12px;border-radius:3px;color:#004D40;">VSR</td>
+<td style="background-color:{C_VSR};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:#004D40;">Casos graves por el virus respiratorio sincitial (VRS) en lactantes desde el nacimiento hasta los 6 meses de edad mediante la inmunización activa de mujeres embarazadas</td>
 </tr>
 """
 
@@ -332,11 +332,11 @@ else:
 </tr>
 {fila_vsr_html}
 <tr>
-<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Anti neumocócica polisacárida 23 valente</td>
+<td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Anti neumocócica conjugada 20 valente (VCN20)</td>
 <td style="background-color:{C_NEUMO_AD if act_neumo else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_neumo else '#9E9E9E'};">Infección por neumococo</td>
 </tr>
 <tr>
-<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_infl else '#9E9E9E'};">Anti influenza</td>
+<td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:600;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_infl else '#9E9E9E'};">Anti influenza estacional</td>
 <td style="background-color:{C_INFL_AD if act_infl else C_INACTIVO};font-size:0.95rem;font-weight:500;text-align:center;padding:12px;border-radius:3px;color:{'#212121' if act_infl else '#9E9E9E'};">Influenza</td>
 </tr>
 </tbody>
@@ -407,8 +407,8 @@ CATALOGO_PEDIATRICO = [
         "color": "#2E7D32"
     },
     {
-        "nombre": "(VCN)-1ª Neumocócica conjugada",
-        "dosis": "Neumocócica conjugada 1ª Dosis",
+        "nombre": "(VCN20)-1ª Neumocócica conjugada 20v",
+        "dosis": "Neumocócica conjugada 20 valente 1ª Dosis",
         "hito_meses": 2,
         "edad_rec_str": "2 meses",
         "edad_min_str": "6 semanas",
@@ -452,8 +452,8 @@ CATALOGO_PEDIATRICO = [
         "color": "#2E7D32"
     },
     {
-        "nombre": "(VCN)-2ª Neumocócica conjugada",
-        "dosis": "Neumocócica conjugada 2ª Dosis",
+        "nombre": "(VCN20)-2ª Neumocócica conjugada 20v",
+        "dosis": "Neumocócica conjugada 20 valente 2ª Dosis",
         "hito_meses": 4,
         "edad_rec_str": "4 meses",
         "edad_min_str": "10 semanas",
@@ -527,8 +527,8 @@ CATALOGO_PEDIATRICO = [
         "color": "#E65100"
     },
     {
-        "nombre": "(VCN)-3ª Neumocócica conjugada",
-        "dosis": "Neumocócica conjugada 3ª Dosis",
+        "nombre": "(VCN20)-3ª Neumocócica conjugada 20v",
+        "dosis": "Neumocócica conjugada 20 valente 3ª Dosis",
         "hito_meses": 12,
         "edad_rec_str": "12 meses",
         "edad_min_str": "12 semanas",
@@ -672,109 +672,159 @@ if anios < 10:
 
 elif esta_embarazada:
     # --- PANEL EXCLUSIVO PARA EMBARAZO ---
-    st.subheader("🤰 Biológicos Recomendados durante el Embarazo")
-    st.caption("Lineamiento Oficial de Vacunación en Personas Embarazadas:")
-
-    # 1. Tdpa
-    with st.container(border=True):
-        st.markdown("<h4 style='color:#2E7D32;margin:0;'>Tdpa (Tétanos, Difteria, Tos Ferina acelular)</h4>", unsafe_allow_html=True)
-        st.markdown("""
-        * **Indicación:** **En cada embarazo**, independientemente del antecedente de vacunación previa.
-        * **Momento de aplicación:** A partir de la **semana 20 de gestación** (preferentemente entre las semanas 27 y 36).
-        * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea.
-        * **Objetivo:** Transferencia transplacentaria masiva de anticuerpos contra pertussis para proteger al recién nacido durante sus primeros meses de vida.
-        """)
-
-    # 2. VSR
-    with st.container(border=True):
-        st.markdown("<h4 style='color:#004D40;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
-        st.markdown("""
-        * **Indicación:** Personas embarazadas entre las **semanas 32 a 36 de gestación**.
-        * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea del brazo no dominante.
-        * **Revacunación:** No se requiere revacunación.
-        * **Objetivo:** Prevenir infecciones respiratorias agudas graves (bronquiolitis y neumonía) en el recién nacido y lactante menor.
-        """)
-
-    # 3. Influenza y COVID-19
-    col_emb1, col_emb2 = st.columns(2)
-    with col_emb1:
+    if es_personal_salud:
+        st.subheader("🤰🩺 Biológicos Recomendados: Personal de Salud en Periodo de Gestación")
+        st.info("Las personas trabajadoras de la salud en periodo de gestación deben cumplir con el control prenatal correspondiente y el médico tratante determinará la protección adicional que amerite; sin embargo, toda persona embarazada debe recibir la vacuna Tdpa en cada embarazo, independientemente de su antecedente vacunal con Td y del intervalo intergenésico; así como, la vacuna contra la influenza estacional, contra la COVID-19 y contra el Virus Sincitial Respiratorio, durante la temporada invernal.")
+        
+        # Tdpa
         with st.container(border=True):
-            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** En **cualquier trimestre** del embarazo durante la temporada invernal activa.
-            * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
-            """)
-    with col_emb2:
+            st.markdown("<h4 style='color:#2E7D32;margin:0;'>Tdpa</h4>", unsafe_allow_html=True)
+            st.markdown("* **Indicación:** Una dosis de Tdpa en cada embarazo a partir de la semana 20 de gestación como sustitución o no de Td.")
+        
+        # VSR
         with st.container(border=True):
-            st.markdown("<h4 style='color:#1B5E20;margin:0;'>Anti COVID-19</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#004D40;margin:0;'>Contra el VSR</h4>", unsafe_allow_html=True)
+            st.markdown("* **Indicación:** Una dosis entre las semanas 32 y 36 de gestación.")
+        
+        # Influenza y COVID-19
+        col_emb1, col_emb2 = st.columns(2)
+        with col_emb1:
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti influenza estacional</h4>", unsafe_allow_html=True)
+                st.markdown("* **Indicación:** Una dosis en cualquier trimestre del embarazo, durante la temporada invernal.")
+        with col_emb2:
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#1B5E20;margin:0;'>Contra la COVID-19</h4>", unsafe_allow_html=True)
+                st.markdown("* **Indicación:** Una dosis en cualquier trimestre del embarazo, preferentemente a partir del segundo trimestre, derivado del beneficio de transmisión de anticuerpos al feto.")
+        
+        st.warning("⛔ **Contraindicación estricta en el embarazo:** Vacunas de virus vivos atenuados como **SR, SRP, Varicela y Fiebre Amarilla** están contraindicadas durante toda la gestación.")
+
+    else:
+        st.subheader("🤰 Biológicos Recomendados durante el Embarazo")
+        st.caption("Lineamiento Oficial de Vacunación en Personas Embarazadas:")
+
+        # 1. Tdpa
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#2E7D32;margin:0;'>Tdpa (Tétanos, Difteria, Tos Ferina acelular)</h4>", unsafe_allow_html=True)
             st.markdown("""
-            * **Indicación:** A partir del **segundo trimestre** de gestación o según campaña invernal activa.
-            * **Dosis y Vía:** Intramuscular en región deltoidea.
+            * **Indicación:** **En cada embarazo**, independientemente del antecedente de vacunación previa.
+            * **Momento de aplicación:** A partir de la **semana 20 de gestación** (preferentemente entre las semanas 27 y 36).
+            * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea.
+            * **Objetivo:** Transferencia transplacentaria masiva de anticuerpos contra pertussis para proteger al recién nacido durante sus primeros meses de vida.
             """)
 
-    st.warning("⛔ **Contraindicación estricta en el embarazo:** Vacunas de virus vivos atenuados como **SR, SRP, Varicela y Fiebre Amarilla** están contraindicadas durante toda la gestación.")
+        # 2. VSR
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#004D40;margin:0;'>Vacuna contra el Virus Sincitial Respiratorio (VSR)</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación:** Personas embarazadas entre las **32 y 36 semanas de gestación**.
+            * **Objetivo principal:** Prevenir casos graves por el virus respiratorio sincitial (VRS) en lactantes desde el nacimiento hasta los 6 meses de edad mediante la inmunización activa de mujeres embarazadas.
+            * **Dosis y Vía:** Dosis única de 0.5 mL intramuscular en región deltoidea del brazo no dominante.
+            """)
+
+        # 3. Influenza y COVID-19
+        col_emb1, col_emb2 = st.columns(2)
+        with col_emb1:
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
+                st.markdown("""
+                * **Indicación:** En **cualquier trimestre** del embarazo durante la temporada invernal activa.
+                * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
+                """)
+        with col_emb2:
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#1B5E20;margin:0;'>Anti COVID-19</h4>", unsafe_allow_html=True)
+                st.markdown("""
+                * **Indicación:** A partir del **segundo trimestre** de gestación o según campaña invernal activa.
+                * **Dosis y Vía:** Intramuscular en región deltoidea.
+                """)
+
+        st.warning("⛔ **Contraindicación estricta en el embarazo:** Vacunas de virus vivos atenuados como **SR, SRP, Varicela y Fiebre Amarilla** están contraindicadas durante toda la gestación.")
 
 elif es_personal_salud:
     # --- PANEL EXCLUSIVO PARA PERSONAL DE SALUD ---
-    st.subheader("🩺 Esquema de Inmunización para Personal de Salud")
-    st.caption("Lineamientos de bioseguridad ocupacional y protección al trabajador de la salud:")
+    st.subheader("🩺 Esquema de Inmunización para Trabajadores de la Salud (Cuadro 10)")
+    st.caption("Adaptado de los lineamientos oficiales para protección ocupacional.")
 
-    # 1. Hepatitis B (Ocupacional)
-    with st.container(border=True):
-        st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B (Protección Ocupacional Obligatoria)</h4>", unsafe_allow_html=True)
-        st.markdown("""
-        * **Esquema:** 
-          - Presentación de 20 µg (1.0 mL): **2 dosis** con intervalo mínimo de 4 semanas.
-          - Presentación de 10 µg (0.5 mL): **3 dosis** con esquema 0, 1 y 6 meses.
-        * **Verificación serológica:** Determinación de anticuerpos Anti-HBs entre 1 y 2 meses después de la última dosis. Título protector: **≥ 10 mUI/mL**.
-        """)
+    tabla_ps_html = """
+    <table style="width:100%;border-collapse:collapse;font-family:'Segoe UI',sans-serif;margin-top:10px; border: 1px solid #ddd;">
+    <thead style="background-color:#900C3F; color:white;">
+    <tr>
+    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">VACUNA</th>
+    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">ENFERMEDAD QUE PREVIENE</th>
+    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">DOSIS/ESQUEMA</th>
+    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">FRECUENCIA</th>
+    </tr>
+    </thead>
+    <tbody style="background-color:#FAFAFA; color:#333;">
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Anti Influenza estacional</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Complicaciones severas y mortalidad por influenza</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Anual (en época invernal)</td>
+    </tr>
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Contra la COVID-19</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Cuadros graves y letalidad por el virus SARS-CoV-2</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.*</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Sujeta a directrices y políticas vigentes de la Secretaría de Salud</td>
+    </tr>
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Anti hepatitis B (HB)</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Infección por Hepatitis B</td>
+    <td style="padding:10px; border: 1px solid #ddd;">2 aplicaciones de 20 µg (intervalo 0, 1 mes).<br>O bien:<br>3 aplicaciones** de 10 µg (intervalo 0, 1, 6 meses).</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Personal de laboratorio clínico: requiere refuerzo si la titulación de anticuerpos (anti-HBs) es inferior a 10 mUI/mL.</td>
+    </tr>
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">SR***</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Sarampión y Rubéola</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.</td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Dosis única</td>
+    </tr>
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Td</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Tétanos y Difteria</td>
+    <td style="padding:10px; border: 1px solid #ddd;">
+    <strong>Con antecedente completo****:</strong> A partir de los 15 años, refuerzo decenal.<br><br>
+    <strong>Con antecedente incompleto/desconocido:</strong> 3 aplicaciones (0, 1, 12 meses) y luego refuerzos decenales.
+    </td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Cada 10 años</td>
+    </tr>
+    <tr>
+    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Tdpa</td>
+    <td style="padding:10px; border: 1px solid #ddd;">Tétanos, Difteria y Tos ferina</td>
+    <td style="padding:10px; border: 1px solid #ddd; background-color:#FFF9C4;">
+    Trabajadores de la salud con exposición a pacientes pediátricos: administrar 1 aplicación si carecen de historial vacunal previo.
+    </td>
+    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Dosis única</td>
+    </tr>
+    </tbody>
+    </table>
+    """
+    st.markdown(tabla_ps_html, unsafe_allow_html=True)
 
-    # 2. Influenza y COVID-19 Anual
-    col_ps1, col_ps2 = st.columns(2)
-    with col_ps1:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza Estacional</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** **Dosis anual obligatoria** al inicio de cada temporada invernal (octubre a marzo).
-            * **Dosis y Vía:** 0.5 mL intramuscular en deltoides.
-            """)
-    with col_ps2:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#1B5E20;margin:0;'>Anti COVID-19</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** **Refuerzo anual sectorial** con biológicos actualizados de nueva generación.
-            * **Dosis y Vía:** Intramuscular en región deltoidea.
-            """)
-
-    # 3. Td/Tdpa y SR
-    col_ps3, col_ps4 = st.columns(2)
-    with col_ps3:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** Refuerzo cada **10 años** (se recomienda que al menos una de las dosis sea **Tdpa** para protección contra tos ferina en áreas de pediatría/neonatología/urgencias).
-            """)
-    with col_ps4:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)</h4>", unsafe_allow_html=True)
-            st.markdown("""
-            * **Indicación:** **2 dosis** con intervalo de 4 semanas en personal sin antecedente vacunal verificable o sin serología positiva para sarampión/rubéola.
-            """)
+    st.markdown("""
+    <div style="font-size: 0.85rem; color: #555; margin-top: 15px;">
+    <strong>Notas aclaratorias:</strong><br>
+    * Sujeto a disponibilidad de biológicos a nivel nacional.<br>
+    ** Utilizar esta pauta si la unidad médica carece de la formulación de 20 µg.<br>
+    *** Si el trabajador tiene menos de 40 años y carece de documentación sobre al menos dos aplicaciones de SR o SRP, debe recibir 2 dosis (0.5 mL) separadas por 4 semanas.<br>
+    **** Se considera historial completo poseer 5 dosis del esquema infantil (4 de hexavalente + 1 de DPT) o 3 aplicaciones de Td (intervalos 0, 1 y 12 meses).
+    </div>
+    """, unsafe_allow_html=True)
 
 elif es_adulto_mayor:
     # --- PANEL EXCLUSIVO PARA ADULTO MAYOR (>= 60 AÑOS) ---
     st.subheader(f"🎯 Biológicos Prioritarios para {tipo_paciente}")
     st.caption(f"Lineamientos de vacunación del adulto mayor en México (Edad actual: {edad_texto_grande}):")
 
-    # 1. Neumococo 23V
+    # 1. Neumococo 20V
     with st.container(border=True):
-        st.markdown("<h4 style='color:#00838F;margin:0;'>Anti Neumocócica Polisacárida 23 Valente</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#00838F;margin:0;'>Anti Neumocócica Conjugada 20 Valente (VCN20)</h4>", unsafe_allow_html=True)
         st.markdown("""
-        * **Criterio Oficial:**
-          * **Población de 65 años y más:** Aplicación universal (Dosis única).
-          * **Población de 60 a 64 años con factores de riesgo:** Pacientes con diabetes mellitus, EPOC, cardiopatías, nefropatías, hepatopatías crónicas o tabaquismo.
+        * **Criterio Oficial:** Toda la población de **60 años y más** (Dosis única).
         * **Dosis y Vía:** 0.5 mL intramuscular en región deltoidea.
-        * **Revacunación:** Dosis única de revacunación a los 5 años únicamente en personas con asplenia anatómica/funcional o inmunocomprometidas.
+        * **Revacunación:** No se requiere (esquema de dosis única).
         """)
 
     # 2. Influenza Estacional
@@ -841,10 +891,10 @@ else:
                 """)
             st.info("💡 **Nota clínica:** No se requiere prueba de VPH previa. La vacunación no sustituye el tamizaje citológico.")
 
-    # 3. Td / Tdpa
-    if act_td or act_tdpa:
+    # 3. Td
+    if act_td:
         with st.container(border=True):
-            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td / Tdpa (Tétanos, Difteria, Tos Ferina)</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td (Tétanos, Difteria)</h4>", unsafe_allow_html=True)
             st.markdown("""
             * **Población:** A partir de los 15 años de edad. Refuerzo cada 10 años (o esquema 0, 1, 12 meses sin antecedente).
             * **Dosis:** 0.5 mL intramuscular en región deltoidea.
