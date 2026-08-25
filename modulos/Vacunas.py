@@ -743,75 +743,75 @@ elif esta_embarazada:
 
 elif es_personal_salud:
     # --- PANEL EXCLUSIVO PARA PERSONAL DE SALUD ---
-    st.subheader("🩺 Esquema de Inmunización para Trabajadores de la Salud (Cuadro 10)")
-    st.caption("Adaptado de los lineamientos oficiales para protección ocupacional.")
+    st.subheader("🩺 Esquema de Inmunización para Trabajadores de la Salud")
+    st.caption("Adaptado de los lineamientos oficiales para protección ocupacional (Cuadro 10).")
 
-    tabla_ps_html = """
-    <table style="width:100%;border-collapse:collapse;font-family:'Segoe UI',sans-serif;margin-top:10px; border: 1px solid #ddd;">
-    <thead style="background-color:#900C3F; color:white;">
-    <tr>
-    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">VACUNA</th>
-    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">ENFERMEDAD QUE PREVIENE</th>
-    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">DOSIS/ESQUEMA</th>
-    <th style="padding:10px; border: 1px solid #ddd; text-align:center;">FRECUENCIA</th>
-    </tr>
-    </thead>
-    <tbody style="background-color:#FAFAFA; color:#333;">
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Anti Influenza estacional</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Complicaciones severas y mortalidad por influenza</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Anual (en época invernal)</td>
-    </tr>
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Contra la COVID-19</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Cuadros graves y letalidad por el virus SARS-CoV-2</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.*</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Sujeta a directrices y políticas vigentes de la Secretaría de Salud</td>
-    </tr>
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Anti hepatitis B (HB)</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Infección por Hepatitis B</td>
-    <td style="padding:10px; border: 1px solid #ddd;">2 aplicaciones de 20 µg (intervalo 0, 1 mes).<br>O bien:<br>3 aplicaciones** de 10 µg (intervalo 0, 1, 6 meses).</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Personal de laboratorio clínico: requiere refuerzo si la titulación de anticuerpos (anti-HBs) es inferior a 10 mUI/mL.</td>
-    </tr>
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">SR***</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Sarampión y Rubéola</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Una aplicación de 0.5 mL.</td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Dosis única</td>
-    </tr>
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Td</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Tétanos y Difteria</td>
-    <td style="padding:10px; border: 1px solid #ddd;">
-    <strong>Con antecedente completo****:</strong> A partir de los 15 años, refuerzo decenal.<br><br>
-    <strong>Con antecedente incompleto/desconocido:</strong> 3 aplicaciones (0, 1, 12 meses) y luego refuerzos decenales.
-    </td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Cada 10 años</td>
-    </tr>
-    <tr>
-    <td style="padding:10px; border: 1px solid #ddd; font-weight:bold; text-align:center;">Tdpa</td>
-    <td style="padding:10px; border: 1px solid #ddd;">Tétanos, Difteria y Tos ferina</td>
-    <td style="padding:10px; border: 1px solid #ddd; background-color:#FFF9C4;">
-    Trabajadores de la salud con exposición a pacientes pediátricos: administrar 1 aplicación si carecen de historial vacunal previo.
-    </td>
-    <td style="padding:10px; border: 1px solid #ddd; text-align:center;">Dosis única</td>
-    </tr>
-    </tbody>
-    </table>
-    """
-    st.markdown(tabla_ps_html, unsafe_allow_html=True)
+    # 1. Influenza y COVID-19
+    col_ps1, col_ps2 = st.columns(2)
+    with col_ps1:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#AD1457;margin:0;'>Anti Influenza estacional</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Prevención:** Complicaciones severas y mortalidad por influenza.
+            * **Dosis y Vía:** Una aplicación de 0.5 mL.
+            * **Frecuencia:** Anual (en época invernal).
+            """)
+    with col_ps2:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#1B5E20;margin:0;'>Contra la COVID-19</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Prevención:** Cuadros graves y letalidad por el virus SARS-CoV-2.
+            * **Dosis y Vía:** Una aplicación de 0.5 mL.\*
+            * **Frecuencia:** Sujeta a directrices y políticas vigentes de la Secretaría de Salud.
+            """)
 
-    st.markdown("""
-    <div style="font-size: 0.85rem; color: #555; margin-top: 15px;">
-    <strong>Notas aclaratorias:</strong><br>
-    * Sujeto a disponibilidad de biológicos a nivel nacional.<br>
-    ** Utilizar esta pauta si la unidad médica carece de la formulación de 20 µg.<br>
-    *** Si el trabajador tiene menos de 40 años y carece de documentación sobre al menos dos aplicaciones de SR o SRP, debe recibir 2 dosis (0.5 mL) separadas por 4 semanas.<br>
-    **** Se considera historial completo poseer 5 dosis del esquema infantil (4 de hexavalente + 1 de DPT) o 3 aplicaciones de Td (intervalos 0, 1 y 12 meses).
-    </div>
-    """, unsafe_allow_html=True)
+    # 2. Hepatitis B
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#E65100;margin:0;'>Anti Hepatitis B (HB)</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Prevención:** Infección por Hepatitis B.
+        * **Esquema:** 
+          - 2 aplicaciones de 20 µg (intervalo 0, 1 mes).
+          - **O bien:** 3 aplicaciones\*\* de 10 µg (intervalo 0, 1, 6 meses).
+        * **Frecuencia / Revacunación:** Personal de laboratorio clínico requiere refuerzo si la titulación de anticuerpos (anti-HBs) es inferior a 10 mUI/mL.
+        """)
+
+    # 3. Td y Tdpa
+    col_ps3, col_ps4 = st.columns(2)
+    with col_ps3:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#3949AB;margin:0;'>Td (Tétanos y Difteria)</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Con antecedente completo\*\*\*\*:** A partir de los 15 años, refuerzo decenal.
+            * **Con antecedente incompleto/desconocido:** 3 aplicaciones (0, 1, 12 meses) y luego refuerzos decenales.
+            * **Frecuencia:** Cada 10 años.
+            """)
+    with col_ps4:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#2E7D32;margin:0;'>Tdpa (Tétanos, Difteria y Tos ferina)</h4>", unsafe_allow_html=True)
+            st.markdown("""
+            * **Indicación Ocupacional:** Trabajadores de la salud con exposición a pacientes pediátricos.
+            * **Esquema:** Administrar 1 aplicación si carecen de historial vacunal previo.
+            * **Frecuencia:** Dosis única.
+            """)
+
+    # 4. SR
+    with st.container(border=True):
+        st.markdown("<h4 style='color:#D81B60;margin:0;'>SR (Sarampión y Rubéola)\*\*\*</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        * **Prevención:** Sarampión y Rubéola.
+        * **Dosis y Vía:** Una aplicación de 0.5 mL.
+        * **Frecuencia:** Dosis única.
+        """)
+
+    # Notas
+    st.info("""
+    **Notas aclaratorias:**  
+    \* Sujeto a disponibilidad de biológicos a nivel nacional.  
+    \*\* Utilizar esta pauta si la unidad médica carece de la formulación de 20 µg.  
+    \*\*\* Si el trabajador tiene menos de 40 años y carece de documentación sobre al menos dos aplicaciones de SR o SRP, debe recibir 2 dosis (0.5 mL) separadas por 4 semanas.  
+    \*\*\*\* Se considera historial completo poseer 5 dosis del esquema infantil (4 de hexavalente + 1 de DPT) o 3 aplicaciones de Td (intervalos 0, 1 y 12 meses).
+    """)
 
 elif es_adulto_mayor:
     # --- PANEL EXCLUSIVO PARA ADULTO MAYOR (>= 60 AÑOS) ---
