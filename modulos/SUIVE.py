@@ -12,7 +12,6 @@ def obtener_archivo_suive():
     Busca de forma inteligente el archivo SUIVE oficial en el repositorio 
     y extrae el año dinámicamente de su nombre.
     """
-    # Patrones de búsqueda flexibles
     patrones = [
         "ANEXO 1 - Formato_SUIVE_1*.xlsx",
         "modulos/ANEXO 1 - Formato_SUIVE_1*.xlsx",
@@ -25,7 +24,6 @@ def obtener_archivo_suive():
     for patron in patrones:
         coincidencias = glob.glob(patron)
         if not coincidencias:
-            # Buscar también en subdirectorios si es necesario
             coincidencias = glob.glob(f"**/{patron}", recursive=True)
             
         if coincidencias:
@@ -43,25 +41,45 @@ def obtener_archivo_suive():
 ruta_archivo, anio_suive = obtener_archivo_suive()
 
 if ruta_archivo is not None and os.path.exists(ruta_archivo):
-    # Guardar en memoria de sesión el archivo activo que se analiza
     st.session_state['suive_activo_path'] = ruta_archivo
     st.session_state['suive_anio'] = anio_suive
 
-# Título y Leyenda dinámica con el año detectado
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {anio_activo}**")
 
-# Botón de descarga dinámica del archivo que se está analizando actualmente en memoria/sesión
+# --- CONTENEDOR LLAMATIVO PARA EL BOTÓN DE DESCARGA ---
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 if path_actual and os.path.exists(path_actual):
+    st.markdown("""
+        <style>
+        .download-box {
+            background: linear-gradient(135deg, #0d9488 0%, #0284c7 100%);
+            padding: 15px 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .download-box p {
+            color: white;
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     with open(path_actual, "rb") as file_btn:
+        st.markdown('<div class="download-box"><p>📥 ¿Necesitas el formato oficial vigente?</p>', unsafe_allow_html=True)
         st.download_button(
-            label="📥 Si desea descargar el ANEXO SUIVE 1 ACTUAL de clic aquí",
+            label="👉 SI DESEA DESCARGAR EL ANEXO SUIVE 1 ACTUAL DE CLIC AQUÍ 📥",
             data=file_btn,
             file_name=os.path.basename(path_actual),
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Descargue el archivo Excel exacto que el sistema está analizando en este momento."
+            help="Descargue el archivo Excel exacto que el sistema está analizando en este momento.",
+            use_container_width=True
         )
+        st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -202,4 +220,4 @@ if path_actual and os.path.exists(path_actual):
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo Excel: {e}")
 else:
-    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio. Asegúrate de que el archivo 'ANEXO 1 - Formato_SUIVE_1 2026.xlsx' esté subido en la raíz o dentro de la carpeta 'modulos'.")
+    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio.")
