@@ -46,15 +46,18 @@ if archivo_suive is not None:
                         
                 if pd.notna(d):
                     d_str = " ".join(str(d).split())
-                    if any(w in d_str for w in ['Diagnóstico', 'NOTIFICACIÓN', 'Nota:', 'Vo. Bo.', 'Número']):
+                    # Validar estrictamente que sea un padecimiento oficial (debe tener clave EPI en columna E)
+                    if any(w in d_str for w in ['Diagnóstico', 'NOTIFICACIÓN', 'Nota:', 'Vo. Bo.', 'Número', 'Los códigos', 'Secretaría de Salud']):
+                        continue
+                    
+                    epi = str(e).strip() if pd.notna(e) else ""
+                    if not epi or epi == 'nan':
                         continue
                         
                     # Detección de símbolos de notificación en el texto del diagnóstico
                     es_inmediata = 1 if '*' in d_str else 0
                     es_especial = 1 if '+' in d_str else 0
                     es_brote = 1 if '#' in d_str else 0
-                    
-                    epi = str(e).strip() if pd.notna(e) else ""
                     
                     registros_totales.append({
                         'Pestaña': sheet,
@@ -108,7 +111,7 @@ if archivo_suive is not None:
                 columnas_a_omitir = ['Pestaña', 'Grupo']
                 df_filtrado = df_filtrado.drop(columns=[col for col in columnas_a_omitir if col in df_filtrado.columns])
 
-            # Convertir 1 y 0 a texto vacío o marcas visuales limpias para que no se muestren los números
+            # Convertir 1 y 0 a texto limpio de marca de verificación
             df_visual = df_filtrado.copy()
             for col in ['Inmediata (*)', 'Vig. Especial (+)', 'Brote (#)']:
                 if col in df_visual.columns:
@@ -116,7 +119,6 @@ if archivo_suive is not None:
 
             def estilo_tabla(row):
                 styles = [''] * len(row)
-                # Evaluamos sobre el dataframe original numérico de respaldo
                 orig_idx = row.name
                 if 'Inmediata (*)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Inmediata (*)'] == 1:
                     styles[df_filtrado.columns.get_loc('Inmediata (*)')] = 'background-color: rgba(239, 68, 68, 0.5); color: white; text-align: center; font-weight: bold;'
@@ -126,6 +128,14 @@ if archivo_suive is not None:
                     styles[df_filtrado.columns.get_loc('Brote (#)')] = 'background-color: rgba(249, 115, 22, 0.5); color: white; text-align: center; font-weight: bold;'
                 return styles
 
+            st.divider()
+
+            # --- MÉTRICAS INDIVIDUALES ARRIBA DE LA VISTA PREVIA ---
+            col1, col2, col3 = st.columns(3)
+            col1.metric("🚨 Total Inmediatas (*)", int(df_suive['Inmediata (*)'].sum()))
+            col2.metric("📋 Total Vig. Especiales (+)", int(df_suive['Vig. Especial (+)'].sum()))
+            col3.metric("⚠️ Total Brotes (#)", int(df_suive['Brote (#)'].sum()))
+
             st.markdown(f"### 📋 Matriz de Padecimientos ({len(df_visual)} registros mostrados)")
             
             # Mostrar dataframe estilizado con texto limpio
@@ -134,12 +144,6 @@ if archivo_suive is not None:
                 use_container_width=True,
                 height=500
             )
-            
-            # Métricas rápidas globales
-            col1, col2, col3 = st.columns(3)
-            col1.metric("🚨 Total Inmediatas (*)", int(df_suive['Inmediata (*)'].sum()))
-            col2.metric("📋 Total Vig. Especiales (+)", int(df_suive['Vig. Especial (+)'].sum()))
-            col3.metric("⚠️ Total Brotes (#)", int(df_suive['Brote (#)'].sum()))
             
         else:
             st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos. Verifique la estructura del archivo.")
