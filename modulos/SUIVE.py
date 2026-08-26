@@ -17,34 +17,40 @@ def obtener_archivo_suive():
     
     for ruta in posibles_rutas:
         if os.path.exists(ruta):
-            # Extraer año del nombre del archivo mediante regex
             match_anio = re.search(r'(20\d{2})', ruta)
             anio_detectado = match_anio.group(1) if match_anio else "2026"
             return ruta, anio_detectado
             
     return None, "2026"
 
-# Ejecutar carga
+# Ejecutar carga inicial de la ruta
 ruta_archivo, anio_suive = obtener_archivo_suive()
 
-st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {anio_suive}**")
-
-# Botón de descarga directa del archivo reciente utilizado para el análisis
 if ruta_archivo is not None and os.path.exists(ruta_archivo):
-    with open(ruta_archivo, "rb") as file_btn:
+    # Guardar en memoria de sesión el archivo activo que se analiza
+    st.session_state['suive_activo_path'] = ruta_archivo
+    st.session_state['suive_anio'] = anio_suive
+
+# Título y Leyenda dinámica con el año detectado
+st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {st.session_state.get('suive_anio', anio_suive)}**")
+
+# Botón de descarga dinámica del archivo que se está analizando actualmente en memoria/sesión
+if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['suive_activo_path']):
+    path_actual = st.session_state['suive_activo_path']
+    with open(path_actual, "rb") as file_btn:
         st.download_button(
-            label="📥 Si desea descargar el ANEXO SUIVE 1 de clic aquí",
+            label="📥 Si desea descargar el ANEXO SUIVE 1 ACTUAL de clic aquí",
             data=file_btn,
-            file_name=os.path.basename(ruta_archivo),
+            file_name=os.path.basename(path_actual),
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Descargue el archivo Excel oficial más reciente utilizado para este análisis."
+            help="Descargue el archivo Excel exacto que el sistema está analizando en este momento."
         )
 
 st.divider()
 
-if ruta_archivo is not None and os.path.exists(ruta_archivo):
+if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['suive_activo_path']):
     try:
-        xls = pd.ExcelFile(ruta_archivo)
+        xls = pd.ExcelFile(st.session_state['suive_activo_path'])
         registros_totales = []
         
         def limpiar_texto_grupo(texto):
@@ -96,7 +102,7 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
         df_suive = pd.DataFrame(registros_totales)
         
         if not df_suive.empty:
-            st.success(f"✅ Archivo sincronizado con éxito. Total de padecimientos detectados: **{len(df_suive)}**.")
+            st.success(f"✅ Archivo analizado y sincronizado en memoria con éxito. Total de padecimientos detectados: **{len(df_suive)}**.")
             
             # --- FILTROS EN LA PARTE SUPERIOR ---
             col_f1, col_f2 = st.columns(2)
@@ -179,4 +185,4 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo Excel: {e}")
 else:
-    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio.")
+    st.error("❌ No se encontró el archivo Excel del SUIVE activo en memoria o en el repositorio.")
