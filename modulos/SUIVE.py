@@ -45,11 +45,12 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 
-# --- ENCABEZADO OPTIMIZADO CON BOTÓN ROJO INTEGRADO ---
+# --- ENCABEZADO ORIGINAL CON TÍTULO Y BOTÓN ROJO INTEGRADO ---
 col_head1, col_head2 = st.columns([2.2, 1.8], vertical_alignment="bottom")
 
 with col_head1:
-    st.header(f"📊 SUIVE ACTUAL {anio_activo}")
+    st.header("📊 Módulo de Validación y Vigilancia Epidemiológica - SUIVE")
+    st.markdown(f"### Formato Oficial: **SUIVE ACTUAL {anio_activo}**")
 
 with col_head2:
     if path_actual and os.path.exists(path_actual):
