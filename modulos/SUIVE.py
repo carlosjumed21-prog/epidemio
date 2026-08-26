@@ -45,7 +45,43 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 
-# --- ENCABEZADO PRINCIPAL Y BLOQUE DE DESCARGA (AZUL OSCURO LEVE Y BOTÓN ROJO) ---
+# --- INYECCIÓN DE ESTILOS CSS FORZADOS PARA AZUL OSCURO LEVE Y BOTÓN ROJO ---
+st.markdown("""
+    <style>
+    /* Estilo de la caja contenedora en azul oscuro leve */
+    .suive-box {
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        padding: 12px 15px !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important;
+    }
+    .suive-box p {
+        color: #e2e8f0 !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 8px !important;
+        text-align: center !important;
+    }
+    /* Estilo forzado para el botón de descarga en color rojo */
+    div.stDownloadButton > button {
+        background-color: #dc2626 !important;
+        color: #ffffff !important;
+        font-weight: bold !important;
+        border-radius: 6px !important;
+        border: none !important;
+        padding: 0.4rem 0.8rem !important;
+        width: 100% !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+    }
+    div.stDownloadButton > button:hover {
+        background-color: #b91c1c !important;
+        color: #ffffff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- ENCABEZADO PRINCIPAL Y BLOQUE DE DESCARGA ---
 col_head1, col_head2 = st.columns([1.6, 2.4], vertical_alignment="center")
 
 with col_head1:
@@ -54,42 +90,8 @@ with col_head1:
 
 with col_head2:
     if path_actual and os.path.exists(path_actual):
-        # Estilo CSS personalizado: Contenedor azul oscuro leve y botón rojo llamativo
-        st.markdown("""
-            <style>
-            .download-box {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                padding: 10px 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .download-box p {
-                color: #cbd5e1;
-                font-size: 0.9rem;
-                font-weight: 500;
-                margin-bottom: 6px;
-                text-align: center;
-            }
-            div.stButton > button {
-                background-color: #dc2626 !important;
-                color: white !important;
-                font-weight: bold !important;
-                border-radius: 6px !important;
-                border: none !important;
-                padding: 0.35rem 0.7rem !important;
-                width: 100% !important;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            }
-            div.stButton > button:hover {
-                background-color: #b91c1c !important;
-                color: white !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
         with open(path_actual, "rb") as file_btn:
-            st.markdown('<div class="download-box"><p>📥 ¿Necesitas el formato oficial vigente?</p>', unsafe_allow_html=True)
+            st.markdown('<div class="suive-box"><p>📥 ¿Necesitas el formato oficial vigente?</p>', unsafe_allow_html=True)
             st.download_button(
                 label="👉 SI DESEA DESCARGAR EL ANEXO SUIVE 1 ACTUAL DE CLIC AQUÍ 📥",
                 data=file_btn,
