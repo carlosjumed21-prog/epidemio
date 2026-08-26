@@ -76,8 +76,12 @@ if archivo_suive is not None:
                 filtro_aviso = st.selectbox("Filtrar por Tipo de Notificación:", ["TODOS", "Inmediata (*)", "Vig. Especial (+)", "Brote (#)"])
                 
             df_filtrado = df_suive.copy()
+            
+            # Aplicar filtro por Grupo
             if filtro_grupo != "TODOS":
                 df_filtrado = df_filtrado[df_filtrado['Grupo'] == filtro_grupo]
+                
+            # Aplicar filtro estricto por Tipo de Notificación (solo los que cumplen)
             if filtro_aviso == "Inmediata (*)":
                 df_filtrado = df_filtrado[df_filtrado['Inmediata (*)'] == 1]
             elif filtro_aviso == "Vig. Especial (+)":
@@ -85,26 +89,21 @@ if archivo_suive is not None:
             elif filtro_aviso == "Brote (#)":
                 df_filtrado = df_filtrado[df_filtrado['Brote (#)'] == 1]
 
-            # Función para aplicar colorimetría y transparencia (50%) acorde a la imagen de referencia
-            def color_notificacion(val, color_hex):
-                if val == 1:
-                    # Color de fondo con 50% de opacidad aproximada en formato RGBA o Hex con canal alfa
-                    return f'background-color: {color_hex}80; color: white; font-weight: bold; text-align: center;'
-                return 'text-align: center; color: #555;'
+            # Omitir la columna 'Pestaña' para la visualización final
+            if 'Pestaña' in df_filtrado.columns:
+                df_filtrado = df_filtrado.drop(columns=['Pestaña'])
 
             def estilo_tabla(row):
                 styles = [''] * len(row)
-                # Índices de columnas de interés
-                # 'Inmediata (*)', 'Vig. Especial (+)', 'Brote (#)'
-                if row['Inmediata (*)'] == 1:
+                if 'Inmediata (*)' in df_filtrado.columns and row['Inmediata (*)'] == 1:
                     styles[df_filtrado.columns.get_loc('Inmediata (*)')] = 'background-color: rgba(239, 68, 68, 0.5); color: white; text-align: center; font-weight: bold;' # Rojo
-                if row['Vig. Especial (+)'] == 1:
+                if 'Vig. Especial (+)' in df_filtrado.columns and row['Vig. Especial (+)'] == 1:
                     styles[df_filtrado.columns.get_loc('Vig. Especial (+)')] = 'background-color: rgba(13, 148, 136, 0.5); color: white; text-align: center; font-weight: bold;' # Turquesa
-                if row['Brote (#)'] == 1:
+                if 'Brote (#)' in df_filtrado.columns and row['Brote (#)'] == 1:
                     styles[df_filtrado.columns.get_loc('Brote (#)')] = 'background-color: rgba(249, 115, 22, 0.5); color: white; text-align: center; font-weight: bold;' # Naranja
                 return styles
 
-            st.markdown("### 📋 Matriz de Padecimientos y Criterios de Notificación")
+            st.markdown(f"### 📋 Matriz de Padecimientos y Criterios de Notificación ({len(df_filtrado)} registros encontrados)")
             st.caption("Los campos con cumplimiento normativo se resaltan con el código de colores institucional y 50% de transparencia.")
             
             # Mostrar dataframe estilizado
@@ -114,7 +113,7 @@ if archivo_suive is not None:
                 height=500
             )
             
-            # Métricas rápidas
+            # Métricas rápidas basadas en el set completo cargado
             col1, col2, col3 = st.columns(3)
             col1.metric("🚨 Total Inmediatas (*)", int(df_suive['Inmediata (*)'].sum()))
             col2.metric("📋 Total Vig. Especiales (+)", int(df_suive['Vig. Especial (+)'].sum()))
