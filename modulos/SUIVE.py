@@ -89,7 +89,7 @@ if archivo_suive is not None:
                 
             df_filtrado = df_suive.copy()
             
-            # 1. Aplicar filtro por Grupo
+            # 1. Aplicar filtro por Grupo (si se selecciona uno específico)
             if filtro_grupo != "TODOS":
                 df_filtrado = df_filtrado[df_filtrado['Grupo'] == filtro_grupo]
                 
@@ -111,7 +111,10 @@ if archivo_suive is not None:
                 columnas_a_omitir = ['Pestaña', 'Grupo']
                 df_filtrado = df_filtrado.drop(columns=[col for col in columnas_a_omitir if col in df_filtrado.columns])
 
-            # Convertir 1 y 0 a texto limpio de marca de verificación
+            # Omitir registros vacíos (dropna) para asegurar que no se muestre ningún "empty"
+            df_filtrado = df_filtrado.dropna(how='all')
+
+            # Convertir 1 y 0 a texto limpio de marca de verificación solo para celdas válidas
             df_visual = df_filtrado.copy()
             for col in ['Inmediata (*)', 'Vig. Especial (+)', 'Brote (#)']:
                 if col in df_visual.columns:
@@ -120,12 +123,13 @@ if archivo_suive is not None:
             def estilo_tabla(row):
                 styles = [''] * len(row)
                 orig_idx = row.name
-                if 'Inmediata (*)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Inmediata (*)'] == 1:
-                    styles[df_filtrado.columns.get_loc('Inmediata (*)')] = 'background-color: rgba(239, 68, 68, 0.5); color: white; text-align: center; font-weight: bold;'
-                if 'Vig. Especial (+)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Vig. Especial (+)'] == 1:
-                    styles[df_filtrado.columns.get_loc('Vig. Especial (+)')] = 'background-color: rgba(13, 148, 136, 0.5); color: white; text-align: center; font-weight: bold;'
-                if 'Brote (#)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Brote (#)'] == 1:
-                    styles[df_filtrado.columns.get_loc('Brote (#)')] = 'background-color: rgba(249, 115, 22, 0.5); color: white; text-align: center; font-weight: bold;'
+                if orig_idx in df_suive.index:
+                    if 'Inmediata (*)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Inmediata (*)'] == 1:
+                        styles[df_filtrado.columns.get_loc('Inmediata (*)')] = 'background-color: rgba(239, 68, 68, 0.5); color: white; text-align: center; font-weight: bold;'
+                    if 'Vig. Especial (+)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Vig. Especial (+)'] == 1:
+                        styles[df_filtrado.columns.get_loc('Vig. Especial (+)')] = 'background-color: rgba(13, 148, 136, 0.5); color: white; text-align: center; font-weight: bold;'
+                    if 'Brote (#)' in df_filtrado.columns and df_suive.loc[orig_idx, 'Brote (#)'] == 1:
+                        styles[df_filtrado.columns.get_loc('Brote (#)')] = 'background-color: rgba(249, 115, 22, 0.5); color: white; text-align: center; font-weight: bold;'
                 return styles
 
             st.divider()
@@ -138,12 +142,15 @@ if archivo_suive is not None:
 
             st.markdown(f"### 📋 Matriz de Padecimientos ({len(df_visual)} registros mostrados)")
             
-            # Mostrar dataframe estilizado con texto limpio
-            st.dataframe(
-                df_visual.style.apply(estilo_tabla, axis=1),
-                use_container_width=True,
-                height=500
-            )
+            # Mostrar dataframe estilizado con texto limpio y sin vacíos
+            if not df_visual.empty:
+                st.dataframe(
+                    df_visual.style.apply(estilo_tabla, axis=1),
+                    use_container_width=True,
+                    height=500
+                )
+            else:
+                st.info("ℹ️ No hay registros que coincidan con los filtros seleccionados.")
             
         else:
             st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos. Verifique la estructura del archivo.")
