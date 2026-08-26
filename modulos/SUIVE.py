@@ -45,8 +45,8 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 
-# --- ENCABEZADO ORIGINAL CON TÍTULO Y BOTÓN ROJO INTEGRADO ---
-col_head1, col_head2 = st.columns([2.2, 1.8], vertical_alignment="bottom")
+# --- ENCABEZADO PRINCIPAL Y BLOQUE DE DESCARGA LLAMATIVO INTEGRADOS ---
+col_head1, col_head2 = st.columns([1.6, 2.4], vertical_alignment="center")
 
 with col_head1:
     st.header("📊 Módulo de Validación y Vigilancia Epidemiológica - SUIVE")
@@ -54,9 +54,23 @@ with col_head1:
 
 with col_head2:
     if path_actual and os.path.exists(path_actual):
-        # Estilo CSS personalizado para el botón rojo llamativo
+        # Estilo CSS personalizado para la caja y el botón rojo llamativo
         st.markdown("""
             <style>
+            .download-box {
+                background: linear-gradient(135deg, #1e293b 100%, #0f172a 100%);
+                padding: 12px 15px;
+                border-radius: 8px;
+                border-left: 4px solid #dc2626;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+            }
+            .download-box p {
+                color: #f8fafc;
+                font-size: 0.95rem;
+                font-weight: bold;
+                margin-bottom: 8px;
+                text-align: center;
+            }
             div.stButton > button {
                 background-color: #dc2626 !important;
                 color: white !important;
@@ -75,14 +89,16 @@ with col_head2:
         """, unsafe_allow_html=True)
 
         with open(path_actual, "rb") as file_btn:
+            st.markdown('<div class="download-box"><p>📥 ¿Necesitas el formato oficial vigente?</p>', unsafe_allow_html=True)
             st.download_button(
-                label="📥 Descargar ANEXO SUIVE 1",
+                label="👉 SI DESEA DESCARGAR EL ANEXO SUIVE 1 ACTUAL DE CLIC AQUÍ 📥",
                 data=file_btn,
                 file_name=os.path.basename(path_actual),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 help="Descargue el archivo Excel exacto que el sistema está analizando en este momento.",
                 use_container_width=True
             )
+            st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
