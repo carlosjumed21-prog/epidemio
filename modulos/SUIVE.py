@@ -2,25 +2,41 @@ import streamlit as st
 import pandas as pd
 import re
 import os
+import glob
 
 st.header("📊 Módulo de Validación y Vigilancia Epidemiológica - SUIVE")
 
 @st.cache_data(ttl=3600)
 def obtener_archivo_suive():
     """
-    Localiza el formato SUIVE oficial y extrae el año dinámicamente del nombre.
+    Busca de forma inteligente el archivo SUIVE oficial en el repositorio 
+    y extrae el año dinámicamente de su nombre.
     """
-    posibles_rutas = [
-        "ANEXO 1 - Formato_SUIVE_1 2026.xlsx",
-        "modulos/ANEXO 1 - Formato_SUIVE_1 2026.xlsx"
+    # Patrones de búsqueda flexibles
+    patrones = [
+        "ANEXO 1 - Formato_SUIVE_1*.xlsx",
+        "modulos/ANEXO 1 - Formato_SUIVE_1*.xlsx",
+        "*SUIVE*.xlsx",
+        "*suive*.xlsx",
+        "*.xlsx"
     ]
     
-    for ruta in posibles_rutas:
-        if os.path.exists(ruta):
-            match_anio = re.search(r'(20\d{2})', ruta)
-            anio_detectado = match_anio.group(1) if match_anio else "2026"
-            return ruta, anio_detectado
+    archivo_encontrado = None
+    for patron in patrones:
+        coincidencias = glob.glob(patron)
+        if not coincidencias:
+            # Buscar también en subdirectorios si es necesario
+            coincidencias = glob.glob(f"**/{patron}", recursive=True)
             
+        if coincidencias:
+            archivo_encontrado = coincidencias[0]
+            break
+            
+    if archivo_encontrado and os.path.exists(archivo_encontrado):
+        match_anio = re.search(r'(20\d{2})', archivo_encontrado)
+        anio_detectado = match_anio.group(1) if match_anio else "2026"
+        return archivo_encontrado, anio_detectado
+        
     return None, "2026"
 
 # Ejecutar carga inicial de la ruta
@@ -32,11 +48,12 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
     st.session_state['suive_anio'] = anio_suive
 
 # Título y Leyenda dinámica con el año detectado
-st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {st.session_state.get('suive_anio', anio_suive)}**")
+anio_activo = st.session_state.get('suive_anio', anio_suive)
+st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {anio_activo}**")
 
 # Botón de descarga dinámica del archivo que se está analizando actualmente en memoria/sesión
-if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['suive_activo_path']):
-    path_actual = st.session_state['suive_activo_path']
+path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
+if path_actual and os.path.exists(path_actual):
     with open(path_actual, "rb") as file_btn:
         st.download_button(
             label="📥 Si desea descargar el ANEXO SUIVE 1 ACTUAL de clic aquí",
@@ -48,9 +65,9 @@ if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['
 
 st.divider()
 
-if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['suive_activo_path']):
+if path_actual and os.path.exists(path_actual):
     try:
-        xls = pd.ExcelFile(st.session_state['suive_activo_path'])
+        xls = pd.ExcelFile(path_actual)
         registros_totales = []
         
         def limpiar_texto_grupo(texto):
@@ -185,4 +202,4 @@ if 'suive_activo_path' in st.session_state and os.path.exists(st.session_state['
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo Excel: {e}")
 else:
-    st.error("❌ No se encontró el archivo Excel del SUIVE activo en memoria o en el repositorio.")
+    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio. Asegúrate de que el archivo 'ANEXO 1 - Formato_SUIVE_1 2026.xlsx' esté subido en la raíz o dentro de la carpeta 'modulos'.")
