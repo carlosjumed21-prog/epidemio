@@ -4,8 +4,6 @@ import re
 import os
 import glob
 
-st.header("📊 Módulo de Validación y Vigilancia Epidemiológica - SUIVE")
-
 @st.cache_data(ttl=3600)
 def obtener_archivo_suive():
     """
@@ -45,41 +43,45 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
     st.session_state['suive_anio'] = anio_suive
 
 anio_activo = st.session_state.get('suive_anio', anio_suive)
-st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {anio_activo}**")
-
-# --- CONTENEDOR LLAMATIVO PARA EL BOTÓN DE DESCARGA ---
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
-if path_actual and os.path.exists(path_actual):
-    st.markdown("""
-        <style>
-        .download-box {
-            background: linear-gradient(135deg, #0d9488 0%, #0284c7 100%);
-            padding: 15px 20px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .download-box p {
-            color: white;
-            font-size: 1.1rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
 
-    with open(path_actual, "rb") as file_btn:
-        st.markdown('<div class="download-box"><p>📥 ¿Necesitas el formato oficial vigente?</p>', unsafe_allow_html=True)
-        st.download_button(
-            label="👉 SI DESEA DESCARGAR EL ANEXO SUIVE 1 ACTUAL DE CLIC AQUÍ 📥",
-            data=file_btn,
-            file_name=os.path.basename(path_actual),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Descargue el archivo Excel exacto que el sistema está analizando en este momento.",
-            use_container_width=True
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+# --- ENCABEZADO OPTIMIZADO CON BOTÓN ROJO INTEGRADO ---
+col_head1, col_head2 = st.columns([2.2, 1.8], vertical_alignment="bottom")
+
+with col_head1:
+    st.header(f"📊 SUIVE ACTUAL {anio_activo}")
+
+with col_head2:
+    if path_actual and os.path.exists(path_actual):
+        # Estilo CSS personalizado para el botón rojo llamativo
+        st.markdown("""
+            <style>
+            div.stButton > button {
+                background-color: #dc2626 !important;
+                color: white !important;
+                font-weight: bold !important;
+                border-radius: 6px !important;
+                border: none !important;
+                padding: 0.4rem 0.8rem !important;
+                width: 100% !important;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            div.stButton > button:hover {
+                background-color: #b91c1c !important;
+                color: white !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        with open(path_actual, "rb") as file_btn:
+            st.download_button(
+                label="📥 Descargar ANEXO SUIVE 1",
+                data=file_btn,
+                file_name=os.path.basename(path_actual),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descargue el archivo Excel exacto que el sistema está analizando en este momento.",
+                use_container_width=True
+            )
 
 st.divider()
 
