@@ -84,11 +84,16 @@ pg = st.navigation([
         title="Cronología Clínica", 
         icon="⏳"
     ),
-    # NUEVA PESTAÑA: ESQUEMAS DE VACUNACIÓN 2026
     st.Page(
         "modulos/Vacunas.py", 
         title="Esquemas de vacunación 2026", 
         icon="💉"
+    ),
+    # NUEVA PESTAÑA: ANÁLISIS SUIVE
+    st.Page(
+        "modulos/SUIVE.py", 
+        title="Vigilancia SUIVE", 
+        icon="📊"
     ),
 ])
 
