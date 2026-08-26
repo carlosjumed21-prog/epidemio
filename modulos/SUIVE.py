@@ -2,56 +2,45 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-import gdown
 
 st.header("📊 Módulo de Validación y Vigilancia Epidemiológica - SUIVE")
 
-# URL pública de la carpeta de Google Drive provista
-DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1Bdgn2B04cjV_RdQ7hnuJZuWHfS6FH9G6?usp=sharing"
-
 @st.cache_data(ttl=3600)
-def descargar_y_obtener_archivo_suive(folder_url):
+def obtener_archivo_suive():
     """
-    Descarga el archivo más reciente de la carpeta pública de Google Drive
-    y extrae automáticamente el año del nombre del archivo.
+    Localiza el formato SUIVE oficial y extrae el año dinámicamente del nombre.
     """
-    output_dir = "temp_suive"
-    os.makedirs(output_dir, exist_ok=True)
+    posibles_rutas = [
+        "ANEXO 1 - Formato_SUIVE_1 2026.xlsx",
+        "modulos/ANEXO 1 - Formato_SUIVE_1 2026.xlsx"
+    ]
     
-    try:
-        # Descarga la carpeta completa o el contenido público usando gdown
-        gdown.download_folder(folder_url, output=output_dir, quiet=True, use_cookies=False)
-        
-        # Buscar archivos Excel descargados en el directorio
-        archivos_encontrados = []
-        for root, dirs, files in os.walk(output_dir):
-            for file in files:
-                if file.lower().endswith(('.xlsx', '.xls')):
-                    archivos_encontrados.append(os.path.join(root, file))
-                    
-        if not archivos_encontrados:
-            return None, "2026" # Valor por defecto si no encuentra archivo inmediato
+    for ruta in posibles_rutas:
+        if os.path.exists(ruta):
+            # Extraer año del nombre del archivo mediante regex
+            match_anio = re.search(r'(20\d{2})', ruta)
+            anio_detectado = match_anio.group(1) if match_anio else "2026"
+            return ruta, anio_detectado
             
-        # Seleccionar el archivo más reciente basado en la fecha de modificación
-        archivo_mas_reciente = max(archivos_encontrados, key=os.path.getmtime)
-        nombre_archivo = os.path.basename(archivo_mas_reciente)
-        
-        # Extraer el año del nombre del archivo mediante expresiones regulares (ej. 2026)
-        match_anio = re.search(r'(20\d{2})', nombre_archivo)
-        anio_detectado = match_anio.group(1) if match_anio else "2026"
-        
-        return archivo_mas_reciente, anio_detectado
-        
-    except Exception as e:
-        return None, "2026"
+    return None, "2026"
 
-# Ejecutar la carga automática en segundo plano
-with st.spinner("🔄 Conectando con Google Drive y descargando el formato SUIVE más reciente..."):
-    ruta_archivo, anio_suive = descargar_y_obtener_archivo_suive(DRIVE_FOLDER_URL)
+# Ejecutar carga
+ruta_archivo, anio_suive = obtener_archivo_suive()
 
-# Mostrar la leyenda dinámica solicitada
 st.markdown(f"### 📥 Formato Oficial: **SUIVE ACTUAL {anio_suive}**")
-st.markdown("Carga automatizada y sincronizada directamente desde el repositorio institucional en la nube.")
+
+# Botón de descarga directa del archivo reciente utilizado para el análisis
+if ruta_archivo is not None and os.path.exists(ruta_archivo):
+    with open(ruta_archivo, "rb") as file_btn:
+        st.download_button(
+            label="📥 Si desea descargar el ANEXO SUIVE 1 de clic aquí",
+            data=file_btn,
+            file_name=os.path.basename(ruta_archivo),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Descargue el archivo Excel oficial más reciente utilizado para este análisis."
+        )
+
+st.divider()
 
 if ruta_archivo is not None and os.path.exists(ruta_archivo):
     try:
@@ -185,15 +174,9 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
                 st.info("ℹ️ No hay registros que coincidan con los filtros seleccionados.")
             
         else:
-            st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos. Verifique la estructura del archivo en Google Drive.")
+            st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos.")
             
     except Exception as e:
-        st.error(f"❌ Error al procesar el archivo Excel descargado: {e}")
+        st.error(f"❌ Error al procesar el archivo Excel: {e}")
 else:
-    st.error("❌ No se pudo establecer conexión con la carpeta de Google Drive o no contiene archivos Excel válidos.")
-
-# --- CÓDIGO QR DE ACCESO AL MÓDULO ---
-st.divider()
-st.subheader("📱 Código QR de Acceso al Módulo SUIVE")
-url_app = "https://epidemio-ztqx4t3swz3bqkxxubp4tn.streamlit.app/SUIVE"
-st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={url_app}", width=200)
+    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio.")
