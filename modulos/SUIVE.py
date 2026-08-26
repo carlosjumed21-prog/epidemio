@@ -45,7 +45,7 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 
-# --- ENCABEZADO PRINCIPAL Y BLOQUE DE DESCARGA LLAMATIVO INTEGRADOS ---
+# --- ENCABEZADO PRINCIPAL Y BLOQUE DE DESCARGA (AZUL OSCURO LEVE Y BOTÓN ROJO) ---
 col_head1, col_head2 = st.columns([1.6, 2.4], vertical_alignment="center")
 
 with col_head1:
@@ -54,21 +54,21 @@ with col_head1:
 
 with col_head2:
     if path_actual and os.path.exists(path_actual):
-        # Estilo CSS personalizado para la caja y el botón rojo llamativo
+        # Estilo CSS personalizado: Contenedor azul oscuro leve y botón rojo llamativo
         st.markdown("""
             <style>
             .download-box {
-                background: linear-gradient(135deg, #1e293b 100%, #0f172a 100%);
-                padding: 12px 15px;
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                padding: 10px 15px;
                 border-radius: 8px;
-                border-left: 4px solid #dc2626;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
             .download-box p {
-                color: #f8fafc;
-                font-size: 0.95rem;
-                font-weight: bold;
-                margin-bottom: 8px;
+                color: #cbd5e1;
+                font-size: 0.9rem;
+                font-weight: 500;
+                margin-bottom: 6px;
                 text-align: center;
             }
             div.stButton > button {
@@ -77,7 +77,7 @@ with col_head2:
                 font-weight: bold !important;
                 border-radius: 6px !important;
                 border: none !important;
-                padding: 0.4rem 0.8rem !important;
+                padding: 0.35rem 0.7rem !important;
                 width: 100% !important;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             }
