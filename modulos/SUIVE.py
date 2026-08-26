@@ -66,25 +66,42 @@ if archivo_suive is not None:
         if not df_suive.empty:
             st.success(f"✅ Archivo procesado con éxito. Total de padecimientos detectados: **{len(df_suive)}**.")
             
-            # Filtro único por Tipo de Notificación
-            filtro_aviso = st.selectbox(
-                "Filtrar por Tipo de Notificación:", 
-                ["TODOS", "Inmediata (*)", "Vig. Especial (+)", "Brote (#)"]
-            )
+            # --- AMBOS FILTROS EN LA PARTE INICIAL ---
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                filtro_grupo = st.selectbox(
+                    "Filtrar por Grupo Epidemiológico:", 
+                    ["TODOS"] + sorted(df_suive['Grupo'].unique().tolist())
+                )
+            with col_f2:
+                filtro_aviso = st.selectbox(
+                    "Filtrar por Tipo de Notificación:", 
+                    ["TODOS", "Inmediata (*)", "Vig. Especial (+)", "Brote (#)"]
+                )
                 
             df_filtrado = df_suive.copy()
             
-            # Aplicar filtro estricto por Tipo de Notificación (muestra únicamente las filas correspondientes)
+            # 1. Aplicar filtro por Grupo
+            if filtro_grupo != "TODOS":
+                df_filtrado = df_filtrado[df_filtrado['Grupo'] == filtro_grupo]
+                
+            # 2. Aplicar filtro estricto por Tipo de Notificación y recortar columnas correspondientes
             if filtro_aviso == "Inmediata (*)":
                 df_filtrado = df_filtrado[df_filtrado['Inmediata (*)'] == 1]
+                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Inmediata (*)']
+                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
             elif filtro_aviso == "Vig. Especial (+)":
                 df_filtrado = df_filtrado[df_filtrado['Vig. Especial (+)'] == 1]
+                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Vig. Especial (+)']
+                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
             elif filtro_aviso == "Brote (#)":
                 df_filtrado = df_filtrado[df_filtrado['Brote (#)'] == 1]
-
-            # Omitir columnas 'Pestaña' y 'Grupo' para la visualización final
-            columnas_a_omitir = ['Pestaña', 'Grupo']
-            df_filtrado = df_filtrado.drop(columns=[col for col in columnas_a_omitir if col in df_filtrado.columns])
+                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Brote (#)']
+                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
+            else:
+                # Si se selecciona "TODOS", omitimos 'Pestaña' y 'Grupo' pero dejamos las 3 columnas de notificación
+                columnas_a_omitir = ['Pestaña', 'Grupo']
+                df_filtrado = df_filtrado.drop(columns=[col for col in columnas_a_omitir if col in df_filtrado.columns])
 
             def estilo_tabla(row):
                 styles = [''] * len(row)
