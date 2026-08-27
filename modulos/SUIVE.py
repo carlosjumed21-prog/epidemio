@@ -2,29 +2,37 @@ import streamlit as st
 import pandas as pd
 import re
 import os
+import glob
 
 @st.cache_data(ttl=3600)
 def obtener_archivo_suive():
     """
     Busca de forma inteligente el archivo SUIVE oficial en el repositorio 
-    de manera recursiva y sin importar mayúsculas/minúsculas,
     y extrae el año dinámicamente de su nombre.
     """
-    directorio_base = os.getcwd()
+    patrones = [
+        "ANEXO 1 - Formato_SUIVE_1*.xlsx",
+        "modulos/ANEXO 1 - Formato_SUIVE_1*.xlsx",
+        "*SUIVE*.xlsx",
+        "*suive*.xlsx",
+        "*.xlsx"
+    ]
     
-    for root, dirs, files in os.walk(directorio_base):
-        for file in files:
-            # Convertimos a minúsculas para evitar problemas de case-sensitivity en la nube
-            nombre_min = file.lower()
-            if nombre_min.endswith('.xlsx') and ('suive' in nombre_min or 'anexo' in nombre_min):
-                ruta_completa = os.path.join(root, file)
-                
-                # Extraer año
-                match_anio = re.search(r'(20\d{2})', file)
-                anio_detectado = match_anio.group(1) if match_anio else "2026"
-                
-                return ruta_completa, anio_detectado
-                
+    archivo_encontrado = None
+    for patron in patrones:
+        coincidencias = glob.glob(patron)
+        if not coincidencias:
+            coincidencias = glob.glob(f"**/{patron}", recursive=True)
+            
+        if coincidencias:
+            archivo_encontrado = coincidencias[0]
+            break
+            
+    if archivo_encontrado and os.path.exists(archivo_encontrado):
+        match_anio = re.search(r'(20\d{2})', archivo_encontrado)
+        anio_detectado = match_anio.group(1) if match_anio else "2026"
+        return archivo_encontrado, anio_detectado
+        
     return None, "2026"
 
 # Ejecutar carga inicial de la ruta
@@ -98,23 +106,9 @@ with col_head2:
 
 st.divider()
 
-# --- DEFINIR FUENTE DE DATOS (Local o Subida por Usuario) ---
-fuente_datos = None
-
 if path_actual and os.path.exists(path_actual):
-    fuente_datos = path_actual
-else:
-    st.warning("⚠️ No se encontró el archivo Excel del SUIVE automáticamente en el repositorio.")
-    st.info("💡 Por favor, sube el formato de forma manual para continuar:")
-    archivo_subido = st.file_uploader("Cargar Anexo 1 SUIVE (.xlsx)", type=['xlsx'])
-    if archivo_subido is not None:
-        fuente_datos = archivo_subido
-
-# --- PROCESAMIENTO DEL EXCEL ---
-if fuente_datos is not None:
     try:
-        # pd.ExcelFile puede leer tanto rutas locales como archivos subidos (UploadedFile)
-        xls = pd.ExcelFile(fuente_datos)
+        xls = pd.ExcelFile(path_actual)
         registros_totales = []
         
         def limpiar_texto_grupo(texto):
@@ -244,7 +238,9 @@ if fuente_datos is not None:
                 st.info("ℹ️ No hay registros que coincidan con los filtros seleccionados.")
             
         else:
-            st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos. Verifica la estructura del archivo Excel.")
+            st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos.")
             
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo Excel: {e}")
+else:
+    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio.")
