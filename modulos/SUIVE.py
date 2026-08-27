@@ -21,8 +21,7 @@ def obtener_archivo_desde_drive(file_id):
     
     try:
         # Usamos gdown para descargar el archivo. quiet=True evita que llene la consola de logs.
-        # fuzzy=True ayuda a resolver redirecciones extrañas de Google Drive.
-        gdown.download(url_descarga, ruta_temporal, quiet=True, fuzzy=True)
+        gdown.download(url_descarga, ruta_temporal, quiet=True)
         
         # Verificar que el archivo realmente se descargó
         if not os.path.exists(ruta_temporal):
