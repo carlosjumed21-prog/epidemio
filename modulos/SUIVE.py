@@ -2,34 +2,34 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-import requests
+import gdown
 
 # --- CONFIGURACIÓN DE GOOGLE DRIVE ---
-# Este es el ID exacto de tu archivo Excel dentro de la carpeta que compartiste.
+# Este es el ID exacto de tu archivo Excel.
 FILE_ID_DRIVE = "1AJPgYoA71bqTwEV1M8VjN4s18dzTNUd5cXH96NzmPmE"
 
 @st.cache_data(ttl=3600, show_spinner="Descargando SUIVE desde Google Drive...")
 def obtener_archivo_desde_drive(file_id):
     """
-    Descarga el archivo directamente desde Google Drive y lo guarda en la 
-    memoria temporal del servidor. Se actualiza cada hora (ttl=3600).
+    Descarga el archivo directamente desde Google Drive usando gdown 
+    (para evitar errores 500 o bloqueos de advertencia de virus de Google)
+    y lo guarda en la memoria temporal del servidor.
     """
-    # Construimos el enlace de descarga directa de Google Drive
-    url_descarga = f"https://drive.google.com/uc?id={file_id}&export=download"
+    url_descarga = f'https://drive.google.com/uc?id={file_id}'
     ruta_temporal = "SUIVE_TEMP.xlsx"
     anio_detectado = "2026" # Año por defecto
     
     try:
-        # Descargar el archivo
-        respuesta = requests.get(url_descarga)
-        respuesta.raise_for_status() # Verifica que la descarga fue exitosa
+        # Usamos gdown para descargar el archivo. quiet=True evita que llene la consola de logs.
+        # fuzzy=True ayuda a resolver redirecciones extrañas de Google Drive.
+        gdown.download(url_descarga, ruta_temporal, quiet=True, fuzzy=True)
         
-        # Guardarlo como un archivo local temporal en el servidor
-        with open(ruta_temporal, "wb") as f:
-            f.write(respuesta.content)
-            
+        # Verificar que el archivo realmente se descargó
+        if not os.path.exists(ruta_temporal):
+             st.error("Error: gdown no pudo guardar el archivo.")
+             return None, "2026"
+             
         # Extraer el año dinámicamente leyendo el contenido del Excel
-        # (Buscamos en las primeras filas del documento)
         df_prueba = pd.read_excel(ruta_temporal, header=None, nrows=5)
         for fila in df_prueba.values:
             for celda in fila:
@@ -41,7 +41,7 @@ def obtener_archivo_desde_drive(file_id):
         return ruta_temporal, anio_detectado
         
     except Exception as e:
-        st.error(f"Error de conexión con Google Drive: {e}")
+        st.error(f"Error al intentar descargar con gdown: {e}")
         return None, "2026"
 
 # 1. Ejecutar la descarga o recuperar de la memoria caché
