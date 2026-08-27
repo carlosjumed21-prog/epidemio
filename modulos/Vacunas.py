@@ -73,6 +73,7 @@ edad_texto_grande = " / ".join(partes_grandes)
 esta_embarazada = False
 es_personal_salud = False
 asiste_guarderia = False
+trabaja_guarderia = False
 factores_seleccionados = []
 
 col_cond1, col_cond2 = st.columns([1, 1])
@@ -86,10 +87,9 @@ with col_cond1:
 with col_cond2:
     if anios >= 18:
         es_personal_salud = st.checkbox("🩺 ¿Es personal de salud?")
+        trabaja_guarderia = st.checkbox("🧑‍🏫 ¿Trabaja en guardería o en contacto con menores de 1 año?")
 
-# Filtro de comorbilidades según la edad actual (Evita incongruencias en neonatos)
 if 'Variable_Riesgo' in df_riesgos.columns:
-    # Excluimos PERSONAL_SALUD por si sigue en el Excel, ya que tiene su propio checkbox
     riesgos_validos_edad = df_riesgos[
         (df_riesgos['Edad_Minima_Anios'] <= anios) & 
         (df_riesgos['Edad_Maxima_Anios'] >= anios) & 
@@ -117,6 +117,7 @@ color_fondo, color_borde, color_texto, badge_bg = ("#FCE4EC", "#D81B60", "#880E4
 condiciones_tags = []
 if esta_embarazada: condiciones_tags.append("<strong style='color:#C2185B;'>Embarazo 🤰</strong>")
 if es_personal_salud: condiciones_tags.append("<strong style='color:#0277BD;'>Personal de Salud 🩺</strong>")
+if trabaja_guarderia: condiciones_tags.append("<strong style='color:#004D40;'>Trabaja en Guardería 🧑‍🏫</strong>")
 if factores_seleccionados: condiciones_tags.append("<strong style='color:#E65100;'>Comorbilidad ⚠️</strong>")
 extra_info = " &nbsp;|&nbsp; " + " &nbsp;|&nbsp; ".join(condiciones_tags) if condiciones_tags else ""
 
@@ -132,7 +133,7 @@ tarjeta_html = (
 )
 st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-# Cuadro visual panorámico para menores de 10 años
+# Cuadro visual panorámico (restaurado hasta los 6 años)
 if anios < 10:
     C_INACTIVO = "#FBFBFB"
     act_bcg = dias_vida >= 0
@@ -143,6 +144,8 @@ if anios < 10:
     act_m12 = total_meses >= 12
     act_m18 = total_meses >= 18
     act_m48 = total_meses >= 48
+    act_m59 = total_meses >= 59
+    act_m72 = total_meses >= 72
     
     tabla_pediatrica_html = f"""
     <table style="width:100%;border-collapse:separate;border-spacing:4px;font-family:'Segoe UI',sans-serif;margin-bottom:25px;">
@@ -162,6 +165,12 @@ if anios < 10:
     <td colspan="2" style="background-color:{'#E7F3FE' if act_m4 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">Anti neumocócica 20v (1ª y 2ª)</td>
     </tr>
     <tr>
+    <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:6px;border-radius:3px;">6 meses</td>
+    <td colspan="2" style="background-color:{'#CFE2F3' if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">Hexavalente (3ª)</td>
+    <td colspan="2" style="background-color:{'#FADCE9' if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">Influenza (1ª temp. invernal)</td>
+    <td colspan="2" style="background-color:{'#C8E6C9' if act_m6 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">COVID-19 (1ª temp. invernal)</td>
+    </tr>
+    <tr>
     <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:6px;border-radius:3px;">12 meses</td>
     <td colspan="2" style="background-color:{'#FFF2CC' if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">SRP (1ª dosis)</td>
     <td colspan="2" style="background-color:{'#E7F3FE' if act_m12 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">Anti neumocócica 20v (3ª dosis)</td>
@@ -177,6 +186,15 @@ if anios < 10:
     <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:6px;border-radius:3px;">4 años</td>
     <td colspan="6" style="background-color:{'#FFE082' if act_m48 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">DPT (Refuerzo)</td>
     </tr>
+    <tr>
+    <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:6px;border-radius:3px;">59 meses</td>
+    <td colspan="3" style="background-color:{'#FADCE9' if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">Influenza estacional (Refuerzo anual)</td>
+    <td colspan="3" style="background-color:{'#C8E6C9' if act_m59 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">COVID-19 (Refuerzo anual)</td>
+    </tr>
+    <tr>
+    <td style="background-color:#555;color:#FFF;font-weight:700;font-size:0.88rem;text-align:center;padding:6px;border-radius:3px;">72 meses</td>
+    <td colspan="6" style="background-color:{'#FFF2CC' if act_m72 else C_INACTIVO};font-size:0.85rem;font-weight:600;text-align:center;padding:6px;border-radius:3px;">SRP (2ª dosis - Si nació antes de julio 2020)</td>
+    </tr>
     </tbody>
     </table>
     """
@@ -188,7 +206,6 @@ if anios >= 10:
 # --- 6. ESQUEMA SUGERIDO ACTUAL (MOTOR DE REGLAS) ---
 st.subheader("📋 Biológicos Correspondientes a su Edad Actual")
 
-# Filtrado Base
 esquema_aplicable = df_esquema[
     (df_esquema['Edad_Minima_Dias'] <= dias_vida) & 
     (df_esquema['Edad_Maxima_Dias'] >= dias_vida)
@@ -200,7 +217,7 @@ else: esquema_aplicable = esquema_aplicable[esquema_aplicable['Aplica_Hombre'] =
 condiciones_cumplidas = ["NINGUNA"]
 if esta_embarazada: condiciones_cumplidas.extend(["EMBARAZO", "EMBARAZO_20_SDG", "EMBARAZO_32_36_SDG"])
 if asiste_guarderia: condiciones_cumplidas.append("ASISTE_GUARDERIA")
-if es_personal_salud: condiciones_cumplidas.append("PERSONAL_SALUD")
+if es_personal_salud or trabaja_guarderia: condiciones_cumplidas.append("PERSONAL_SALUD")
 
 if fecha_nacimiento >= date(2020, 7, 1): condiciones_cumplidas.append("NACIDOS_DESPUES_JULIO_2020")
 else: condiciones_cumplidas.append("NACIDOS_ANTES_JULIO_2020")
@@ -233,39 +250,38 @@ else:
     esquema_aplicable['Origen'] = "Base"
     esquema_consolidado = esquema_aplicable
 
-# --- 7. RENDERIZADO VISUAL DETALLADO ---
+# --- 7. RENDERIZADO VISUAL DETALLADO (RESTITUIDO) ---
 COLORES_VACUNAS = {"BCG": "#6A1B9A", "HEPB": "#E65100", "HEXA": "#0277BD", "RV1": "#2E7D32", "VCN20": "#00838F", "INFL": "#AD1457", "COVID": "#1B5E20", "SRP": "#E65100", "DPT": "#5D4037", "VAR": "#4A148C", "HEPA": "#E65100", "VPH": "#F57F17", "TD": "#3949AB", "SR": "#D81B60", "TDPA": "#2E7D32", "VSR": "#004D40"}
 
-# Diccionario auxiliar visual para recuperar los campos de edad y aplicación simultánea
+# Diccionario original para las insignias de simultaneidad y espaciado
 INFO_EXTRA = {
-    "BCG": {"min": "Al nacer", "max": "< 5 años (Excepto <14 años)", "simul": "Hepatitis B, Hexavalente, VCN20, Rotavirus, Influenza"},
-    "HEPB": {"min": "Al nacer", "max": "7 días de vida", "simul": "Rotavirus, Neumo, BCG"},
-    "HEXA": {"min": "6 semanas", "max": "< 5 años", "simul": "Influenza, Rotavirus, Neumococo, Hepatitis A"},
-    "RV1": {"min": "6 semanas", "max": "7 meses 29 días", "simul": "Hexavalente, Influenza, Neumococo"},
-    "VCN20": {"min": "6 semanas", "max": "59 meses (Dosis 1 y 2) / 60+ años (Única)", "simul": "Hexavalente, Influenza, Rotavirus, Hepatitis A"},
-    "SRP": {"min": "12 meses", "max": "< 10 años", "simul": "Influenza, Neumococo, Hepatitis A, Hexavalente"},
-    "VAR": {"min": "12 meses", "max": "59 meses", "simul": "SRP (o separar 4 semanas)"},
-    "HEPA": {"min": "18 meses", "max": "59 meses", "simul": "Hexavalente, VCN20, Influenza, COVID"},
-    "DPT": {"min": "4 años", "max": "< 7 años", "simul": "VCN20, Influenza, SRP, SR"},
-    "VPH": {"min": "5º primaria o 11 años", "max": "11 años (Esquema base)", "simul": "Cualquier vacuna inactivada"},
-    "TD": {"min": "15 años", "max": "Sin límite", "simul": "Cualquier vacuna inactivada"},
-    "SR": {"min": "10 años", "max": "49 años", "simul": "Hepatitis B, Td (En sitios distintos)"},
-    "INFL": {"min": "6 meses", "max": "Sin límite", "simul": "Hexavalente, Rotavirus, VCN20, Hepatitis A, COVID"},
-    "COVID": {"min": "6 meses", "max": "Sin límite", "simul": "Influenza (Ampliamente recomendada)"},
-    "TDPA": {"min": "20 SDG", "max": "Fin del embarazo", "simul": "Influenza, COVID-19"},
-    "VSR": {"min": "32 SDG", "max": "36 SDG", "simul": "Cualquier vacuna inactivada"}
+    "BCG": {"min": "Al nacer", "max": "< 5 años (Excepcionalmente < 14 años)", "simul": ["Hexavalente", "Influenza", "Rotavirus", "Neumococo", "Hepatitis A y B"], "cualq": ["SRP o SR y Varicela"], "esp": []},
+    "HEPB": {"min": "Al nacer", "max": "7 días de vida", "simul": ["Rotavirus", "Neumococo", "BCG (en ausencia potencial de Hexavalente)"], "cualq": [], "esp": []},
+    "HEXA": {"min": "6 semanas", "max": "< 5 años", "simul": ["Influenza", "Rotavirus", "Neumococo", "Hepatitis A"], "cualq": ["BCG", "SRP o SR"], "esp": [("Varicela", "4 semanas de separación")]},
+    "RV1": {"min": "6 semanas", "max": "7 meses 29 días", "simul": ["Hexavalente", "Influenza", "Neumococo"], "cualq": ["BCG"], "esp": []},
+    "VCN20": {"min": "6 semanas", "max": "59 meses de edad / 60+ años", "simul": ["Hexavalente", "Influenza", "Rotavirus", "Hepatitis A"], "cualq": ["BCG", "SRP o SR y Varicela"], "esp": []},
+    "INFL": {"min": "6 meses", "max": "59 meses / 60+ años", "simul": ["Hexavalente", "Rotavirus", "Neumococo", "Hepatitis A y COVID-19"], "cualq": ["BCG", "SRP o SR y Varicela"], "esp": []},
+    "SRP": {"min": "12 meses", "max": "Menores de 10 años", "simul": ["Influenza", "Neumococo", "Hepatitis A", "BCG y Hexavalente"], "cualq": [], "esp": [("SR", "Intervalo de 4 semanas")]},
+    "VAR": {"min": "12 meses", "max": "59 meses", "simul": [], "cualq": ["BCG", "Hexavalente", "Neumococo", "Influenza", "Rotavirus", "Hepatitis A"], "esp": [("SRP", "Simultánea o separar 4 semanas")]},
+    "HEPA": {"min": "18 meses", "max": "59 meses", "simul": ["Hexavalente", "Neumococo", "Influenza", "COVID-19"], "cualq": ["BCG", "SRP o SR y Varicela"], "esp": []},
+    "DPT": {"min": "4 años", "max": "< 7 años", "simul": ["Neumococo", "Influenza", "SRP y SR"], "cualq": ["BCG"], "esp": [("Hexavalente", "Intervalo de 6 semanas")]},
+    "COVID": {"min": "6 meses", "max": "Sin límite", "simul": ["Influenza", "Neumococo", "Hepatitis A", "Hexavalente"], "cualq": ["BCG", "SRP o SR y Varicela"], "esp": []},
+    "TD": {"min": "15 años", "max": "Sin límite", "simul": ["Cualquier vacuna inactivada"], "cualq": ["Cualquier vacuna atenuada"], "esp": []},
+    "SR": {"min": "10 años", "max": "49 años", "simul": ["Hepatitis B", "Td", "Cualquier inactivada"], "cualq": ["BCG"], "esp": [("SRP", "Intervalo de 4 semanas")]},
+    "VPH": {"min": "5º primaria o 11 años", "max": "11 años (Esquema base)", "simul": ["Cualquier vacuna inactivada"], "cualq": ["Cualquier vacuna atenuada"], "esp": []},
+    "TDPA": {"min": "20 SDG / Ocupacional", "max": "Fin del embarazo", "simul": ["Influenza", "COVID-19"], "cualq": ["Cualquier vacuna atenuada"], "esp": []},
+    "VSR": {"min": "32 SDG", "max": "36 SDG", "simul": ["Cualquier vacuna inactivada"], "cualq": ["Cualquier vacuna atenuada"], "esp": []}
 }
 
 if esquema_consolidado.empty:
-    st.success("✅ **Esquema al día.** No se detectan vacunas programadas en el esquema base para esta edad exacta sin otros factores de riesgo.")
+    st.success("✅ **Esquema al día.** No se detectan vacunas programadas en el esquema base para esta edad exacta.")
 else:
     for _, row in esquema_consolidado.iterrows():
         bio_id = row['Biologico']
         nombre_oficial = df_biologicos.loc[df_biologicos['ID_Biologico'] == bio_id, 'Nombre_Oficial'].values
         nombre_display = nombre_oficial[0] if len(nombre_oficial) > 0 else bio_id
         color_tema = COLORES_VACUNAS.get(bio_id, "#455A64")
-        
-        info = INFO_EXTRA.get(bio_id, {"min": "Ver Lineamiento", "max": "Ver Lineamiento", "simul": "Otras inactivadas"})
+        info = INFO_EXTRA.get(bio_id, {"min": "Ver Lineamiento", "max": "Ver Lineamiento", "simul": [], "cualq": [], "esp": []})
         
         with st.container(border=True):
             col_v1, col_v2 = st.columns([3, 2])
@@ -273,15 +289,22 @@ else:
                 st.markdown(f"<h4 style='color:{color_tema};margin:0;'>{nombre_display}</h4>", unsafe_allow_html=True)
                 st.markdown(f"<span style='color:#37474F;font-weight:500;font-size:1.1rem;'>{row['Dosis_Num']}</span>", unsafe_allow_html=True)
             with col_v2:
-                if row['Origen'] == "Riesgo":
-                    badge_html = f"<span style='background-color:#FFF3E0;color:#E65100;padding:6px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;'>⚠️ {row['Edad_Recomendada_Texto']}</span>"
-                else:
-                    badge_html = f"<span style='background-color:#E3F2FD;color:#0D47A1;padding:6px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;'>✅ Etapa: {row['Edad_Recomendada_Texto']}</span>"
-                
+                badge_html = f"<span style='background-color:#FFF3E0;color:#E65100;padding:6px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;'>⚠️ {row['Edad_Recomendada_Texto']}</span>" if row['Origen'] == "Riesgo" else f"<span style='background-color:#E3F2FD;color:#0D47A1;padding:6px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;'>✅ Etapa: {row['Edad_Recomendada_Texto']}</span>"
                 st.markdown(f"<div style='text-align:right; margin-top:10px;'>{badge_html}</div>", unsafe_allow_html=True)
             
             st.write("")
-            c1, c2, c3 = st.columns(3)
-            with c1: st.markdown(f"**🔹 Edad mínima:**<br><span style='color:#0D47A1;'>{info['min']}</span>", unsafe_allow_html=True)
-            with c2: st.markdown(f"**🔸 Edad máxima:**<br><span style='color:#B71C1C;'>{info['max']}</span>", unsafe_allow_html=True)
-            with c3: st.markdown(f"**💉 Simultáneo con:**<br><span style='color:#2E7D32;'>{info['simul']}</span>", unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            with c1: st.markdown(f"**🔹 Edad mínima permitida:** <span style='color:#0D47A1;'>{info['min']}</span>", unsafe_allow_html=True)
+            with c2: st.markdown(f"**🔸 Edad máxima permitida:** <span style='color:#B71C1C;'>{info['max']}</span>", unsafe_allow_html=True)
+            
+            st.divider()
+            st.markdown("**🔗 Aplicación entre biológicos:**")
+            badges_html = []
+            for sim in info.get('simul', []):
+                badges_html.append(f"<span style='background-color:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>💉 Se puede aplicar simultáneamente con: {sim}</span>")
+            for ci in info.get('cualq', []):
+                badges_html.append(f"<span style='background-color:#E0F2F1;color:#004D40;border:1px solid #80CBC4;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⏱️ Y con cualquier intervalo con: {ci}</span>")
+            for ie in info.get('esp', []):
+                badges_html.append(f"<span style='background-color:#FFF3E0;color:#BF360C;border:1px solid #FFCC80;padding:3px 8px;border-radius:6px;font-size:0.8rem;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;'>⚠️ {ie[0]}: {ie[1]}</span>")
+            
+            st.markdown("".join(badges_html), unsafe_allow_html=True)
