@@ -2,41 +2,50 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-import glob
+import requests
 
-@st.cache_data(ttl=3600)
-def obtener_archivo_suive():
+# --- CONFIGURACIÓN DE GOOGLE DRIVE ---
+# Este es el ID exacto de tu archivo Excel dentro de la carpeta que compartiste.
+FILE_ID_DRIVE = "1AJPgYoA71bqTwEV1M8VjN4s18dzTNUd5cXH96NzmPmE"
+
+@st.cache_data(ttl=3600, show_spinner="Descargando SUIVE desde Google Drive...")
+def obtener_archivo_desde_drive(file_id):
     """
-    Busca de forma inteligente el archivo SUIVE oficial en el repositorio 
-    y extrae el año dinámicamente de su nombre.
+    Descarga el archivo directamente desde Google Drive y lo guarda en la 
+    memoria temporal del servidor. Se actualiza cada hora (ttl=3600).
     """
-    patrones = [
-        "ANEXO 1 - Formato_SUIVE_1*.xlsx",
-        "modulos/ANEXO 1 - Formato_SUIVE_1*.xlsx",
-        "*SUIVE*.xlsx",
-        "*suive*.xlsx",
-        "*.xlsx"
-    ]
+    # Construimos el enlace de descarga directa de Google Drive
+    url_descarga = f"https://drive.google.com/uc?id={file_id}&export=download"
+    ruta_temporal = "SUIVE_TEMP.xlsx"
+    anio_detectado = "2026" # Año por defecto
     
-    archivo_encontrado = None
-    for patron in patrones:
-        coincidencias = glob.glob(patron)
-        if not coincidencias:
-            coincidencias = glob.glob(f"**/{patron}", recursive=True)
-            
-        if coincidencias:
-            archivo_encontrado = coincidencias[0]
-            break
-            
-    if archivo_encontrado and os.path.exists(archivo_encontrado):
-        match_anio = re.search(r'(20\d{2})', archivo_encontrado)
-        anio_detectado = match_anio.group(1) if match_anio else "2026"
-        return archivo_encontrado, anio_detectado
+    try:
+        # Descargar el archivo
+        respuesta = requests.get(url_descarga)
+        respuesta.raise_for_status() # Verifica que la descarga fue exitosa
         
-    return None, "2026"
+        # Guardarlo como un archivo local temporal en el servidor
+        with open(ruta_temporal, "wb") as f:
+            f.write(respuesta.content)
+            
+        # Extraer el año dinámicamente leyendo el contenido del Excel
+        # (Buscamos en las primeras filas del documento)
+        df_prueba = pd.read_excel(ruta_temporal, header=None, nrows=5)
+        for fila in df_prueba.values:
+            for celda in fila:
+                match = re.search(r'(20\d{2})', str(celda))
+                if match:
+                    anio_detectado = match.group(1)
+                    return ruta_temporal, anio_detectado
+                    
+        return ruta_temporal, anio_detectado
+        
+    except Exception as e:
+        st.error(f"Error de conexión con Google Drive: {e}")
+        return None, "2026"
 
-# Ejecutar carga inicial de la ruta
-ruta_archivo, anio_suive = obtener_archivo_suive()
+# 1. Ejecutar la descarga o recuperar de la memoria caché
+ruta_archivo, anio_suive = obtener_archivo_desde_drive(FILE_ID_DRIVE)
 
 if ruta_archivo is not None and os.path.exists(ruta_archivo):
     st.session_state['suive_activo_path'] = ruta_archivo
@@ -45,7 +54,7 @@ if ruta_archivo is not None and os.path.exists(ruta_archivo):
 anio_activo = st.session_state.get('suive_anio', anio_suive)
 path_actual = st.session_state.get('suive_activo_path', ruta_archivo)
 
-# --- ESTILOS CSS DEFINITIVOS PARA CAJA AZUL OSCURO Y BOTÓN ROJO BONITO ---
+# --- ESTILOS CSS DEFINITIVOS ---
 st.markdown("""
     <style>
     .suive-container {
@@ -62,7 +71,6 @@ st.markdown("""
         font-weight: 600;
         margin-bottom: 8px;
     }
-    /* Estilo ultraselectivo para forzar el color rojo brillante en el botón de descarga */
     .stDownloadButton button {
         background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
         color: #ffffff !important;
@@ -97,7 +105,7 @@ with col_head2:
             st.download_button(
                 label="👉 SI DESEA DESCARGAR EL ANEXO SUIVE 1 ACTUAL DE CLIC AQUÍ 📥",
                 data=file_btn,
-                file_name=os.path.basename(path_actual),
+                file_name=f"Formato_SUIVE_{anio_activo}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 help="Descargue el archivo Excel exacto que el sistema está analizando en este momento.",
                 use_container_width=True
@@ -106,6 +114,7 @@ with col_head2:
 
 st.divider()
 
+# --- PROCESAMIENTO DEL EXCEL DESCARGADO ---
 if path_actual and os.path.exists(path_actual):
     try:
         xls = pd.ExcelFile(path_actual)
@@ -122,9 +131,9 @@ if path_actual and os.path.exists(path_actual):
             
             for idx in range(len(df)):
                 row = df.iloc[idx]
-                b = row.iloc[1]  # Columna B: Grupo
-                d = row.iloc[3]  # Columna C/D: Diagnóstico y CIE-10
-                e = row.iloc[4]  # Columna D/E: EPI Clave
+                b = row.iloc[1]  
+                d = row.iloc[3]  
+                e = row.iloc[4]  
                 
                 if idx < 19:
                     continue
@@ -160,9 +169,9 @@ if path_actual and os.path.exists(path_actual):
         df_suive = pd.DataFrame(registros_totales)
         
         if not df_suive.empty:
-            st.success(f"✅ Archivo analizado y sincronizado en memoria con éxito. Total de padecimientos detectados: **{len(df_suive)}**.")
+            st.success(f"✅ Archivo obtenido desde Drive y sincronizado con éxito. Padecimientos detectados: **{len(df_suive)}**.")
             
-            # --- FILTROS EN LA PARTE SUPERIOR ---
+            # --- FILTROS ---
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 filtro_grupo = st.selectbox(
@@ -177,30 +186,23 @@ if path_actual and os.path.exists(path_actual):
                 
             df_filtrado = df_suive.copy()
             
-            # 1. Aplicar filtro por Grupo
             if filtro_grupo != "TODOS":
                 df_filtrado = df_filtrado[df_filtrado['Grupo'] == filtro_grupo]
                 
-            # 2. Aplicar filtro estricto por Tipo de Notificación y recortar columnas
             if filtro_aviso == "Inmediata (*)":
                 df_filtrado = df_filtrado[df_filtrado['Inmediata (*)'] == 1]
-                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Inmediata (*)']
-                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
+                df_filtrado = df_filtrado[['Padecimiento', 'EPI Clave', 'Inmediata (*)']]
             elif filtro_aviso == "Vig. Especial (+)":
                 df_filtrado = df_filtrado[df_filtrado['Vig. Especial (+)'] == 1]
-                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Vig. Especial (+)']
-                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
+                df_filtrado = df_filtrado[['Padecimiento', 'EPI Clave', 'Vig. Especial (+)']]
             elif filtro_aviso == "Brote (#)":
                 df_filtrado = df_filtrado[df_filtrado['Brote (#)'] == 1]
-                columnas_a_mantener = ['Padecimiento', 'EPI Clave', 'Brote (#)']
-                df_filtrado = df_filtrado[[col for col in columnas_a_mantener if col in df_filtrado.columns]]
+                df_filtrado = df_filtrado[['Padecimiento', 'EPI Clave', 'Brote (#)']]
             else:
-                columnas_a_omitir = ['Pestaña', 'Grupo']
-                df_filtrado = df_filtrado.drop(columns=[col for col in columnas_a_omitir if col in df_filtrado.columns])
+                df_filtrado = df_filtrado.drop(columns=['Pestaña', 'Grupo'])
 
             df_filtrado = df_filtrado.dropna(how='all')
 
-            # Convertir 1 y 0 a marca limpia de verificación
             df_visual = df_filtrado.copy()
             for col in ['Inmediata (*)', 'Vig. Especial (+)', 'Brote (#)']:
                 if col in df_visual.columns:
@@ -220,7 +222,6 @@ if path_actual and os.path.exists(path_actual):
 
             st.divider()
 
-            # --- MÉTRICAS INDIVIDUALES ARRIBA DE LA VISTA PREVIA ---
             col1, col2, col3 = st.columns(3)
             col1.metric("🚨 Total Inmediatas (*)", int(df_suive['Inmediata (*)'].sum()))
             col2.metric("📋 Total Vig. Especiales (+)", int(df_suive['Vig. Especial (+)'].sum()))
@@ -229,18 +230,11 @@ if path_actual and os.path.exists(path_actual):
             st.markdown(f"### 📋 Matriz de Padecimientos ({len(df_visual)} registros mostrados)")
             
             if not df_visual.empty:
-                st.dataframe(
-                    df_visual.style.apply(estilo_tabla, axis=1),
-                    use_container_width=True,
-                    height=500
-                )
+                st.dataframe(df_visual.style.apply(estilo_tabla, axis=1), use_container_width=True, height=500)
             else:
-                st.info("ℹ️ No hay registros que coincidan con los filtros seleccionados.")
-            
-        else:
-            st.warning("⚠️ No se pudieron extraer filas válidas de padecimientos.")
+                st.info("ℹ️ No hay registros que coincidan con los filtros.")
             
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo Excel: {e}")
 else:
-    st.error("❌ No se encontró el archivo Excel del SUIVE en el repositorio.")
+    st.error("❌ No se pudo cargar el archivo desde Google Drive.")
