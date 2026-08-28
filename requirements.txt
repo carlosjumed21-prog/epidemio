@@ -16,4 +16,5 @@ scipy
 matplotlib
 google-auth-oauthlib
 gdown
+python-docx
 
