@@ -73,7 +73,7 @@ if uploaded_file is not None:
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "No especificado"
         anio = df.iloc[1, 1] if df.shape[0] > 1 and df.shape[1] > 1 else "No especificado"
         
-        # Periodo registrado: conteo de semanas en fila 5 (índice 4), desde columna B (índice 1) hasta AA (índice 26)
+        # Periodo registrado: conteo de semanas en fila 5 (índice 4), desde columna B (índice 1) hasta AA (índice 26) = 26 semanas
         semanas_list = []
         if df.shape[0] > 4:
             for col_idx in range(1, 27): # Columnas B a AA
@@ -126,7 +126,7 @@ if uploaded_file is not None:
         else:
             st.success(f"¡Archivo procesado con éxito! Se mapearon {len(data_dict)} unidades.")
             
-            # Procesamiento de indicadores por unidad con base en las semanas reales del periodo (ej. 26 semanas semestrales)
+            # Procesamiento de indicadores por unidad con las etiquetas originales exactas
             processed_results = []
             TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 26.0
 
@@ -138,10 +138,11 @@ if uploaded_file is not None:
                 u_habilitadas = m.get("Unidades habilitadas", 26)
                 u_sin_notificar = m.get("Unidades sin notificar", 0)
                 
-                # Fórmulas oficiales exactas usando el periodo dinámico de la fila 5 (26 semanas)
-                ind_a = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
+                # Fórmulas oficiales exactas
+                promedio_semanas_unidad = (semanas_casos / u_habilitadas) if u_habilitadas > 0 else 0
+                ind_a = (promedio_semanas_unidad / TOTAL_SEMANAS_PERIODO) * 100
                 ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
-                ind_c = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
+                ind_c = (promedio_semanas_unidad / TOTAL_SEMANAS_PERIODO) * 100
                 ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
@@ -149,12 +150,12 @@ if uploaded_file is not None:
                 
                 processed_results.append({
                     "Unidad": unidad,
-                    "a) Cumplimiento Oportunidad (%)": round(ind_a, 2),
+                    "a) Cumplimiento u Oportunidad (%)": round(ind_a, 2),
                     "b) Cobertura Oportuna (%)": round(ind_b, 2),
                     "c) Consistencia (%)": round(ind_c, 2),
-                    "d) RSM (%)": round(ind_d, 2),
+                    "d) Reporta Sin Movimiento (RSM) (%)": round(ind_d, 2),
                     "e) Cobertura Ajustada (%)": round(ind_e, 2),
-                    "f) Calidad (%)": round(ind_f, 2),
+                    "f) Calidad (Descriptivo) (%)": round(ind_f, 2),
                     "_raw": {
                         "a": ind_a, "b": ind_b, "c": ind_c, "d": ind_d, "e": ind_e, "f": ind_f
                     }
@@ -164,29 +165,29 @@ if uploaded_file is not None:
 
             # Función para determinar color de fondo según rangos y tipo de indicador
             def get_bg_color(val, ind_type):
-                if ind_type == "a": # Cumplimiento Oportunidad
+                if ind_type == "a": # Cumplimiento u Oportunidad
                     if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
                     elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type in ["b", "e"]: # Cobertura Oportuna / Ajustada
+                elif ind_type in ["b", "e"]: # Cobertura Oportuna / Cobertura Ajustada
                     if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
                     elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "c": # Consistencia
                     if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
                     elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type == "d": # RSM
+                elif ind_type == "d": # Reporta Sin Movimiento (RSM)
                     if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
                     elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type == "f": # Calidad
+                elif ind_type == "f": # Calidad (Descriptivo)
                     if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
                     elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 return ''
@@ -195,12 +196,12 @@ if uploaded_file is not None:
             def style_dataframe(row_data):
                 styles = [''] * len(row_data)
                 col_mapping = {
-                    "a) Cumplimiento Oportunidad (%)": "a",
+                    "a) Cumplimiento u Oportunidad (%)": "a",
                     "b) Cobertura Oportuna (%)": "b",
                     "c) Consistencia (%)": "c",
-                    "d) RSM (%)": "d",
+                    "d) Reporta Sin Movimiento (RSM) (%)": "d",
                     "e) Cobertura Ajustada (%)": "e",
-                    "f) Calidad (%)": "f"
+                    "f) Calidad (Descriptivo) (%)": "f"
                 }
                 idx = row_data.name
                 raw_dict = df_resumen.loc[idx, "_raw"]
@@ -209,7 +210,7 @@ if uploaded_file is not None:
                     if col_name in col_mapping:
                         itype = col_mapping[col_name]
                         val = raw_dict[itype]
-                        styles[i] = get_bg_color(val, itype)
+                        styles[i] = get_bg_color(val,itype)
                 return styles
 
             st.markdown("---")
@@ -222,7 +223,6 @@ if uploaded_file is not None:
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
             
-            # Leyenda de Semaforización colocada al inicio de la sección de unidades
             st.markdown("##### 🚦 Leyenda de Acotaciones y Semaforización")
             st.markdown("""
             <div class="legend-container">
@@ -233,7 +233,6 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
             
-            # Opción de selección incluyendo "TODAS"
             unit_options = ["TODAS"] + list(data_dict.keys())
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
             
@@ -254,7 +253,7 @@ if uploaded_file is not None:
                     st.markdown("##### Indicadores y Semáforo")
                     ind_summary = []
                     indicators_meta = [
-                        ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
+                        ("a) Cumplimiento u Oportunidad", raw_vals["a"], "a"),
                         ("b) Cobertura Oportuna", raw_vals["b"], "b"),
                         ("c) Consistencia", raw_vals["c"], "c"),
                         ("d) Reporta Sin Movimiento (RSM)", raw_vals["d"], "d"),
@@ -269,7 +268,6 @@ if uploaded_file is not None:
                     
                     ind_df = pd.DataFrame(ind_summary)
                     
-                    # Estilizar tabla individual por celdas (sombreando la columna Resultado (%))
                     def style_ind_table(row_ind):
                         styles = [''] * len(row_ind)
                         itypes = ["a", "b", "c", "d", "e", "f"]
