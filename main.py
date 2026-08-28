@@ -89,11 +89,16 @@ pg = st.navigation([
         title="Esquemas de vacunación 2026", 
         icon="💉"
     ),
-    # NUEVA PESTAÑA: ANÁLISIS SUIVE
     st.Page(
         "modulos/SUIVE.py", 
         title="Vigilancia SUIVE", 
         icon="📊"
+    ),
+    # NUEVA PESTAÑA: INDICADORES SUIVE (Para el cubo de datos)
+    st.Page(
+        "modulos/indicadores_suive.py", 
+        title="Indicadores SUIVE", 
+        icon="📈"
     ),
 ])
 
