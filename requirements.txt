@@ -17,3 +17,4 @@ matplotlib
 google-auth-oauthlib
 gdown
 pygwalker
+tornado
