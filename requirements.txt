@@ -16,5 +16,5 @@ scipy
 matplotlib
 google-auth-oauthlib
 gdown
-pygwalker
+pygwalker>=0.4.8
 tornado
