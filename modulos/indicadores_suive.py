@@ -1,122 +1,78 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests
-from requests.auth import HTTPBasicAuth
 
 st.title("📈 Indicadores SUIVE")
-st.markdown("Constructor multidimensional y validación de conexión (Versión Estable Nativa)")
 
-# --- 1. CONFIGURACIÓN DEL ENTORNO Y CONEXIÓN ---
-st.sidebar.header("📍 Entorno de Red")
-zona_trabajo = st.sidebar.radio(
-    "Ubicación actual:",
-    options=["Externa (Offline / Casa)", "Interna (Red Hospital)"]
-)
-
-if "Interna" in zona_trabajo:
-    st.sidebar.info("Modo Intranet activo. Verifica si la red interna del hospital permite acceder al cubo.")
-    
-    if st.sidebar.button("Verificar Conexión SINAVE", type="primary"):
-        with st.spinner("Enviando petición SOAP al cubo OLAP..."):
-            url = "http://cubo.sinave.gob.mx/msmdpump.dll" 
-            body = """<Envelope xmlns="http://schemas.xmlsoap.org/soap/envelope/">
-                        <Body>
-                            <Discover xmlns="urn:schemas-microsoft-com:xml-analysis">
-                                <RequestType>DBSCHEMA_CATALOGS</RequestType>
-                                <Restrictions/>
-                                <Properties/>
-                            </Discover>
-                        </Body>
-                      </Envelope>"""
-            headers = {
-                'Content-Type': 'text/xml',
-                'User-Agent': 'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Excel 16.0.12026; Pro)',
-                'Accept': '*/*'
-            }
-            
-            try:
-                respuesta = requests.post(
-                    url, 
-                    data=body, 
-                    headers=headers, 
-                    auth=HTTPBasicAuth('PWIDGE10\\cubos2015', 'Cubos$2015'),
-                    timeout=10
-                )
-                
-                if respuesta.status_code == 200:
-                    st.sidebar.success("✅ ¡Acceso Autorizado! Estás dentro de la red del SINAVE.")
-                    with st.sidebar.expander("Ver respuesta del servidor"):
-                        st.code(respuesta.text[:500], language='xml')
-                elif respuesta.status_code == 401:
-                    st.sidebar.error("❌ Error 401: Autenticación fallida. Credenciales rechazadas.")
-                else:
-                    st.sidebar.warning(f"⚠️ Código inesperado: {respuesta.status_code}")
-                        
-            except requests.exceptions.RequestException as e:
-                st.sidebar.error("❌ Conexión rechazada. El firewall institucional sigue bloqueando la petición.")
-                st.sidebar.caption(str(e))
-else:
-    st.sidebar.info("Modo local. Usando última base de datos extraída.")
-
-st.divider()
-
-# --- 2. DATOS SIMULADOS (Para visualizar estructura) ---
+# 1. Simulación de los datos basados en tu imagen
+# (Cuando te conectes al servidor, reemplazarás esto con los datos reales)
 @st.cache_data
-def cargar_datos():
+def cargar_datos_prueba():
     return pd.DataFrame({
-        'Delegacion ISSSTE': ['CDMX Sur', 'CDMX Sur', 'Puebla', 'CDMX Sur', 'Puebla', 'CDMX Sur'],
-        'Año': [2026, 2026, 2026, 2026, 2026, 2026],
-        'Semana': [30, 31, 30, 31, 31, 30],
-        'Unidad médica': ['CMN 20 de Noviembre', 'CMN 20 de Noviembre', 'H.R. Puebla', 'CMN 20 de Noviembre', 'H.R. Puebla', 'C.M.F. Balbuena'],
-        'Datos indicadores': ['Casos Nuevos', 'Casos Nuevos', 'Seguimiento', 'Alta', 'Casos Nuevos', 'Seguimiento'],
-        'Datos': [12, 15, 8, 5, 10, 3]
+        'Delegacion ISSSTE': ['CDMX Sur', 'CDMX Sur', 'Puebla', 'CDMX Sur'],
+        'Año': [2026, 2026, 2026, 2026],
+        'Semana': [30, 31, 30, 31],
+        'Unidad médica': ['CMN 20 de Noviembre', 'CMN 20 de Noviembre', 'H.R. Puebla', 'CMN 20 de Noviembre'],
+        'Datos indicadores': ['Casos Nuevos', 'Casos Nuevos', 'Seguimiento', 'Alta'],
+        'Datos': [12, 15, 8, 5]
     })
 
-df = cargar_datos()
+df = cargar_datos_prueba()
 
-# --- 3. CONSTRUCTOR DE TABLA DINÁMICA ---
+# 2. Interfaz del Constructor (Los 4 Cuadrantes de Excel)
 st.subheader("Campos de tabla dinámica")
+st.markdown("Selecciona los campos para las áreas siguientes:")
 
+# Cuadrantes Superiores
 col_filtros, col_columnas = st.columns(2)
 
 with col_filtros:
     st.markdown("#### 🔍 Filtros")
-    filtro_delegacion = st.multiselect("Delegacion ISSSTE", df['Delegacion ISSSTE'].unique(), default=[])
-    filtro_ano = st.multiselect("Año", df['Año'].unique(), default=[])
+    # En Excel, el filtro aplica a toda la hoja antes de armar la tabla
+    filtro_delegacion = st.multiselect("Delegacion ISSSTE", df['Delegacion ISSSTE'].unique())
+    filtro_ano = st.multiselect("Año", df['Año'].unique())
 
 with col_columnas:
     st.markdown("#### ⏸️ Columnas")
-    columnas_sel = st.multiselect("Arrastrar a Columnas", df.columns.tolist(), default=['Semana'])
+    # Dejamos 'Semana' por defecto como en tu foto
+    columnas_sel = st.multiselect("Seleccionar Columnas", df.columns.tolist(), default=['Semana'])
 
+# Cuadrantes Inferiores
 col_filas, col_valores = st.columns(2)
 
 with col_filas:
     st.markdown("#### 📋 Filas")
-    filas_sel = st.multiselect("Arrastrar a Filas", df.columns.tolist(), default=['Unidad médica', 'Datos indicadores'])
+    # Dejamos 'Unidad médica' y 'Datos indicadores' por defecto
+    filas_sel = st.multiselect("Seleccionar Filas", df.columns.tolist(), default=['Unidad médica', 'Datos indicadores'])
 
 with col_valores:
     st.markdown("#### Σ Valores")
+    # Seleccionamos qué medir y cómo medirlo
     valor_sel = st.selectbox("Campo de Valores", df.columns.tolist(), index=df.columns.tolist().index('Datos'))
     operacion = st.selectbox("Operación", ["Suma", "Recuento", "Promedio"])
 
 st.divider()
 
-# --- 4. PROCESAMIENTO PANDAS ---
+# 3. Procesamiento en el Backend (Pandas)
+
+# Aplicar los filtros globales primero
 df_filtrado = df.copy()
 if filtro_delegacion:
     df_filtrado = df_filtrado[df_filtrado['Delegacion ISSSTE'].isin(filtro_delegacion)]
 if filtro_ano:
     df_filtrado = df_filtrado[df_filtrado['Año'].isin(filtro_ano)]
 
+# Diccionario para traducir la operación seleccionada a Numpy
 diccionario_operaciones = {
     "Suma": np.sum,
     "Recuento": len,
     "Promedio": np.mean
 }
 
+# 4. Generar y Mostrar la Tabla Dinámica
 st.subheader("Informe Dinámico")
 
+# Validar que el usuario haya seleccionado al menos una fila o columna para evitar errores
 if filas_sel or columnas_sel:
     try:
         tabla_dinamica = pd.pivot_table(
@@ -129,6 +85,6 @@ if filas_sel or columnas_sel:
         )
         st.dataframe(tabla_dinamica, use_container_width=True)
     except Exception as e:
-        st.error(f"Combinación no válida. Detalles del error: {e}")
+        st.error(f"Configuración de tabla no válida. Error: {e}")
 else:
-    st.info("👈 Selecciona al menos un campo para Filas o Columnas para generar el reporte.")
+    st.info("👈 Por favor, selecciona al menos un campo para 'Filas' o 'Columnas' para generar la tabla.")
