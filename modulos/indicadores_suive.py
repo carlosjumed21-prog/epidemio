@@ -53,10 +53,10 @@ st.markdown("""
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis, metadatos y semaforización por unidad médica</div>', unsafe_allow_html=True)
 
-# Lista de las 15 unidades operativas oficiales (excluyendo CMN 20 de Noviembre del reporte final)
+# Lista completa de las 16 unidades incluyendo CMN 20 DE NOVIEMBRE
 TARGET_UNITS = [
-    "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", "DIVISION DEL NORTE",
-    "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
+    "CHURUBUSCO", "CLIDDA", "CMN 20 DE NOVIEMBRE", "COYOACAN", "DEL VALLE", 
+    "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
     "FUENTES BROTANTES", "HG DRA. MATILDE PETRA MONTOYA LAFRAGUA",
     "MILPA ALTA", "NARVARTE", "TLALPAN", "VILLA ALVARO OBREGON", "XOCHIMILCO"
 ]
@@ -92,14 +92,12 @@ if uploaded_file is not None:
                 <li><b>Delegación:</b> {delegacion}</li>
                 <li><b>Año:</b> {anio}</li>
                 <li><b>Periodo Registrado:</b> {periodo_str} (26 Semanas)</li>
+                <li><b>Total Unidades Mapeadas:</b> 16 Unidades (Incluye CMN 20 de Noviembre)</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------
-        # MAPEO ROBUSTO Y DINÁMICO POR UNIDAD Y SUS VARIABLES (COLUMNA A Y AB)
-        # ---------------------------------------------------------
-        all_units_in_excel = TARGET_UNITS + ["CMN 20 DE NOVIEMBRE"]
+        # Mapeo y extracción de datos por unidad desde el Excel
         data_dict = {}
         current_unit = None
         metrics = {}
@@ -110,13 +108,12 @@ if uploaded_file is not None:
             
             if pd.notna(val):
                 val_str = str(val).strip()
-                if val_str in all_units_in_excel:
+                if val_str in TARGET_UNITS:
                     if current_unit:
                         data_dict[current_unit] = metrics
                     current_unit = val_str
                     metrics = {}
                 elif current_unit:
-                    # Capturar cualquier métrica válida dentro del bloque de la unidad actual
                     if val_str in [
                         "Casos acumulados", "Casos oportunos", "Semanas acumuladas con casos",
                         "Unidades con casos oportunos", "Unidades habilitadas", "Unidades sin notificar"
@@ -129,12 +126,11 @@ if uploaded_file is not None:
         if not data_dict:
             st.error("No se encontraron unidades válidas en la Columna A con los nombres esperados.")
         else:
-            st.success(f"¡Archivo procesado con éxito! Se mapearon correctamente las unidades y sus variables.")
+            st.success(f"¡Archivo procesado con éxito! Se mapearon correctamente las 16 unidades desde el Excel.")
             
-            # Procesamiento de indicadores por unidad (restringido a las 15 unidades oficiales)
+            # Procesamiento de indicadores por unidad
             processed_results = []
             TOTAL_SEMANAS_PERIODO = 26.0  # Semestre de 26 semanas
-            TOTAL_UNIDADES_CATALOGO = 16.0  # Catálogo total de unidades
 
             for unidad in TARGET_UNITS:
                 m = data_dict.get(unidad, {})
@@ -142,12 +138,15 @@ if uploaded_file is not None:
                 casos_oportunos = m.get("Casos oportunos", 0.0)
                 semanas_casos = m.get("Semanas acumuladas con casos", 0.0)
                 u_oportunas = m.get("Unidades con casos oportunos", 0.0)
-                u_habilitadas = m.get("Unidades habilitadas", TOTAL_UNIDADES_CATALOGO)
+                u_habilitadas = m.get("Unidades habilitadas", 16.0) # Tomado de su propia fila en el Excel
                 u_sin_notificar = m.get("Unidades sin notificar", 0.0)
                 
-                base_hab = u_habilitadas if u_habilitadas > 0 else TOTAL_UNIDADES_CATALOGO
+                # Base de unidades habilitadas leída directamente de su fila del Excel
+                base_hab = u_habilitadas if u_habilitadas > 0 else 16.0
 
                 # Fórmulas oficiales exactas
+                # Nota para CMN 20 de Noviembre: al no tener casos/oportunos/semanas, sus indicadores a y c dan 0,
+                # mientras que b, d, e, f se calculan con base en sus unidades habilitadas y sin notificar.
                 promedio_semanas_unidad = (semanas_casos / base_hab) if base_hab > 0 else 0.0
                 ind_a = (promedio_semanas_unidad / TOTAL_SEMANAS_PERIODO) * 100
                 ind_b = (u_oportunas / base_hab) * 100
@@ -254,7 +253,7 @@ if uploaded_file is not None:
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
-                    st.markdown("##### Variables Base Mapeadas")
+                    st.markdown("##### Variables Base Mapeadas (Del Excel)")
                     var_df = pd.DataFrame(list(unit_data.items()), columns=["Variable", "Valor (Columna AB)"])
                     st.dataframe(var_df, use_container_width=True, hide_index=True)
                 
