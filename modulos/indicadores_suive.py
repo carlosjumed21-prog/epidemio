@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la semaforización y diseño
+# Estilos CSS personalizados para la interfaz y tarjetas
 st.markdown("""
 <style>
     .main-header {
@@ -22,13 +22,6 @@ st.markdown("""
         font-size: 1.1rem;
         color: #4B5563;
         margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        padding: 15px;
-        border-radius: 8px;
-        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -84,8 +77,6 @@ if uploaded_file is not None:
             
             # Procesamiento de indicadores por unidad
             processed_results = []
-            
-            # Constante de semanas periodo / total (generalmente 351 semanas máximas del periodo evaluado)
             TOTAL_SEMANAS_PERIODO = 351.0 
 
             for unidad, m in data_dict.items():
@@ -93,27 +84,16 @@ if uploaded_file is not None:
                 casos_oportunos = m.get("Casos oportunos", 0)
                 semanas_casos = m.get("Semanas acumuladas con casos", 0)
                 u_oportunas = m.get("Unidades con casos oportunos", 0)
-                u_habilitadas = m.get("Unidades habilitadas", 26) # Por defecto 26 si no existe
+                u_habilitadas = m.get("Unidades habilitadas", 26)
                 u_sin_notificar = m.get("Unidades sin notificar", 0)
                 
                 # Fórmulas oficiales
-                # a) Cumplimiento Oportunidad = (Semanas con casos / Total Semanas Periodo) * 100
                 ind_a = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0
-                
-                # b) Cobertura Oportuna = (Unidades con casos oportunos / U. habilitadas) * 100
                 ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0
-                
-                # c) Consistencia = (Semanas acumuladas con casos / Total Semanas Periodo) * 100 (ajuste base)
                 ind_c = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0
-                
-                # d) Reporta Sin Movimiento (RSM) = (Unidades sin notificar / U. habilitadas) * 100
                 ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0
-                
-                # e) Cobertura Ajustada = Cobertura Oportuna - Excedente RSM > 5%
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
-                
-                # f) Calidad (Descriptivo) = (Promedio % Cobertura + % Consistencia) / 2 -> (ind_b + ind_c) / 2
                 ind_f = (ind_b + ind_c) / 2.0
                 
                 processed_results.append({
@@ -124,7 +104,6 @@ if uploaded_file is not None:
                     "d) RSM (%)": round(ind_d, 2),
                     "e) Cobertura Ajustada (%)": round(ind_e, 2),
                     "f) Calidad (%)": round(ind_f, 2),
-                    # Guardamos valores crudos para evaluar colores
                     "_raw": {
                         "a": ind_a, "b": ind_b, "c": ind_c, "d": ind_d, "e": ind_e, "f": ind_f
                     }
@@ -132,38 +111,39 @@ if uploaded_file is not None:
 
             df_resumen = pd.DataFrame(processed_results)
 
-            # Función de semaforización exacta según tablas de referencia
-            def get_color(val, ind_type):
+            # Función para determinar color de fondo según rangos y tipo de indicador
+            def get_bg_color(val, ind_type):
                 if ind_type == "a": # Cumplimiento Oportunidad
-                    if val == 100.0: return "🟢 Excelente"
-                    elif 97.5 <= val <= 99.9: return "⚪ Bueno"
-                    elif 95.0 <= val <= 97.4: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                elif ind_type == "b" or ind_type == "e": # Cobertura Oportuna / Ajustada
-                    if 95.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 90.0 <= val <= 94.9: return "⚪ Bueno"
-                    elif 80.0 <= val <= 89.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
+                    if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;' # Verde
+                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Blanco
+                    elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;' # Amarillo
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;' # Rojo
+                elif ind_type in ["b", "e"]: # Cobertura Oportuna / Ajustada
+                    if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "c": # Consistencia
-                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
-                    elif 70.0 <= val <= 79.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
+                    if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "d": # RSM
-                    if 0.0 <= val <= 1.9: return "🟢 Excelente"
-                    elif 2.0 <= val <= 4.9: return "⚪ Bueno"
-                    elif 5.0 <= val <= 10.0: return "🟡 Regular"
-                    else: return "🔴 Malo"
+                    if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
+                    elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "f": # Calidad
-                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
-                    elif 60.0 <= val <= 79.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                return "⚪ Bueno"
+                    if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+                return ''
 
-            # Estilo visual de celdas en DataFrame
-            def color_cells(val, col_name):
-                code_map = {
+            # Función para aplicar estilos a la tabla general
+            def style_dataframe(row_data):
+                styles = [''] * len(row_data)
+                col_mapping = {
                     "a) Cumplimiento Oportunidad (%)": "a",
                     "b) Cobertura Oportuna (%)": "b",
                     "c) Consistencia (%)": "c",
@@ -171,37 +151,46 @@ if uploaded_file is not None:
                     "e) Cobertura Ajustada (%)": "e",
                     "f) Calidad (%)": "f"
                 }
-                if col_name in code_map:
-                    # Extraer el valor numérico correspondiente
-                    pass
-                return ''
+                # Buscar el índice correspondiente usando df_resumen original con _raw
+                idx = row_data.name
+                raw_dict = df_resumen.loc[idx, "_raw"]
+                
+                for i, col_name in enumerate(row_data.index):
+                    if col_name in col_mapping:
+                        itype = col_mapping[col_name]
+                        val = raw_dict[itype]
+                        styles[i] = get_bg_color(val, itype)
+                return styles
 
             st.markdown("---")
-            st.subheader("📊 Tabla Comparativa General de Indicadores por Unidad")
+            st.subheader("📊 Tabla Comparativa General de Indicadores (Con Semaforización)")
             
-            # Mostrar tabla resumen limpia sin la columna interna _raw
             display_df = df_resumen.drop(columns=["_raw"])
-            st.dataframe(display_df, use_container_width=True)
+            styled_general = display_df.style.apply(style_dataframe, axis=1)
+            st.dataframe(styled_general, use_container_width=True)
 
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
             
-            selected_unit = st.selectbox("Seleccione una Unidad Médica para ver detalle:", list(data_dict.keys()))
+            # Opción de selección incluyendo "TODAS"
+            unit_options = ["TODAS"] + list(data_dict.keys())
+            selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
             
-            if selected_unit:
-                unit_data = data_dict[selected_unit]
-                unit_row = df_resumen[df_resumen["Unidad"] == selected_unit].iloc[0]
+            def render_unit_details(unit_name):
+                unit_data = data_dict[unit_name]
+                unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
                 raw_vals = unit_row["_raw"]
                 
+                st.markdown(f"### 📍 Unidad: **{unit_name}**")
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
-                    st.markdown(f"### 📋 Variables Base: {selected_unit}")
+                    st.markdown("##### Variables Base")
                     var_df = pd.DataFrame(list(unit_data.items()), columns=["Variable", "Valor (Columna AB)"])
                     st.dataframe(var_df, use_container_width=True, hide_index=True)
                 
                 with col2:
-                    st.markdown(f"### 📈 Indicadores y Semáforo")
+                    st.markdown("##### Indicadores y Semáforo")
                     ind_summary = []
                     indicators_meta = [
                         ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
@@ -212,15 +201,65 @@ if uploaded_file is not None:
                         ("f) Calidad (Descriptivo)", raw_vals["f"], "f")
                     ]
                     for name, val, itype in indicators_meta:
-                        cat = get_color(val, itype)
+                        # Texto de categoría para la columna de texto
+                        cat_text = get_category_text(val, itype)
                         ind_summary.append({
                             "Indicador": name,
                             "Resultado (%)": round(val, 2),
-                            "Categoría": cat
+                            "Categoría": cat_text
                         })
                     
                     ind_df = pd.DataFrame(ind_summary)
-                    st.dataframe(ind_df, use_container_width=True, hide_index=True)
+                    
+                    # Estilizar la tablita individual por celdas
+                    def style_ind_table(df_ind):
+                        st_list = []
+                        for idx, row in df_ind.iterrows():
+                            # Mapeo del tipo de indicador según la fila
+                            itype_map = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f"}
+                            itype = itype_map.get(idx, "a")
+                            val = row["Resultado (%)"]
+                            color_style = get_bg_color(val, itype)
+                            st_list.append(['', '', color_style])
+                        return pd.DataFrame(st_list, index=df_ind.index, columns=df_ind.columns)
+
+                    styled_ind = ind_df.style.apply(lambda r: [get_bg_color(r["Resultado (%)"], ["a","b","c","d","e","f"][list(ind_df["Indicador"]).index(r["Indicador"])]) if col == "Categoría" else '' for col in ind_df.columns], axis=1)
+                    st.dataframe(styled_ind, use_container_width=True, hide_index=True)
+                st.markdown("---")
+
+            def get_category_text(val, ind_type):
+                if ind_type == "a":
+                    if val == 100.0: return "🟢 Excelente"
+                    elif 97.5 <= val <= 99.9: return "⚪ Bueno"
+                    elif 95.0 <= val <= 97.4: return "🟡 Regular"
+                    else: return "🔴 Malo"
+                elif ind_type in ["b", "e"]:
+                    if 95.0 <= val <= 100.0: return "🟢 Excelente"
+                    elif 90.0 <= val <= 94.9: return "⚪ Bueno"
+                    elif 80.0 <= val <= 89.9: return "🟡 Regular"
+                    else: return "🔴 Malo"
+                elif ind_type == "c":
+                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
+                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
+                    elif 70.0 <= val <= 79.9: return "🟡 Regular"
+                    else: return "🔴 Malo"
+                elif ind_type == "d":
+                    if 0.0 <= val <= 1.9: return "🟢 Excelente"
+                    elif 2.0 <= val <= 4.9: return "⚪ Bueno"
+                    elif 5.0 <= val <= 10.0: return "🟡 Regular"
+                    else: return "🔴 Malo"
+                elif ind_type == "f":
+                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
+                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
+                    elif 60.0 <= val <= 79.9: return "🟡 Regular"
+                    else: return "🔴 Malo"
+                return "⚪ Bueno"
+
+            if selected_unit == "TODAS":
+                for u in data_dict.keys():
+                    render_unit_details(u)
+            else:
+                render_unit_details(selected_unit)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
