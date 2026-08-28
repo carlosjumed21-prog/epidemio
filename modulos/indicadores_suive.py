@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz y tarjetas
+# Estilos CSS personalizados
 st.markdown("""
 <style>
     .main-header {
@@ -21,13 +21,20 @@ st.markdown("""
     .sub-header {
         font-size: 1.1rem;
         color: #4B5563;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .info-box {
+        background-color: #F8FAFC;
+        border-left: 4px solid #1E3A8A;
+        padding: 12px;
+        margin-bottom: 20px;
+        border-radius: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Herramienta de análisis y semaforización por unidad médica</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Herramienta de análisis, metadatos y semaforización por unidad médica</div>', unsafe_allow_html=True)
 
 # Lista exacta de unidades requeridas
 TARGET_UNITS = [
@@ -45,7 +52,34 @@ if uploaded_file is not None:
         # Leer el archivo Excel sin importar el nombre
         df = pd.read_excel(uploaded_file, sheet_name=0, header=None)
         
-        # Mapeo y extracción de datos
+        # Extracción de Metadatos de Cabecera
+        delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "No especificado"
+        anio = df.iloc[1, 1] if df.shape[0] > 1 and df.shape[1] > 1 else "No especificado"
+        
+        # Periodo registrado: conteo de semanas en fila 5 (índice 4), desde columna B (índice 1) hasta AA (índice 26)
+        semanas_list = []
+        if df.shape[0] > 4:
+            for col_idx in range(1, 27): # Columnas B a AA
+                val_sem = df.iloc[4, col_idx]
+                if pd.notna(val_sem):
+                    semanas_list.append(str(val_sem).strip())
+        
+        total_semanas_reportadas = len(semanas_list)
+        periodo_str = f"Semana {semanas_list[0]} a Semana {semanas_list[-1]} (Total: {total_semanas_reportadas} semanas)" if semanas_list else "No determinado"
+
+        # Mostrar Panel de Metadatos Generales
+        st.markdown(f"""
+        <div class="info-box">
+            <h4>📋 Información General del Reporte</h4>
+            <ul>
+                <li><b>Delegación (B1):</b> {delegacion}</li>
+                <li><b>Año (B2):</b> {anio}</li>
+                <li><b>Periodo Registrado (Semanas B5:AA5):</b> {periodo_str}</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Mapeo y extracción de datos por unidad
         data_dict = {}
         current_unit = None
         metrics = {}
@@ -77,7 +111,8 @@ if uploaded_file is not None:
             
             # Procesamiento de indicadores por unidad
             processed_results = []
-            TOTAL_SEMANAS_PERIODO = 351.0 
+            # Usamos el total de semanas reportadas o 351 como base de periodo normado
+            TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 351.0
 
             for unidad, m in data_dict.items():
                 casos_acum = m.get("Casos acumulados", 0)
@@ -151,7 +186,6 @@ if uploaded_file is not None:
                     "e) Cobertura Ajustada (%)": "e",
                     "f) Calidad (%)": "f"
                 }
-                # Buscar el índice correspondiente usando df_resumen original con _raw
                 idx = row_data.name
                 raw_dict = df_resumen.loc[idx, "_raw"]
                 
@@ -176,57 +210,6 @@ if uploaded_file is not None:
             unit_options = ["TODAS"] + list(data_dict.keys())
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
             
-            def render_unit_details(unit_name):
-                unit_data = data_dict[unit_name]
-                unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
-                raw_vals = unit_row["_raw"]
-                
-                st.markdown(f"### 📍 Unidad: **{unit_name}**")
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    st.markdown("##### Variables Base")
-                    var_df = pd.DataFrame(list(unit_data.items()), columns=["Variable", "Valor (Columna AB)"])
-                    st.dataframe(var_df, use_container_width=True, hide_index=True)
-                
-                with col2:
-                    st.markdown("##### Indicadores y Semáforo")
-                    ind_summary = []
-                    indicators_meta = [
-                        ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
-                        ("b) Cobertura Oportuna", raw_vals["b"], "b"),
-                        ("c) Consistencia", raw_vals["c"], "c"),
-                        ("d) Reporta Sin Movimiento (RSM)", raw_vals["d"], "d"),
-                        ("e) Cobertura Ajustada", raw_vals["e"], "e"),
-                        ("f) Calidad (Descriptivo)", raw_vals["f"], "f")
-                    ]
-                    for name, val, itype in indicators_meta:
-                        # Texto de categoría para la columna de texto
-                        cat_text = get_category_text(val, itype)
-                        ind_summary.append({
-                            "Indicador": name,
-                            "Resultado (%)": round(val, 2),
-                            "Categoría": cat_text
-                        })
-                    
-                    ind_df = pd.DataFrame(ind_summary)
-                    
-                    # Estilizar la tablita individual por celdas
-                    def style_ind_table(df_ind):
-                        st_list = []
-                        for idx, row in df_ind.iterrows():
-                            # Mapeo del tipo de indicador según la fila
-                            itype_map = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f"}
-                            itype = itype_map.get(idx, "a")
-                            val = row["Resultado (%)"]
-                            color_style = get_bg_color(val, itype)
-                            st_list.append(['', '', color_style])
-                        return pd.DataFrame(st_list, index=df_ind.index, columns=df_ind.columns)
-
-                    styled_ind = ind_df.style.apply(lambda r: [get_bg_color(r["Resultado (%)"], ["a","b","c","d","e","f"][list(ind_df["Indicador"]).index(r["Indicador"])]) if col == "Categoría" else '' for col in ind_df.columns], axis=1)
-                    st.dataframe(styled_ind, use_container_width=True, hide_index=True)
-                st.markdown("---")
-
             def get_category_text(val, ind_type):
                 if ind_type == "a":
                     if val == 100.0: return "🟢 Excelente"
@@ -254,6 +237,56 @@ if uploaded_file is not None:
                     elif 60.0 <= val <= 79.9: return "🟡 Regular"
                     else: return "🔴 Malo"
                 return "⚪ Bueno"
+
+            def render_unit_details(unit_name):
+                unit_data = data_dict[unit_name]
+                unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
+                raw_vals = unit_row["_raw"]
+                
+                st.markdown(f"### 📍 Unidad: **{unit_name}**")
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.markdown("##### Variables Base")
+                    var_df = pd.DataFrame(list(unit_data.items()), columns=["Variable", "Valor (Columna AB)"])
+                    st.dataframe(var_df, use_container_width=True, hide_index=True)
+                
+                with col2:
+                    st.markdown("##### Indicadores y Semáforo")
+                    ind_summary = []
+                    indicators_meta = [
+                        ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
+                        ("b) Cobertura Oportuna", raw_vals["b"], "b"),
+                        ("c) Consistencia", raw_vals["c"], "c"),
+                        ("d) Reporta Sin Movimiento (RSM)", raw_vals["d"], "d"),
+                        ("e) Cobertura Ajustada", raw_vals["e"], "e"),
+                        ("f) Calidad (Descriptivo)", raw_vals["f"], "f")
+                    ]
+                    for name, val, itype in indicators_meta:
+                        cat_text = get_category_text(val, itype)
+                        ind_summary.append({
+                            "Indicador": name,
+                            "Resultado (%)": round(val, 2),
+                            "Categoría": cat_text
+                        })
+                    
+                    ind_df = pd.DataFrame(ind_summary)
+                    
+                    # Estilizar tabla individual por celdas
+                    def style_ind_table(row_ind):
+                        styles = [''] * len(row_ind)
+                        itypes = ["a", "b", "c", "d", "e", "f"]
+                        idx = row_ind.name
+                        itype = itypes[idx] if idx < len(itypes) else "a"
+                        for i, col_name in enumerate(row_ind.index):
+                            if col_name in ["Resultado (%)", "Categoría"]:
+                                val = raw_vals[itype]
+                                styles[i] = get_bg_color(val, itype)
+                        return styles
+
+                    styled_ind = ind_df.style.apply(style_ind_table, axis=1)
+                    st.dataframe(styled_ind, use_container_width=True, hide_index=True)
+                st.markdown("---")
 
             if selected_unit == "TODAS":
                 for u in data_dict.keys():
