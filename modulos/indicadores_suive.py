@@ -53,17 +53,6 @@ st.markdown("""
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis, metadatos y semaforización por unidad médica</div>', unsafe_allow_html=True)
 
-# Leyenda de semaforización al inicio
-st.markdown("### 🚦 Leyenda de Semaforización")
-st.markdown("""
-<div class="legend-container">
-    <div class="legend-item legend-excelente">🟢 Excelente</div>
-    <div class="legend-item legend-bueno">⚪ Bueno</div>
-    <div class="legend-item legend-regular">🟡 Regular</div>
-    <div class="legend-item legend-malo">🔴 Malo</div>
-</div>
-""", unsafe_allow_html=True)
-
 # Lista exacta de unidades requeridas
 TARGET_UNITS = [
     "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", "DIVISION DEL NORTE",
@@ -80,7 +69,7 @@ if uploaded_file is not None:
         # Leer el archivo Excel sin importar el nombre
         df = pd.read_excel(uploaded_file, sheet_name=0, header=None)
         
-        # Extracción de Metadatos de Cabecera (sin mostrar referencias a etiquetas)
+        # Extracción de Metadatos de Cabecera (sin mostrar etiquetas)
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "No especificado"
         anio = df.iloc[1, 1] if df.shape[0] > 1 and df.shape[1] > 1 else "No especificado"
         
@@ -233,6 +222,17 @@ if uploaded_file is not None:
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
             
+            # Leyenda de Semaforización colocada justo debajo de la info general / antes de las unidades
+            st.markdown("##### 🚦 Leyenda de Acotaciones y Semaforización")
+            st.markdown("""
+            <div class="legend-container">
+                <div class="legend-item legend-excelente">🟢 Excelente</div>
+                <div class="legend-item legend-bueno">⚪ Bueno</div>
+                <div class="legend-item legend-regular">🟡 Regular</div>
+                <div class="legend-item legend-malo">🔴 Malo</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
             # Opción de selección incluyendo "TODAS"
             unit_options = ["TODAS"] + list(data_dict.keys())
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
@@ -252,7 +252,6 @@ if uploaded_file is not None:
                 
                 with col2:
                     st.markdown("##### Indicadores y Semáforo")
-                    # Sin columna de categoría, unicamente Indicador y Resultado (%)
                     ind_summary = []
                     indicators_meta = [
                         ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
