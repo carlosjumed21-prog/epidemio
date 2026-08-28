@@ -69,7 +69,7 @@ if uploaded_file is not None:
         # Leer el archivo Excel sin importar el nombre
         df = pd.read_excel(uploaded_file, sheet_name=0, header=None)
         
-        # Extracción de Metadatos de Cabecera (sin mostrar etiquetas)
+        # Extracción de Metadatos de Cabecera
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "No especificado"
         anio = df.iloc[1, 1] if df.shape[0] > 1 and df.shape[1] > 1 else "No especificado"
         
@@ -126,25 +126,36 @@ if uploaded_file is not None:
         else:
             st.success(f"¡Archivo procesado con éxito! Se mapearon {len(data_dict)} unidades.")
             
-            # Procesamiento de indicadores por unidad
+            # Procesamiento de indicadores por unidad con fórmulas oficiales estrictas
             processed_results = []
             TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 351.0
 
             for unidad, m in data_dict.items():
                 casos_acum = m.get("Casos acumulados", 0)
                 casos_oportunos = m.get("Casos oportunos", 0)
-                semanas_casos = m.get("Semanas acumuladas con casos", 0)
-                u_oportunas = m.get("Unidades con casos oportunos", 0)
-                u_habilitadas = m.get("Unidades habilitadas", 26)
-                u_sin_notificar = m.get("Unidades sin notificar", 0)
+                semanas_casos = m.get("Semanas acumuladas con casos", 0) # Semanas oportunas / consistentes
+                u_oportunas = m.get("Unidades con casos oportunos", 0) # Unidades que reportan
+                u_habilitadas = m.get("Unidades habilitadas", 26) # U. habilitadas / Catálogo
+                u_sin_notificar = m.get("Unidades sin notificar", 0) # Unidades con RSM
                 
-                # Fórmulas oficiales
-                ind_a = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0
-                ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0
-                ind_c = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0
-                ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0
+                # Fórmulas oficiales exactas:
+                # a) Cumplimiento u Oportunidad: (Semanas oportunas / Total semanas) * 100
+                ind_a = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
+                
+                # b) Cobertura Oportuna: (Unidades que reportan / U. habilitadas) * 100
+                ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
+                
+                # c) Consistencia: (Semanas consistentes / Semanas periodo) * 100
+                ind_c = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
+                
+                # d) Reporta Sin Movimiento (RSM): (Unidades con RSM / Unidades catálogo) * 100
+                ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
+                
+                # e) Cobertura Ajustada: Cobertura - (Excedente del 5% en RSM)
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
+                
+                # f) Calidad (Descriptivo): (Promedio % Cobertura + % Consistencia) / 2
                 ind_f = (ind_b + ind_c) / 2.0
                 
                 processed_results.append({
@@ -216,13 +227,14 @@ if uploaded_file is not None:
             st.subheader("📊 Tabla Comparativa General de Indicadores (Con Semaforización)")
             
             display_df = df_resumen.drop(columns=["_raw"])
-            styled_general = display_df.style.apply(style_dataframe, axis=1)
+            # Formatear todos los flotantes a 2 decimales exactos
+            styled_general = display_df.style.format(formatter="{:.2f}", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
             st.dataframe(styled_general, use_container_width=True)
 
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
             
-            # Leyenda de Semaforización colocada justo debajo de la info general / antes de las unidades
+            # Leyenda de Semaforización colocada debajo de la info general / antes de las unidades
             st.markdown("##### 🚦 Leyenda de Acotaciones y Semaforización")
             st.markdown("""
             <div class="legend-container">
@@ -281,7 +293,7 @@ if uploaded_file is not None:
                                 styles[i] = get_bg_color(val, itype)
                         return styles
 
-                    styled_ind = ind_df.style.apply(style_ind_table, axis=1)
+                    styled_ind = ind_df.style.format(formatter="{:.2f}", subset=["Resultado (%)"]).apply(style_ind_table, axis=1)
                     st.dataframe(styled_ind, use_container_width=True, hide_index=True)
                 st.markdown("---")
 
