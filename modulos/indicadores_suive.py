@@ -30,11 +30,39 @@ st.markdown("""
         margin-bottom: 20px;
         border-radius: 4px;
     }
+    .legend-container {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .legend-item {
+        padding: 8px 15px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+    .legend-excelente { background-color: #10B981; color: white; }
+    .legend-bueno { background-color: #FFFFFF; color: black; border: 1px solid #CBD5E1; }
+    .legend-regular { background-color: #FEF08A; color: black; }
+    .legend-malo { background-color: #EF4444; color: white; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis, metadatos y semaforización por unidad médica</div>', unsafe_allow_html=True)
+
+# Leyenda de semaforización al inicio
+st.markdown("### 🚦 Leyenda de Semaforización")
+st.markdown("""
+<div class="legend-container">
+    <div class="legend-item legend-excelente">🟢 Excelente</div>
+    <div class="legend-item legend-bueno">⚪ Bueno</div>
+    <div class="legend-item legend-regular">🟡 Regular</div>
+    <div class="legend-item legend-malo">🔴 Malo</div>
+</div>
+""", unsafe_allow_html=True)
 
 # Lista exacta de unidades requeridas
 TARGET_UNITS = [
@@ -52,7 +80,7 @@ if uploaded_file is not None:
         # Leer el archivo Excel sin importar el nombre
         df = pd.read_excel(uploaded_file, sheet_name=0, header=None)
         
-        # Extracción de Metadatos de Cabecera
+        # Extracción de Metadatos de Cabecera (sin mostrar referencias a etiquetas)
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "No especificado"
         anio = df.iloc[1, 1] if df.shape[0] > 1 and df.shape[1] > 1 else "No especificado"
         
@@ -72,9 +100,9 @@ if uploaded_file is not None:
         <div class="info-box">
             <h4>📋 Información General del Reporte</h4>
             <ul>
-                <li><b>Delegación (B1):</b> {delegacion}</li>
-                <li><b>Año (B2):</b> {anio}</li>
-                <li><b>Periodo Registrado (Semanas B5:AA5):</b> {periodo_str}</li>
+                <li><b>Delegación:</b> {delegacion}</li>
+                <li><b>Año:</b> {anio}</li>
+                <li><b>Periodo Registrado:</b> {periodo_str}</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -111,7 +139,6 @@ if uploaded_file is not None:
             
             # Procesamiento de indicadores por unidad
             processed_results = []
-            # Usamos el total de semanas reportadas o 351 como base de periodo normado
             TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 351.0
 
             for unidad, m in data_dict.items():
@@ -149,10 +176,10 @@ if uploaded_file is not None:
             # Función para determinar color de fondo según rangos y tipo de indicador
             def get_bg_color(val, ind_type):
                 if ind_type == "a": # Cumplimiento Oportunidad
-                    if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;' # Verde
-                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Blanco
-                    elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;' # Amarillo
-                    else: return 'background-color: #EF4444; color: white; font-weight: bold;' # Rojo
+                    if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                    elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type in ["b", "e"]: # Cobertura Oportuna / Ajustada
                     if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
                     elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -210,34 +237,6 @@ if uploaded_file is not None:
             unit_options = ["TODAS"] + list(data_dict.keys())
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
             
-            def get_category_text(val, ind_type):
-                if ind_type == "a":
-                    if val == 100.0: return "🟢 Excelente"
-                    elif 97.5 <= val <= 99.9: return "⚪ Bueno"
-                    elif 95.0 <= val <= 97.4: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                elif ind_type in ["b", "e"]:
-                    if 95.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 90.0 <= val <= 94.9: return "⚪ Bueno"
-                    elif 80.0 <= val <= 89.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                elif ind_type == "c":
-                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
-                    elif 70.0 <= val <= 79.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                elif ind_type == "d":
-                    if 0.0 <= val <= 1.9: return "🟢 Excelente"
-                    elif 2.0 <= val <= 4.9: return "⚪ Bueno"
-                    elif 5.0 <= val <= 10.0: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                elif ind_type == "f":
-                    if 90.0 <= val <= 100.0: return "🟢 Excelente"
-                    elif 80.0 <= val <= 89.9: return "⚪ Bueno"
-                    elif 60.0 <= val <= 79.9: return "🟡 Regular"
-                    else: return "🔴 Malo"
-                return "⚪ Bueno"
-
             def render_unit_details(unit_name):
                 unit_data = data_dict[unit_name]
                 unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
@@ -253,6 +252,7 @@ if uploaded_file is not None:
                 
                 with col2:
                     st.markdown("##### Indicadores y Semáforo")
+                    # Sin columna de categoría, unicamente Indicador y Resultado (%)
                     ind_summary = []
                     indicators_meta = [
                         ("a) Cumplimiento Oportunidad", raw_vals["a"], "a"),
@@ -263,23 +263,21 @@ if uploaded_file is not None:
                         ("f) Calidad (Descriptivo)", raw_vals["f"], "f")
                     ]
                     for name, val, itype in indicators_meta:
-                        cat_text = get_category_text(val, itype)
                         ind_summary.append({
                             "Indicador": name,
-                            "Resultado (%)": round(val, 2),
-                            "Categoría": cat_text
+                            "Resultado (%)": round(val, 2)
                         })
                     
                     ind_df = pd.DataFrame(ind_summary)
                     
-                    # Estilizar tabla individual por celdas
+                    # Estilizar tabla individual por celdas (sombreando la columna Resultado (%))
                     def style_ind_table(row_ind):
                         styles = [''] * len(row_ind)
                         itypes = ["a", "b", "c", "d", "e", "f"]
                         idx = row_ind.name
                         itype = itypes[idx] if idx < len(itypes) else "a"
                         for i, col_name in enumerate(row_ind.index):
-                            if col_name in ["Resultado (%)", "Categoría"]:
+                            if col_name == "Resultado (%)":
                                 val = raw_vals[itype]
                                 styles[i] = get_bg_color(val, itype)
                         return styles
