@@ -53,7 +53,7 @@ st.markdown("""
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis, metadatos y semaforización por unidad médica</div>', unsafe_allow_html=True)
 
-# Lista exacta de unidades requeridas
+# Lista de las 15 unidades operativas para mostrar en los desgloses individuales
 TARGET_UNITS = [
     "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", "DIVISION DEL NORTE",
     "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
@@ -91,12 +91,15 @@ if uploaded_file is not None:
             <ul>
                 <li><b>Delegación:</b> {delegacion}</li>
                 <li><b>Año:</b> {anio}</li>
-                <li><b>Periodo Registrado:</b> {periodo_str}</li>
+                <li><b>Periodo Registrado:</b> {periodo_str} (26 Semanas)</li>
+                <li><b>Unidades del Catálogo (Habilitadas):</b> 16 Unidades</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
-        # Mapeo y extracción de datos por unidad
+        # Mapeo y extracción de datos por unidad (incluyendo también 20 de Noviembre si el excel lo trae para el catálogo de habilitadas)
+        ALL_UNITS_TO_MAP = TARGET_UNITS + ["CMN 20 DE NOVIEMBRE"]
+        
         data_dict = {}
         current_unit = None
         metrics = {}
@@ -107,7 +110,7 @@ if uploaded_file is not None:
             
             if pd.notna(val):
                 val_str = str(val).strip()
-                if val_str in TARGET_UNITS:
+                if val_str in ALL_UNITS_TO_MAP:
                     if current_unit:
                         data_dict[current_unit] = metrics
                     current_unit = val_str
@@ -124,26 +127,31 @@ if uploaded_file is not None:
         if not data_dict:
             st.error("No se encontraron unidades válidas en la Columna A con los nombres esperados.")
         else:
-            st.success(f"¡Archivo procesado con éxito! Se mapearon {len(data_dict)} unidades.")
+            st.success(f"¡Archivo procesado con éxito! Se mapearon las unidades del sistema.")
             
-            # Procesamiento de indicadores por unidad con las etiquetas originales exactas
+            # Procesamiento de indicadores por unidad (restringido a las 15 unidades oficiales para la tabla de resultados)
             processed_results = []
-            TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 26.0
+            TOTAL_SEMANAS_PERIODO = 26.0  # Fijo a 26 semanas del periodo semestral
+            TOTAL_UNIDADES_CATALOGO = 16.0  # Total de unidades del catálogo oficial
 
-            for unidad, m in data_dict.items():
+            for unidad in TARGET_UNITS:
+                m = data_dict.get(unidad, {})
                 casos_acum = m.get("Casos acumulados", 0)
                 casos_oportunos = m.get("Casos oportunos", 0)
                 semanas_casos = m.get("Semanas acumuladas con casos", 0)
                 u_oportunas = m.get("Unidades con casos oportunos", 0)
-                u_habilitadas = m.get("Unidades habilitadas", 26)
+                u_habilitadas = m.get("Unidades habilitadas", TOTAL_UNIDADES_CATALOGO)
                 u_sin_notificar = m.get("Unidades sin notificar", 0)
                 
-                # Fórmulas oficiales exactas
-                promedio_semanas_unidad = (semanas_casos / u_habilitadas) if u_habilitadas > 0 else 0
+                # Si el excel trae unidades habilitadas propias de la fila, las usamos, si no, usamos 16
+                base_hab = u_habilitadas if u_habilitadas > 0 else TOTAL_UNIDADES_CATALOGO
+
+                # Fórmulas oficiales exactas (26 semanas de periodo, 16 unidades de catálogo)
+                promedio_semanas_unidad = (semanas_casos / base_hab) if base_hab > 0 else 0
                 ind_a = (promedio_semanas_unidad / TOTAL_SEMANAS_PERIODO) * 100
-                ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
+                ind_b = (u_oportunas / base_hab) * 100
                 ind_c = (promedio_semanas_unidad / TOTAL_SEMANAS_PERIODO) * 100
-                ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
+                ind_d = (u_sin_notificar / base_hab) * 100
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
                 ind_f = (ind_b + ind_c) / 2.0
@@ -167,27 +175,27 @@ if uploaded_file is not None:
             def get_bg_color(val, ind_type):
                 if ind_type == "a": # Cumplimiento u Oportunidad
                     if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
+                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                     elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type in ["b", "e"]: # Cobertura Oportuna / Cobertura Ajustada
                     if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
+                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                     elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "c": # Consistencia
                     if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                     elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "d": # Reporta Sin Movimiento (RSM)
                     if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
+                    elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                     elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 elif ind_type == "f": # Calidad (Descriptivo)
                     if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;' # Bueno
+                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                     elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                     else: return 'background-color: #EF4444; color: white; font-weight: bold;'
                 return ''
@@ -210,7 +218,7 @@ if uploaded_file is not None:
                     if col_name in col_mapping:
                         itype = col_mapping[col_name]
                         val = raw_dict[itype]
-                        styles[i] = get_bg_color(val,itype)
+                        styles[i] = get_bg_color(val, itype)
                 return styles
 
             st.markdown("---")
@@ -233,11 +241,11 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
             
-            unit_options = ["TODAS"] + list(data_dict.keys())
+            unit_options = ["TODAS"] + TARGET_UNITS
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
             
             def render_unit_details(unit_name):
-                unit_data = data_dict[unit_name]
+                unit_data = data_dict.get(unit_name, {})
                 unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
                 raw_vals = unit_row["_raw"]
                 
@@ -284,7 +292,7 @@ if uploaded_file is not None:
                 st.markdown("---")
 
             if selected_unit == "TODAS":
-                for u in data_dict.keys():
+                for u in TARGET_UNITS:
                     render_unit_details(u)
             else:
                 render_unit_details(selected_unit)
