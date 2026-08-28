@@ -25,7 +25,13 @@ if st.button("Probar Conexión con SINAVE", type="primary"):
                         </Discover>
                     </Body>
                   </Envelope>"""
-        headers = {'Content-Type': 'text/xml'}
+        
+        # Cabeceras actualizadas simulando ser Microsoft Excel
+        headers = {
+            'Content-Type': 'text/xml',
+            'User-Agent': 'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Excel 16.0.12026; Pro)',
+            'Accept': '*/*'
+        }
         
         try:
             respuesta = requests.post(
