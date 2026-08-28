@@ -5,9 +5,9 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 st.title("📈 Indicadores SUIVE")
-st.markdown("Constructor multidimensional (Versión Estable Nativa)")
+st.markdown("Constructor multidimensional y validación de conexión (Versión Estable Nativa)")
 
-# --- 1. CONFIGURACIÓN DEL ENTORNO ---
+# --- 1. CONFIGURACIÓN DEL ENTORNO Y CONEXIÓN ---
 st.sidebar.header("📍 Entorno de Red")
 zona_trabajo = st.sidebar.radio(
     "Ubicación actual:",
@@ -15,14 +15,53 @@ zona_trabajo = st.sidebar.radio(
 )
 
 if "Interna" in zona_trabajo:
-    st.sidebar.info("Modo Intranet activo. Puedes verificar la conexión al cubo.")
-    if st.sidebar.button("Verificar Conexión SINAVE"):
-        # Aquí irá tu código de conexión requests.post que armamos antes
-        st.sidebar.success("Este botón conectará con msmdpump.dll")
+    st.sidebar.info("Modo Intranet activo. Verifica si la red interna del hospital permite acceder al cubo.")
+    
+    if st.sidebar.button("Verificar Conexión SINAVE", type="primary"):
+        with st.spinner("Enviando petición SOAP al cubo OLAP..."):
+            url = "http://cubo.sinave.gob.mx/msmdpump.dll" 
+            body = """<Envelope xmlns="http://schemas.xmlsoap.org/soap/envelope/">
+                        <Body>
+                            <Discover xmlns="urn:schemas-microsoft-com:xml-analysis">
+                                <RequestType>DBSCHEMA_CATALOGS</RequestType>
+                                <Restrictions/>
+                                <Properties/>
+                            </Discover>
+                        </Body>
+                      </Envelope>"""
+            headers = {
+                'Content-Type': 'text/xml',
+                'User-Agent': 'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Excel 16.0.12026; Pro)',
+                'Accept': '*/*'
+            }
+            
+            try:
+                respuesta = requests.post(
+                    url, 
+                    data=body, 
+                    headers=headers, 
+                    auth=HTTPBasicAuth('PWIDGE10\\cubos2015', 'Cubos$2015'),
+                    timeout=10
+                )
+                
+                if respuesta.status_code == 200:
+                    st.sidebar.success("✅ ¡Acceso Autorizado! Estás dentro de la red del SINAVE.")
+                    with st.sidebar.expander("Ver respuesta del servidor"):
+                        st.code(respuesta.text[:500], language='xml')
+                elif respuesta.status_code == 401:
+                    st.sidebar.error("❌ Error 401: Autenticación fallida. Credenciales rechazadas.")
+                else:
+                    st.sidebar.warning(f"⚠️ Código inesperado: {respuesta.status_code}")
+                        
+            except requests.exceptions.RequestException as e:
+                st.sidebar.error("❌ Conexión rechazada. El firewall institucional sigue bloqueando la petición.")
+                st.sidebar.caption(str(e))
 else:
     st.sidebar.info("Modo local. Usando última base de datos extraída.")
 
-# --- 2. DATOS (Simulados temporalmente) ---
+st.divider()
+
+# --- 2. DATOS SIMULADOS (Para visualizar estructura) ---
 @st.cache_data
 def cargar_datos():
     return pd.DataFrame({
@@ -36,7 +75,7 @@ def cargar_datos():
 
 df = cargar_datos()
 
-# --- 3. CONSTRUCTOR DE TABLA DINÁMICA (Estilo Excel) ---
+# --- 3. CONSTRUCTOR DE TABLA DINÁMICA ---
 st.subheader("Campos de tabla dinámica")
 
 col_filtros, col_columnas = st.columns(2)
@@ -90,6 +129,6 @@ if filas_sel or columnas_sel:
         )
         st.dataframe(tabla_dinamica, use_container_width=True)
     except Exception as e:
-        st.error("Combinación no válida. Revisa los campos seleccionados.")
+        st.error(f"Combinación no válida. Detalles del error: {e}")
 else:
-    st.info("👈 Selecciona al menos un campo para Filas o Columnas.")
+    st.info("👈 Selecciona al menos un campo para Filas o Columnas para generar el reporte.")
