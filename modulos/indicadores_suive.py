@@ -126,36 +126,25 @@ if uploaded_file is not None:
         else:
             st.success(f"¡Archivo procesado con éxito! Se mapearon {len(data_dict)} unidades.")
             
-            # Procesamiento de indicadores por unidad con fórmulas oficiales estrictas
+            # Procesamiento de indicadores por unidad con base en las semanas reales del periodo (ej. 26 semanas semestrales)
             processed_results = []
-            TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 351.0
+            TOTAL_SEMANAS_PERIODO = float(total_semanas_reportadas) if total_semanas_reportadas > 0 else 26.0
 
             for unidad, m in data_dict.items():
                 casos_acum = m.get("Casos acumulados", 0)
                 casos_oportunos = m.get("Casos oportunos", 0)
-                semanas_casos = m.get("Semanas acumuladas con casos", 0) # Semanas oportunas / consistentes
-                u_oportunas = m.get("Unidades con casos oportunos", 0) # Unidades que reportan
-                u_habilitadas = m.get("Unidades habilitadas", 26) # U. habilitadas / Catálogo
-                u_sin_notificar = m.get("Unidades sin notificar", 0) # Unidades con RSM
+                semanas_casos = m.get("Semanas acumuladas con casos", 0)
+                u_oportunas = m.get("Unidades con casos oportunos", 0)
+                u_habilitadas = m.get("Unidades habilitadas", 26)
+                u_sin_notificar = m.get("Unidades sin notificar", 0)
                 
-                # Fórmulas oficiales exactas:
-                # a) Cumplimiento u Oportunidad: (Semanas oportunas / Total semanas) * 100
+                # Fórmulas oficiales exactas usando el periodo dinámico de la fila 5 (26 semanas)
                 ind_a = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
-                
-                # b) Cobertura Oportuna: (Unidades que reportan / U. habilitadas) * 100
                 ind_b = (u_oportunas / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
-                
-                # c) Consistencia: (Semanas consistentes / Semanas periodo) * 100
                 ind_c = (semanas_casos / TOTAL_SEMANAS_PERIODO) * 100 if TOTAL_SEMANAS_PERIODO > 0 else 0.0
-                
-                # d) Reporta Sin Movimiento (RSM): (Unidades con RSM / Unidades catálogo) * 100
                 ind_d = (u_sin_notificar / u_habilitadas) * 100 if u_habilitadas > 0 else 0.0
-                
-                # e) Cobertura Ajustada: Cobertura - (Excedente del 5% en RSM)
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
-                
-                # f) Calidad (Descriptivo): (Promedio % Cobertura + % Consistencia) / 2
                 ind_f = (ind_b + ind_c) / 2.0
                 
                 processed_results.append({
@@ -227,14 +216,13 @@ if uploaded_file is not None:
             st.subheader("📊 Tabla Comparativa General de Indicadores (Con Semaforización)")
             
             display_df = df_resumen.drop(columns=["_raw"])
-            # Formatear todos los flotantes a 2 decimales exactos
             styled_general = display_df.style.format(formatter="{:.2f}", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
             st.dataframe(styled_general, use_container_width=True)
 
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
             
-            # Leyenda de Semaforización colocada debajo de la info general / antes de las unidades
+            # Leyenda de Semaforización colocada al inicio de la sección de unidades
             st.markdown("##### 🚦 Leyenda de Acotaciones y Semaforización")
             st.markdown("""
             <div class="legend-container">
