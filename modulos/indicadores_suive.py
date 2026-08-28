@@ -1,90 +1,119 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
+from requests.auth import HTTPBasicAuth
 
-st.title("📈 Indicadores SUIVE")
+st.title("📈 Indicadores SUIVE (Cubo de Datos)")
+st.markdown("Módulo de análisis multidimensional de vigilancia epidemiológica.")
 
-# 1. Simulación de los datos basados en tu imagen
-# (Cuando te conectes al servidor, reemplazarás esto con los datos reales)
-@st.cache_data
-def cargar_datos_prueba():
-    return pd.DataFrame({
-        'Delegacion ISSSTE': ['CDMX Sur', 'CDMX Sur', 'Puebla', 'CDMX Sur'],
-        'Año': [2026, 2026, 2026, 2026],
-        'Semana': [30, 31, 30, 31],
-        'Unidad médica': ['CMN 20 de Noviembre', 'CMN 20 de Noviembre', 'H.R. Puebla', 'CMN 20 de Noviembre'],
-        'Datos indicadores': ['Casos Nuevos', 'Casos Nuevos', 'Seguimiento', 'Alta'],
-        'Datos': [12, 15, 8, 5]
-    })
+# --- SECCIÓN 1: CONFIGURACIÓN DEL ENTORNO ---
+st.header("📍 Entorno de Red")
+st.markdown("Selecciona tu ubicación actual para determinar el método de conexión:")
 
-df = cargar_datos_prueba()
-
-# 2. Interfaz del Constructor (Los 4 Cuadrantes de Excel)
-st.subheader("Campos de tabla dinámica")
-st.markdown("Selecciona los campos para las áreas siguientes:")
-
-# Cuadrantes Superiores
-col_filtros, col_columnas = st.columns(2)
-
-with col_filtros:
-    st.markdown("#### 🔍 Filtros")
-    # En Excel, el filtro aplica a toda la hoja antes de armar la tabla
-    filtro_delegacion = st.multiselect("Delegacion ISSSTE", df['Delegacion ISSSTE'].unique())
-    filtro_ano = st.multiselect("Año", df['Año'].unique())
-
-with col_columnas:
-    st.markdown("#### ⏸️ Columnas")
-    # Dejamos 'Semana' por defecto como en tu foto
-    columnas_sel = st.multiselect("Seleccionar Columnas", df.columns.tolist(), default=['Semana'])
-
-# Cuadrantes Inferiores
-col_filas, col_valores = st.columns(2)
-
-with col_filas:
-    st.markdown("#### 📋 Filas")
-    # Dejamos 'Unidad médica' y 'Datos indicadores' por defecto
-    filas_sel = st.multiselect("Seleccionar Filas", df.columns.tolist(), default=['Unidad médica', 'Datos indicadores'])
-
-with col_valores:
-    st.markdown("#### Σ Valores")
-    # Seleccionamos qué medir y cómo medirlo
-    valor_sel = st.selectbox("Campo de Valores", df.columns.tolist(), index=df.columns.tolist().index('Datos'))
-    operacion = st.selectbox("Operación", ["Suma", "Recuento", "Promedio"])
+zona_trabajo = st.radio(
+    "Zona de Trabajo:",
+    options=[
+        "Externa (Casa / Red Comercial / Wi-Fi Público)", 
+        "Interna (Hospital / Cable Ethernet ISSSTE)"
+    ],
+    horizontal=False
+)
 
 st.divider()
 
-# 3. Procesamiento en el Backend (Pandas)
+# --- SECCIÓN 2: LÓGICA SEGÚN EL ENTORNO ---
 
-# Aplicar los filtros globales primero
-df_filtrado = df.copy()
-if filtro_delegacion:
-    df_filtrado = df_filtrado[df_filtrado['Delegacion ISSSTE'].isin(filtro_delegacion)]
-if filtro_ano:
-    df_filtrado = df_filtrado[df_filtrado['Año'].isin(filtro_ano)]
+if "Interna" in zona_trabajo:
+    st.subheader("Extracción en Vivo (Intranet)")
+    st.info("💡 **Nota:** Al usar el cable Ethernet en el hospital, es normal no tener 'Internet' para navegar, pero sí tienes acceso a la red interna del gobierno de salud.")
+    
+    if st.button("Verificar Conectividad al SINAVE", type="primary"):
+        with st.spinner("Intentando traspasar el firewall hacia el servidor del SINAVE..."):
+            url = "http://cubo.sinave.gob.mx/msmdpump.dll" 
+            body = """<Envelope xmlns="http://schemas.xmlsoap.org/soap/envelope/">
+                        <Body>
+                            <Discover xmlns="urn:schemas-microsoft-com:xml-analysis">
+                                <RequestType>DBSCHEMA_CATALOGS</RequestType>
+                                <Restrictions/>
+                                <Properties/>
+                            </Discover>
+                        </Body>
+                      </Envelope>"""
+            headers = {
+                'Content-Type': 'text/xml',
+                'User-Agent': 'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Excel 16.0.12026; Pro)',
+                'Accept': '*/*'
+            }
+            
+            try:
+                respuesta = requests.post(
+                    url, 
+                    data=body, 
+                    headers=headers, 
+                    auth=HTTPBasicAuth('PWIDGE10\\cubos2015', 'Cubos$2015'),
+                    timeout=10
+                )
+                
+                if respuesta.status_code == 200:
+                    st.success("✅ ¡Acceso Autorizado! Estás dentro de la red del SINAVE.")
+                    st.caption("El servidor respondió correctamente. Ya podemos programar la descarga de la base de datos completa.")
+                elif respuesta.status_code == 401:
+                    st.error("❌ Error 401: El firewall te dejó pasar, pero las credenciales fueron rechazadas.")
+                else:
+                    st.warning(f"⚠️ El servidor respondió con un código inesperado: {respuesta.status_code}")
+                        
+            except requests.exceptions.RequestException as e:
+                st.error("❌ Conexión rechazada. El firewall institucional bloqueó la petición o la intranet no está resolviendo el dominio del SINAVE.")
+                st.caption(str(e))
 
-# Diccionario para traducir la operación seleccionada a Numpy
-diccionario_operaciones = {
-    "Suma": np.sum,
-    "Recuento": len,
-    "Promedio": np.mean
-}
-
-# 4. Generar y Mostrar la Tabla Dinámica
-st.subheader("Informe Dinámico")
-
-# Validar que el usuario haya seleccionado al menos una fila o columna para evitar errores
-if filas_sel or columnas_sel:
-    try:
-        tabla_dinamica = pd.pivot_table(
-            df_filtrado,
-            index=filas_sel if filas_sel else None,
-            columns=columnas_sel if columnas_sel else None,
-            values=valor_sel,
-            aggfunc=diccionario_operaciones[operacion],
-            fill_value=0
-        )
-        st.dataframe(tabla_dinamica, use_container_width=True)
-    except Exception as e:
-        st.error(f"Configuración de tabla no válida. Error: {e}")
 else:
-    st.info("👈 Por favor, selecciona al menos un campo para 'Filas' o 'Columnas' para generar la tabla.")
+    st.subheader("Modo de Análisis Local (Offline)")
+    st.info("Estás fuera de la red institucional. El sistema utilizará la última base de datos sincronizada localmente para que puedas seguir trabajando.")
+    
+    if st.button("Cargar Base de Datos Local", type="primary"):
+        with st.spinner("Cargando el archivo local (ej. datos_suive.csv)..."):
+            # Aquí irá el código pd.read_csv() cuando tengamos el archivo extraído
+            # Por ahora generamos el DataFrame simulado
+            st.session_state['datos_suive'] = pd.DataFrame({
+                'Jurisdicción': ['Puebla', 'Tehuacán', 'Tehuacán', 'Puebla', 'Cholula', 'Cholula'],
+                'Semana_Epi': [1, 1, 2, 2, 1, 2],
+                'Grupo_Edad': ['Adultos', 'Adultos', 'Menores de 5', 'Adultos', 'Menores de 5', 'Menores de 5'],
+                'Casos_Notificados': [15, 40, 12, 18, 5, 8]
+            })
+            st.success("✅ Datos locales cargados correctamente.")
+
+st.divider()
+
+# --- SECCIÓN 3: TABLERO DINÁMICO ---
+if 'datos_suive' in st.session_state or ("Interna" in zona_trabajo):
+    st.header("📊 Tablero Dinámico")
+    
+    # Si estamos en modo offline y cargamos los datos, usamos esos. 
+    # (Si estamos online, aquí iría el cruce con los datos vivos).
+    if 'datos_suive' in st.session_state:
+        df_base = st.session_state['datos_suive']
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            filtro_jurisdiccion = st.multiselect("Filtrar Jurisdicción", df_base['Jurisdicción'].unique(), df_base['Jurisdicción'].unique())
+        with col2:
+            filtro_edad = st.multiselect("Filtrar Grupo de Edad", df_base['Grupo_Edad'].unique(), df_base['Grupo_Edad'].unique())
+
+        df_filtrado = df_base[
+            (df_base['Jurisdicción'].isin(filtro_jurisdiccion)) & 
+            (df_base['Grupo_Edad'].isin(filtro_edad))
+        ]
+
+        if not df_filtrado.empty:
+            tabla_dinamica = pd.pivot_table(
+                data=df_filtrado,
+                index=['Jurisdicción', 'Grupo_Edad'],
+                columns=['Semana_Epi'],
+                values='Casos_Notificados',
+                aggfunc=np.sum,
+                fill_value=0                 
+            )
+            st.dataframe(tabla_dinamica, use_container_width=True)
+        else:
+            st.warning("No hay casos que coincidan con los filtros seleccionados.")
