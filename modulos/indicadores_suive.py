@@ -327,7 +327,7 @@ if uploaded_file is not None:
             st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
-        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE)
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE DE DOS EN DOS)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -409,13 +409,13 @@ if uploaded_file is not None:
                 trim_results_abs[t_name] = t_vals_abs
                 trim_results_ind[t_name] = t_vals_ind
 
-            # Construcción de la tabla fusionada por trimestres
+            # Construcción de la tabla fusionada por trimestres en parejas (Semanas Notificadas + Indicador)
             tabla_fusión_data = []
             for unidad in TARGET_UNITS:
                 fila = {"UNIDAD MÉDICA": unidad}
                 for t_name, _, _ in bloques_semanas:
                     fila[(t_name, "Semanas Notificadas Oportunamente")] = trim_results_abs[t_name].get(unidad, np.nan)
-                    fila[(t_name, "Indicador (%)")] = trim_results_ind[t_name].get(unidad, np.nan)
+                    fila[(t_name, "Indicador")] = trim_results_ind[t_name].get(unidad, np.nan)
                 tabla_fusión_data.append(fila)
 
             df_fusion = pd.DataFrame(tabla_fusión_data)
@@ -430,19 +430,18 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
 
-            # Construcción del MultiIndex agrupado por Trimestre (Semanas Notificadas + Indicador)
+            # MultiIndex agrupado de dos en dos por Trimestre
             fusion_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
             for t_name, _, _ in bloques_semanas:
                 fusion_tuples.append((t_name, "Semanas Notificadas Oportunamente"))
-                fusion_tuples.append((t_name, "Indicador (%)"))
+                fusion_tuples.append((t_name, "Indicador"))
 
             df_fusion.columns = pd.MultiIndex.from_tuples(fusion_tuples)
 
             def style_fusion_table(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    # Si la columna pertenece al indicador (nivel 1 es "Indicador (%)"), aplicamos sombreado
-                    if isinstance(col_name, tuple) and col_name[1] == "Indicador (%)":
+                    if isinstance(col_name, tuple) and col_name[1] == "Indicador":
                         val = row_data.iloc[i]
                         if pd.notna(val):
                             styles[i] = get_bg_color(val, ind_key)
@@ -474,7 +473,7 @@ if uploaded_file is not None:
             delegacional_dict = {("UNIDAD MÉDICA", "UNIDAD MÉDICA"): "Mínimo Registrado"}
             for t_name, _, _ in bloques_semanas:
                 delegacional_dict[(t_name, "Semanas Notificadas Oportunamente")] = min_row_abs[t_name]
-                delegacional_dict[(t_name, "Indicador (%)")] = min_row_ind[t_name]
+                delegacional_dict[(t_name, "Indicador")] = min_row_ind[t_name]
 
             df_del = pd.DataFrame([delegacional_dict])
             df_del.columns = pd.MultiIndex.from_tuples(fusion_tuples)
@@ -482,7 +481,7 @@ if uploaded_file is not None:
             def style_delegational(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[1] == "Indicador (%)":
+                    if isinstance(col_name, tuple) and col_name[1] == "Indicador":
                         raw_str = row_data[col_name]
                         if raw_str != "-":
                             try:
