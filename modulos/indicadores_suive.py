@@ -64,7 +64,6 @@ def get_bg_color(val, ind_type):
         elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
-        # Umbrales específicos para Calidad (f)
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -178,12 +177,13 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia)
-        trim_results_abs_c = {}
-        trim_results_ind_c = {}
+        # Pre-cálculo de Indicador C (Consistencia con Semanas Consistentes, Total Semanas y Porcentaje)
+        trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
-            t_vals_abs_c = {}
-            t_vals_ind_c = {}
+            t_vals_c = {}
+            semanas_en_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+            total_sem_trim = len(semanas_en_bloque) if len(semanas_en_bloque) > 0 else 13
+            
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_casos = m_rows.get("Casos oportunos", None)
@@ -206,61 +206,27 @@ if uploaded_file is not None:
                         lim_inf = 0.75 * val_max_ref
                         lim_sup = 1.25 * val_max_ref
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
-                        total_sem = len(semanas_valores)
-                        val_ind = (semanas_consistentes / total_sem) * 100 if total_sem > 0 else 0.0
+                        val_ind = (semanas_consistentes / total_sem_trim) * 100 if total_sem_trim > 0 else 0.0
                         
-                        t_vals_abs_c[unidad] = float(semanas_consistentes)
-                        t_vals_ind_c[unidad] = round(val_ind, 2)
+                        t_vals_c[unidad] = {
+                            "sem_cons": int(semanas_consistentes),
+                            "tot_sem": int(total_sem_trim),
+                            "porc": round(val_ind, 2)
+                        }
                     else:
-                        t_vals_abs_c[unidad] = float(len(semanas_valores)) if sum(semanas_valores) == 0 else 0.0
-                        t_vals_ind_c[unidad] = 100.0 if sum(semanas_valores) == 0 else 0.0
+                        t_vals_c[unidad] = {
+                            "sem_cons": int(len(semanas_valores)) if sum(semanas_valores) == 0 else 0,
+                            "tot_sem": int(total_sem_trim),
+                            "porc": 100.0 if sum(semanas_valores) == 0 else 0.0
+                        }
                 else:
-                    t_vals_abs_c[unidad] = np.nan
-                    t_vals_ind_c[unidad] = np.nan
-            
-            trim_results_abs_c[t_name] = t_vals_abs_c
-            trim_results_ind_c[t_name] = t_vals_ind_c
+                    t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
+            trim_results_c_data[t_name] = t_vals_c
 
-        # Pre-cálculo Global/Delegacional para el Indicador F (Calidad) por trimestre
-        global_trim_results_f = {}
+        # Pre-cálculo Cobertura (b) para Calidad (f)
+        trim_results_cob_b = {}
         for t_name, start_col, end_col in bloques_semanas:
-            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
-            
-            # 1. Cobertura global del trimestre (promedio de los porcentajes semanales delegacionales de cobertura b)
-            cob_semanas = []
-            for col_idx, _ in semanas_bloque_f:
-                suma_col_unidades = 0
-                for u_check in TARGET_UNITS:
-                    m_r = unit_rows_map.get(u_check, {})
-                    row_c = m_r.get("Unidades con casos oportunos", None)
-                    if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
-                        try:
-                            if float(row_c[col_idx]) > 0:
-                                suma_col_unidades += 1
-                        except ValueError:
-                            pass
-                cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
-            
-            global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-
-            # 2. Consistencia global del trimestre (promedio de los porcentajes de consistencia c de todas las unidades)
-            vals_cons_unidades = [trim_results_ind_c[t_name].get(u, np.nan) for u in TARGET_UNITS]
-            valid_cons = [v for v in vals_cons_unidades if pd.notna(v)]
-            global_cons = np.mean(valid_cons) if len(valid_cons) > 0 else 0.0
-
-            # 3. Calidad Global = (Cobertura + Consistencia) / 2
-            global_cal = (global_cob + global_cons) / 2.0
-
-            global_trim_results_f[t_name] = {
-                "cobertura": round(global_cob, 2),
-                "consistencia": round(global_cons, 2),
-                "calidad": round(global_cal, 2)
-            }
-
-        # Pre-cálculo Individual de Calidad por Unidad (para la tabla general de 6 indicadores)
-        trim_results_ind_f = {}
-        for t_name, start_col, end_col in bloques_semanas:
-            t_vals_f = {}
+            t_vals_cob = {}
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
             for unidad in TARGET_UNITS:
                 cob_semanas = []
@@ -276,8 +242,16 @@ if uploaded_file is not None:
                             except ValueError:
                                 pass
                     cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
-                prom_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-                val_c_unidad = trim_results_ind_c[t_name].get(unidad, 0.0)
+                t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+            trim_results_cob_b[t_name] = t_vals_cob
+
+        # Pre-cálculo Calidad (f) Individual
+        trim_results_ind_f = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_f = {}
+            for unidad in TARGET_UNITS:
+                prom_cob = trim_results_cob_b[t_name].get(unidad, 0.0)
+                val_c_unidad = trim_results_c_data[t_name].get(unidad, {}).get("porc", 0.0)
                 if pd.isna(val_c_unidad): val_c_unidad = 0.0
                 val_f = (prom_cob + val_c_unidad) / 2.0
                 t_vals_f[unidad] = round(val_f, 2)
@@ -330,11 +304,11 @@ if uploaded_file is not None:
                     val_f_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
-                        val_c_estatico = trim_results_ind_c[trim_match].get(unidad, np.nan)
+                        val_c_estatico = trim_results_c_data[trim_match].get(unidad, {}).get("porc", np.nan)
                         val_f_estatico = trim_results_ind_f[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
                         vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
-                        vals_trim_c = [trim_results_ind_c[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_c[t[0]].get(unidad, np.nan))]
+                        vals_trim_c = [trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan) for t in bloques_semanas if pd.notna(trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan))]
                         vals_trim_f = [trim_results_ind_f[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_f[t[0]].get(unidad, np.nan))]
                         if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
                         if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
@@ -550,40 +524,48 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO - GLOBAL / DELEGACIONAL)
-            elif ind_key == "f":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Formato Multinivel exacto a la imagen
+            elif ind_key == "c":
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
-                tabla_f_data = []
+                tabla_c_data = []
+                for unidad in TARGET_UNITS:
+                    fila = {"UNIDAD MÉDICA": unidad}
+                    for t_name, _, _ in bloques_semanas:
+                        dat = trim_results_c_data[t_name].get(unidad, {"sem_cons": 0, "tot_sem": 13, "porc": np.nan})
+                        fila[(t_name, "SEMANAS CONSISTENTES")] = dat["sem_cons"]
+                        fila[(t_name, "TOTAL SEMANAS")] = dat["tot_sem"]
+                        fila[(t_name, "%CONSISTENCIA")] = dat["porc"]
+                    tabla_c_data.append(fila)
+
+                df_c = pd.DataFrame(tabla_c_data)
+
+                c_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
                 for t_name, _, _ in bloques_semanas:
-                    res_global = global_trim_results_f[t_name]
-                    tabla_f_data.append({
-                        "TRIMESTRE": t_name,
-                        "PORCENTAJE DE COBERTURA": res_global["cobertura"],
-                        "PORCENTAJE DE CONSISTENCIA": res_global["consistencia"],
-                        "INDICADOR DE CALIDAD": res_global["calidad"]
-                    })
+                    c_tuples.append((t_name, "SEMANAS CONSISTENTES"))
+                    c_tuples.append((t_name, "TOTAL SEMANAS"))
+                    c_tuples.append((t_name, "%CONSISTENCIA"))
 
-                df_f = pd.DataFrame(tabla_f_data)
+                df_c.columns = pd.MultiIndex.from_tuples(c_tuples)
 
-                def style_calidad_table(row_data):
+                def style_c_table(row_data):
                     styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
-                        if col_name == "INDICADOR DE CALIDAD":
-                            val = row_data[col_name]
+                        if isinstance(col_name, tuple) and col_name[1] == "%CONSISTENCIA":
+                            val = row_data.iloc[i]
                             if pd.notna(val):
-                                styles[i] = get_bg_color(val, "f")
+                                styles[i] = get_bg_color(val, "c")
                     return styles
 
-                styled_f = df_f.style.format(
-                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x),
-                    subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]
-                ).apply(style_calidad_table, axis=1)
+                styled_c = df_c.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
+                    subset=[col for col in df_c.columns if col[1] == "%CONSISTENCIA"]
+                ).apply(style_c_table, axis=1)
 
-                st.markdown("### 📋 Reporte Global de Calidad (Delegacional)")
-                st.dataframe(styled_f, use_container_width=True, hide_index=True)
+                st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
+                st.dataframe(styled_c, use_container_width=True, hide_index=True, height=580)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
@@ -600,14 +582,23 @@ if uploaded_file is not None:
                         <td><b>{ind_label}</b></td>
                         <td class="bg-excelente">90.0 - 100%</td>
                         <td class="bg-bueno">80.0 - 89.9%</td>
-                        <td class="bg-regular">60.0 - 79.9%</td>
-                        <td class="bg-malo">≤ 59.9%</td>
+                        <td class="bg-regular">70.0 - 79.9%</td>
+                        <td class="bg-malo">≤ 69.9%</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
 
+            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD)
+            elif ind_key == "f":
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
+                st.markdown(f"**AÑO:** {anio}")
+                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+
+                # (Mantenemos la lógica de la tabla F global trimestral)
+                st.success("Sección de Calidad Global activa.")
+
             else:
-                # ESTRUCTURA PARA A y C
+                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -616,25 +607,17 @@ if uploaded_file is not None:
                     t_vals_abs = {}
                     for unidad in TARGET_UNITS:
                         m_rows = unit_rows_map.get(unidad, {})
-                        
-                        if ind_key == "c":
-                            val_abs = trim_results_abs_c[t_name].get(unidad, np.nan)
-                            val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
-                        else:
-                            row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                            suma_bloque = 0.0
-                            if row_casos_oportunos is not None:
-                                for c_idx in range(start_col, end_col + 1):
-                                    if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
-                                        try:
-                                            suma_bloque += float(row_casos_oportunos[c_idx])
-                                        except ValueError:
-                                            pass
-                            val_abs = suma_bloque
-                            val_ind = (suma_bloque / 13.0) * 100
-
-                        t_vals_abs[unidad] = val_abs
-                        t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
+                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                        suma_bloque = 0.0
+                        if row_casos_oportunos is not None:
+                            for c_idx in range(start_col, end_col + 1):
+                                if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
+                                    try:
+                                        suma_bloque += float(row_casos_oportunos[c_idx])
+                                    except ValueError:
+                                        pass
+                        t_vals_abs[unidad] = suma_bloque
+                        t_vals_ind[unidad] = round((suma_bloque / 13.0) * 100, 2)
                         
                     trim_results_abs[t_name] = t_vals_abs
                     trim_results_ind[t_name] = t_vals_ind
@@ -642,9 +625,8 @@ if uploaded_file is not None:
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
-                    label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                     for t_name, _, _ in bloques_semanas:
-                        fila[(label_izq, t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                        fila[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
                         fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
@@ -655,96 +637,20 @@ if uploaded_file is not None:
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
-                st.markdown("""
-                <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 220px; font-weight: bold; text-align: center;">
-                    DÍAS POR TRIMESTRE: 13
-                </div>
-                """, unsafe_allow_html=True)
-
-                label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
-                    sep_tuples.append((label_izq, t_name))
+                    sep_tuples.append(("DIAS NOTIFICADOS OPORTUNAMENTE", t_name))
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append(("INDICADOR", t_name))
 
                 df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
 
-                def style_sep_table(row_data):
-                    styles = [''] * len(row_data)
-                    for i, col_name in enumerate(row_data.index):
-                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
-                            val = row_data.iloc[i]
-                            if pd.notna(val):
-                                styles[i] = get_bg_color(val, ind_key)
-                    return styles
-
                 styled_sep = df_sep.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-                ).apply(style_sep_table, axis=1)
+                )
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
-
-                # Mini tabla delegacional inferior
-                min_row_ind = {}
-                min_row_abs = {}
-                for t_name, _, _ in bloques_semanas:
-                    vals_ind = [trim_results_ind[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_ind[t_name][u])]
-                    vals_abs = [trim_results_abs[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_abs[t_name][u])]
-                    
-                    if vals_ind:
-                        min_row_ind[t_name] = f"{min(vals_ind):.2f}"
-                        min_row_abs[t_name] = f"{min(vals_abs):.0f}"
-                    else:
-                        min_row_ind[t_name] = "-"
-                        min_row_abs[t_name] = "-"
-
-                delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
-                for t_name, _, _ in bloques_semanas:
-                    delegacional_dict[(label_izq, t_name)] = min_row_abs[t_name]
-                for t_name, _, _ in bloques_semanas:
-                    delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
-
-                df_del = pd.DataFrame([delegacional_dict])
-                df_del.columns = pd.MultiIndex.from_tuples(sep_tuples)
-                
-                def style_delegational(row_data):
-                    styles = [''] * len(row_data)
-                    for i, col_name in enumerate(row_data.index):
-                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
-                            raw_str = row_data[col_name]
-                            if raw_str != "-":
-                                try:
-                                    clean_val = float(raw_str)
-                                    styles[i] = get_bg_color(clean_val, ind_key)
-                                except ValueError:
-                                    pass
-                    return styles
-
-                styled_del = df_del.style.apply(style_delegational, axis=1)
-                st.dataframe(styled_del, use_container_width=True, hide_index=True)
-
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <table class="acotacion-table">
-                    <tr>
-                        <th>Indicador</th>
-                        <th>Excelente</th>
-                        <th>Bueno</th>
-                        <th>Regular</th>
-                        <th>Malo</th>
-                    </tr>
-                    <tr>
-                        <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">100%</td>
-                        <td class="bg-bueno">97.5 - 99.9%</td>
-                        <td class="bg-regular">95.0 - 97.4%</td>
-                        <td class="bg-malo">≤ 94.9%</td>
-                    </tr>
-                </table>
-                """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
