@@ -55,7 +55,7 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "d":
@@ -65,7 +65,7 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
@@ -689,7 +689,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento)
+                # ESTRUCTURA PARA A (Cumplimiento) con fila Delegacional de Valor Máximo
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -724,6 +724,20 @@ if uploaded_file is not None:
 
                 df_sep = pd.DataFrame(tabla_sep_data)
 
+                # Fila Delegacional calculando el MÁXIMO de cada columna numérica para A
+                fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
+                for t_name, _, _ in bloques_semanas:
+                    col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
+                    col_ind = [("INDICADOR", t_name)]
+                    
+                    max_abs = df_sep[col_abs].max().values[0]
+                    max_ind = df_sep[col_ind].max().values[0]
+                    
+                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = max_abs
+                    fila_delegacional_a[("INDICADOR", t_name)] = max_ind
+
+                df_sep = pd.concat([df_sep, pd.DataFrame([fila_delegacional_a])], ignore_index=True)
+
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
@@ -751,6 +765,27 @@ if uploaded_file is not None:
                 ).apply(style_sep_table, axis=1)
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
+
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <table class="acotacion-table">
+                    <tr>
+                        <th>Indicador</th>
+                        <th>Excelente</th>
+                        <th>Bueno</th>
+                        <th>Regular</th>
+                        <th>Malo</th>
+                    </tr>
+                    <tr>
+                        <td><b>{ind_label}</b></td>
+                        <td class="bg-excelente">100.0%</td>
+                        <td class="bg-bueno">97.5 - 99.9%</td>
+                        <td class="bg-regular">95.0 - 97.4%</td>
+                        <td class="bg-malo">≤ 94.9%</td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
