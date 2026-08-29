@@ -221,10 +221,46 @@ if uploaded_file is not None:
             trim_results_abs_c[t_name] = t_vals_abs_c
             trim_results_ind_c[t_name] = t_vals_ind_c
 
-        # Pre-cálculo de Cobertura (b) para Calidad (f)
-        trim_results_cob_b = {}
+        # Pre-cálculo Global/Delegacional para el Indicador F (Calidad) por trimestre
+        global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
-            t_vals_cob = {}
+            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
+            
+            # 1. Cobertura global del trimestre (promedio de los porcentajes semanales delegacionales de cobertura b)
+            cob_semanas = []
+            for col_idx, _ in semanas_bloque_f:
+                suma_col_unidades = 0
+                for u_check in TARGET_UNITS:
+                    m_r = unit_rows_map.get(u_check, {})
+                    row_c = m_r.get("Unidades con casos oportunos", None)
+                    if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
+                        try:
+                            if float(row_c[col_idx]) > 0:
+                                suma_col_unidades += 1
+                        except ValueError:
+                            pass
+                cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
+            
+            global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+
+            # 2. Consistencia global del trimestre (promedio de los porcentajes de consistencia c de todas las unidades)
+            vals_cons_unidades = [trim_results_ind_c[t_name].get(u, np.nan) for u in TARGET_UNITS]
+            valid_cons = [v for v in vals_cons_unidades if pd.notna(v)]
+            global_cons = np.mean(valid_cons) if len(valid_cons) > 0 else 0.0
+
+            # 3. Calidad Global = (Cobertura + Consistencia) / 2
+            global_cal = (global_cob + global_cons) / 2.0
+
+            global_trim_results_f[t_name] = {
+                "cobertura": round(global_cob, 2),
+                "consistencia": round(global_cons, 2),
+                "calidad": round(global_cal, 2)
+            }
+
+        # Pre-cálculo Individual de Calidad por Unidad (para la tabla general de 6 indicadores)
+        trim_results_ind_f = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_f = {}
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
             for unidad in TARGET_UNITS:
                 cob_semanas = []
@@ -240,15 +276,7 @@ if uploaded_file is not None:
                             except ValueError:
                                 pass
                     cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
-                t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-            trim_results_cob_b[t_name] = t_vals_cob
-
-        # Pre-cálculo de Indicador F (Calidad)
-        trim_results_ind_f = {}
-        for t_name, start_col, end_col in bloques_semanas:
-            t_vals_f = {}
-            for unidad in TARGET_UNITS:
-                prom_cob = trim_results_cob_b[t_name].get(unidad, 0.0)
+                prom_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
                 val_c_unidad = trim_results_ind_c[t_name].get(unidad, 0.0)
                 if pd.isna(val_c_unidad): val_c_unidad = 0.0
                 val_f = (prom_cob + val_c_unidad) / 2.0
@@ -522,25 +550,20 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO) - Estructura tabular por Trimestres
+            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO - GLOBAL / DELEGACIONAL)
             elif ind_key == "f":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
-                unidad_calidad = st.selectbox("Seleccione la unidad médica para el reporte de Calidad:", TARGET_UNITS, index=0, key="sel_unidad_calidad")
-
                 tabla_f_data = []
-                for t_name, start_col, end_col in bloques_semanas:
-                    cob_val = trim_results_cob_b[t_name].get(unidad_calidad, 0.0)
-                    cons_val = trim_results_ind_c[t_name].get(unidad_calidad, 0.0)
-                    cal_val = trim_results_ind_f[t_name].get(unidad_calidad, 0.0)
-
+                for t_name, _, _ in bloques_semanas:
+                    res_global = global_trim_results_f[t_name]
                     tabla_f_data.append({
                         "TRIMESTRE": t_name,
-                        "PORCENTAJE DE COBERTURA": round(cob_val, 2),
-                        "PORCENTAJE DE CONSISTENCIA": round(cons_val, 2),
-                        "INDICADOR DE CALIDAD": round(cal_val, 2)
+                        "PORCENTAJE DE COBERTURA": res_global["cobertura"],
+                        "PORCENTAJE DE CONSISTENCIA": res_global["consistencia"],
+                        "INDICADOR DE CALIDAD": res_global["calidad"]
                     })
 
                 df_f = pd.DataFrame(tabla_f_data)
@@ -559,7 +582,7 @@ if uploaded_file is not None:
                     subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]
                 ).apply(style_calidad_table, axis=1)
 
-                st.markdown(f"### 📋 Reporte de Calidad para: **{unidad_calidad}**")
+                st.markdown("### 📋 Reporte Global de Calidad (Delegacional)")
                 st.dataframe(styled_f, use_container_width=True, hide_index=True)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
