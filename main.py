@@ -94,7 +94,6 @@ pg = st.navigation([
         title="Vigilancia SUIVE", 
         icon="📊"
     ),
-    # NUEVA PESTAÑA: INDICADORES SUIVE (Para el cubo de datos)
     st.Page(
         "modulos/indicadores_suive.py", 
         title="Indicadores SUIVE", 
