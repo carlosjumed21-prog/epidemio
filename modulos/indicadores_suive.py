@@ -221,7 +221,7 @@ if uploaded_file is not None:
             trim_results_abs_c[t_name] = t_vals_abs_c
             trim_results_ind_c[t_name] = t_vals_ind_c
 
-        # Pre-cálculo de Cobertura (b) para Calidad (f) por trimestre y unidad
+        # Pre-cálculo de Cobertura (b) para Calidad (f)
         trim_results_cob_b = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_cob = {}
@@ -243,7 +243,7 @@ if uploaded_file is not None:
                 t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
             trim_results_cob_b[t_name] = t_vals_cob
 
-        # Pre-cálculo de Indicador F (Calidad: Promedio de Cobertura [b] y Consistencia [c])
+        # Pre-cálculo de Indicador F (Calidad)
         trim_results_ind_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_f = {}
@@ -522,13 +522,12 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO)
+            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO) - Estructura tabular por Trimestres
             elif ind_key == "f":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
-                # Selector de unidad para ver su desglose trimestral de calidad al estilo de la imagen
                 unidad_calidad = st.selectbox("Seleccione la unidad médica para el reporte de Calidad:", TARGET_UNITS, index=0, key="sel_unidad_calidad")
 
                 tabla_f_data = []
@@ -541,24 +540,21 @@ if uploaded_file is not None:
                         "TRIMESTRE": t_name,
                         "PORCENTAJE DE COBERTURA": round(cob_val, 2),
                         "PORCENTAJE DE CONSISTENCIA": round(cons_val, 2),
-                        "INDICADOR DE CALIDAD": round(cal_val, 2),
-                        "_cal_val": cal_val
+                        "INDICADOR DE CALIDAD": round(cal_val, 2)
                     })
 
                 df_f = pd.DataFrame(tabla_f_data)
 
-                # Estilo para resaltar la columna de indicador de calidad con color según semáforo
                 def style_calidad_table(row_data):
                     styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
                         if col_name == "INDICADOR DE CALIDAD":
-                            val = row_data["_cal_val"]
+                            val = row_data[col_name]
                             if pd.notna(val):
                                 styles[i] = get_bg_color(val, "f")
                     return styles
 
-                display_f = df_f.drop(columns=["_cal_val"])
-                styled_f = display_f.style.format(
+                styled_f = df_f.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x),
                     subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]
                 ).apply(style_calidad_table, axis=1)
