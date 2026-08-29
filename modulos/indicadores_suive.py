@@ -117,7 +117,7 @@ def get_hex_color(val, ind_type):
             
     return bg_hex, text_color
 
-# Clase Canvas personalizada para pintar el encabezado institucional en cada página
+# Clase Canvas para dibujar el encabezado institucional en cada página
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -128,7 +128,6 @@ class NumberedCanvas(canvas.Canvas):
         self._startPage()
 
     def save(self):
-        page_count = len(self.pages)
         for page in self.pages:
             self.__dict__.update(page)
             self.draw_header_footer()
@@ -140,7 +139,6 @@ class NumberedCanvas(canvas.Canvas):
         self.setFont("Helvetica-Bold", 7.5)
         self.setFillColor(colors.HexColor('#1F2937'))
         
-        # Encabezado institucional centrado en formato vertical (ancho ~612 pts)
         y = 755
         lines = [
             "REPRESENTACIÓN REGIONAL SUR",
@@ -153,12 +151,10 @@ class NumberedCanvas(canvas.Canvas):
             self.drawCentredString(612 / 2.0, y, line)
             y -= 9
             
-        # Línea divisoria del encabezado
         self.setStrokeColor(colors.HexColor('#CBD5E1'))
         self.setLineWidth(0.75)
         self.line(30, 705, 612 - 30, 705)
         
-        # Pie de página (Número de página)
         self.setFont("Helvetica", 8)
         self.setFillColor(colors.HexColor('#6B7280'))
         self.drawRightString(612 - 30, 20, f"Página {self._pageNumber}")
@@ -167,14 +163,13 @@ class NumberedCanvas(canvas.Canvas):
 # Función para generar el reporte completo en PDF (Formato Vertical)
 def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_results_ind_a, trim_results_c_data, global_trim_results_f, delegational_b_trim, unit_rows_map, bloques_semanas, semanas_info):
     buffer = io.BytesIO()
-    # Margen superior amplio (75 pts) para evitar solapamiento con el encabezado institucional repetido
     doc = SimpleDocTemplate(buffer, pagesize=portrait(letter), rightMargin=25, leftMargin=25, topMargin=75, bottomMargin=35)
     story = []
     
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor('#111827'), spaceAfter=3)
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor('#4B5563'], spaceAfter=8)
-    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'), spaceBefore=8, spaceAfter=3)
+    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'], spaceBefore=8, spaceAfter=3)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#374151'))
     
     # 1. SECCIÓN GENERAL
@@ -279,7 +274,6 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
     style_commands.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#E2E8F0')))
     style_commands.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
     
-    # Ancho total exacto para formato vertical de letra (~560 puntos)
     col_w = [110] + [45]*len(bloques_semanas)*4
     t_gen = Table(table_data, colWidths=col_w)
     t_gen.setStyle(TableStyle(style_commands))
@@ -571,7 +565,6 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -608,7 +601,6 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -630,7 +622,6 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -642,7 +633,6 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -688,7 +678,6 @@ if uploaded_file is not None:
                     t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
             trim_results_c_data[t_name] = t_vals_c
 
-        # Pre-cálculo Global de Calidad (f) por Trimestre
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -719,7 +708,6 @@ if uploaded_file is not None:
                 "calidad": round(global_cal, 2)
             }
 
-        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional
         delegational_b_trim = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -809,7 +797,6 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Fila Delegacional independiente abajo (General)
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -866,7 +853,6 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad (Descriptivo)"
 
-            # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -961,7 +947,6 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -1055,7 +1040,6 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD)
             elif ind_key == "f":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -1112,7 +1096,6 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -1173,7 +1156,6 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
