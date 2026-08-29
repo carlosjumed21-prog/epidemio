@@ -178,13 +178,13 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia con mediana/promedio y ±25%)
+        # Pre-cálculo de Indicador C (Consistencia usando estrictamente la fila "Casos oportunos")
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                row_casos = m_rows.get("Unidades con casos oportunos", None)
+                row_casos = m_rows.get("Casos oportunos", None)
                 semanas_valores = []
                 if row_casos is not None:
                     for c_idx in range(start_col, end_col + 1):
@@ -200,13 +200,15 @@ if uploaded_file is not None:
                     med = np.median(arr_vals)
                     val_max_ref = max(prom, med)
                     
-                    lim_inf = 0.75 * val_max_ref
-                    lim_sup = 1.25 * val_max_ref
-                    
-                    semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
-                    total_sem = len(semanas_valores)
-                    val_ind = (semanas_consistentes / total_sem) * 100 if total_sem > 0 else 0.0
-                    t_vals_c[unidad] = round(val_ind, 2)
+                    if val_max_ref > 0:
+                        lim_inf = 0.75 * val_max_ref
+                        lim_sup = 1.25 * val_max_ref
+                        semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
+                        total_sem = len(semanas_valores)
+                        val_ind = (semanas_consistentes / total_sem) * 100 if total_sem > 0 else 0.0
+                        t_vals_c[unidad] = round(val_ind, 2)
+                    else:
+                        t_vals_c[unidad] = 100.0 if sum(semanas_valores) == 0 else 0.0
                 else:
                     t_vals_c[unidad] = np.nan
             trim_results_ind_c[t_name] = t_vals_c
@@ -475,7 +477,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A, C, F
+                # ESTRUCTURA PARA A, C, F (USANDO LA FILA CASOS OPORTUNOS PARA C)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -484,8 +486,9 @@ if uploaded_file is not None:
                     t_vals_abs = {}
                     for unidad in TARGET_UNITS:
                         m_rows = unit_rows_map.get(unidad, {})
-                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                         
+                        # Extraer valores absolutos acumulados o de referencia para la tabla izquierda
+                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                         suma_bloque = 0.0
                         if row_casos_oportunos is not None:
                             for c_idx in range(start_col, end_col + 1):
