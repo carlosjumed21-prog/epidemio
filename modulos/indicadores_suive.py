@@ -5,7 +5,7 @@ import io
 
 # Importaciones para generación de PDF con ReportLab
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -232,14 +232,13 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
     style_commands.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#E2E8F0')))
     style_commands.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
     
-    # Autoajuste de columnas de la tabla general (ancho total disponible ~740 pts)
     col_w = [110] + [62]*len(bloques_semanas)*4
     t_gen = Table(table_data, colWidths=col_w)
     t_gen.setStyle(TableStyle(style_commands))
     story.append(t_gen)
     story.append(Spacer(1, 10))
     
-    # 2. SECCIÓN DESGLOSADA POR INDICADOR CON SUS RESPECTIVAS TABLAS DELEGAIONALES Y ACOTACIONES
+    # 2. SECCIÓN DESGLOSADA POR INDICADOR
     story.append(Paragraph("Análisis Desglosado por Indicador", h2_style))
     
     def agregar_tabla_acotaciones(story, titulo, rango_exc, rango_buen, rango_reg, rango_mal):
@@ -304,7 +303,6 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
             style_a.append(('TEXTCOLOR', (2, row_i), (2, row_i), tc_a))
             row_i += 1
             
-        # Fila Delegacional A por Trimestre
         min_ind_a = min([v for v in vals_trim_a if pd.notna(v)], default=0.0)
         min_abs_a = abs_trim_a[vals_trim_a.index(min_ind_a)] if vals_trim_a else 0.0
         t_a_data.append(["DELEGACIONAL", f"{min_abs_a:.0f}", f"{min_ind_a:.2f}%"])
@@ -359,7 +357,6 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
         col_widths = [130] + [max(30, 580 / len(semanas_bloque))] * len(semanas_bloque)
         t_b = Table([["Métrica"] + [f"Día {s[1]}" for s in semanas_bloque], row_u, row_ind, row_del_b_vals], colWidths=col_widths)
         
-        # Sombreados para fila indicador y delegacional en B
         for col_idx in range(1, len(semanas_bloque) + 1):
             val_ind_col = float(row_ind[col_idx].replace('%',''))
             bg_bi, tc_bi = get_hex_color(val_ind_col, "b")
@@ -419,7 +416,7 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
         t_c_data.append(row)
         row_i += 1
         
-    # Fila Delegacional C
+    # Fila Delegacional C corregida y robusta sin fallos de índice
     row_del_c = ["DELEGACIONAL"]
     for t_name, _, _ in bloques_semanas:
         dat_ref = next((trim_results_c_data[t_name].get(u, {}) for u in TARGET_UNITS if trim_results_c_data[t_name].get(u, {}).get("porc") == max_c_por_trim[bloques_semanas.index((t_name, _, _))]), {"sem_cons": 0, "tot_sem": 13})
