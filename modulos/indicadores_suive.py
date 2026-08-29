@@ -5,12 +5,12 @@ import io
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Sistema de Evaluación Epidemiológica - SUAVE / SUIVE",
+    page_title="Sistema de Evaluación Epidemiológica - SUIVE",
     page_icon="📊",
     layout="wide"
 )
 
-# Estilos CSS personalizados
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #111827; font-weight: 700; margin-bottom: 0.2rem; }
@@ -49,6 +49,7 @@ def get_bg_color(val, ind_type):
         elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type in ["b", "e"]:
+        # Umbrales específicos para Cobertura Oportuna (b)
         if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -80,7 +81,7 @@ if uploaded_file is not None:
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "REPRESENTACIÓN REGIONAL SUR"
         anio = int(df.iloc[1, 1]) if df.shape[0] > 1 and df.shape[1] > 1 and str(df.iloc[1, 1]).isdigit() else 2024
         
-        # Mapeo estricto de columnas y números de semanas desde la fila 5 (índice 4)
+        # Mapeo estricto de columnas y números de periodos/días desde la fila 5 (índice 4)
         semanas_info = [] 
         if df.shape[0] > 4:
             for col_idx in range(1, df.shape[1] - 1):
@@ -94,7 +95,7 @@ if uploaded_file is not None:
         
         total_semanas_reportadas = len(semanas_info)
         ultima_semana = semanas_info[-1][1] if semanas_info else 0
-        periodo_str = f"Semana {semanas_info[0][1]} a Semana {ultima_semana} (Total: {total_semanas_reportadas} semanas)" if semanas_info else "No determinado"
+        periodo_str = f"Día {semanas_info[0][1]} a Día {ultima_semana} (Total: {total_semanas_reportadas} días)" if semanas_info else "No determinado"
 
         st.markdown(f"""
         <div class="info-box">
@@ -146,7 +147,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base unificado: Semanas Notificadas Oportunamente (Valores Absolutos)
+        # Cálculo base unificado: Semanas/Días Notificadas Oportunamente (Valores Absolutos)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -191,10 +192,10 @@ if uploaded_file is not None:
             [
                 "",
                 "Total",
-                "1er Trimestre (Semanas 1 a 13)",
-                "2º Trimestre (Semanas 13 a 26)",
-                "3er Trimestre (Semanas 26 a 39)",
-                "4º Trimestre (Semanas 39 a 52)"
+                "1er Trimestre (Días 1 a 13)",
+                "2º Trimestre (Días 13 a 26)",
+                "3er Trimestre (Días 26 a 39)",
+                "4º Trimestre (Días 39 a 52)"
             ],
             index=0,
             key="sel_gen"
@@ -205,13 +206,13 @@ if uploaded_file is not None:
                 if not opcion_periodo:
                     return [], ""
                 if "1er Trimestre" in opcion_periodo or "Primer" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 1 <= item[1] <= 13], "1er Trimestre (Sem. 1-13)", "PRIMER TRIMESTRE"
+                    return [item[0] for item in semanas_info if 1 <= item[1] <= 13], "1er Trimestre (Días 1-13)", "PRIMER TRIMESTRE"
                 elif "2º Trimestre" in opcion_periodo or "Segundo" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 13 < item[1] <= 26], "2º Trimestre (Sem. 14-26)", "SEGUNDO TRIMESTRE"
+                    return [item[0] for item in semanas_info if 13 < item[1] <= 26], "2º Trimestre (Días 14-26)", "SEGUNDO TRIMESTRE"
                 elif "3er Trimestre" in opcion_periodo or "Tercer" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 26 < item[1] <= 39], "3er Trimestre (Sem. 27-39)", "TERCER TRIMESTRE"
+                    return [item[0] for item in semanas_info if 26 < item[1] <= 39], "3er Trimestre (Días 27-39)", "TERCER TRIMESTRE"
                 elif "4º Trimestre" in opcion_periodo or "Cuarto" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 39 < item[1] <= 52], "4º Trimestre (Sem. 40-52)", "CUARTO TRIMESTRE"
+                    return [item[0] for item in semanas_info if 39 < item[1] <= 52], "4º Trimestre (Días 40-52)", "CUARTO TRIMESTRE"
                 else:
                     return [item[0] for item in semanas_info], "Total", None
 
@@ -356,7 +357,7 @@ if uploaded_file is not None:
                 ind_label = "Cumplimiento u Oportunidad"
             elif "COBERTURA" in indicador_seleccionado:
                 ind_key = "b"
-                ind_label = "Cobertura Oportuna"
+                ind_label = "Indicador de Cobertura oportuna"
             elif "CONSISTENCIA" in indicador_seleccionado:
                 ind_key = "c"
                 ind_label = "Consistencia"
@@ -364,26 +365,28 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad"
 
-            # CASO ESPECIAL PARA EL INDICADOR B: Sumatoria vertical por columna/semana (denominador fijo 15)
+            # CASO ESPECIAL PARA EL INDICADOR B: Sumatoria vertical por columna/día (denominador fijo 15)
             if ind_key == "b":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Semanal / 15 Unidades)")
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+
+                st.markdown("""
+                <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 310px; font-weight: bold; text-align: center;">
+                    UNIDADES HABILITADAS POR SEMANA: 15
+                </div>
+                """, unsafe_allow_html=True)
 
                 for t_name, start_col, end_col in bloques_semanas:
                     st.markdown(f"#### 📅 {t_name}")
                     
-                    # Obtenemos las semanas reales mapeadas en este bloque
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
                     if not semanas_bloque:
                         st.info(f"No hay registros activos para el {t_name}.")
                         continue
 
-                    # Construcción de las 2 filas: 
-                    # Fila 1: UNIDADES CON NOTIFICACIÓN OPORTUNA (Sumatoria vertical de 1s)
-                    # Fila 2: INDICADOR SEMANAL (%)
-                    fila_unidades = {"MÉTRICA / SEMANA": "UNIDADES CON NOTIFICACIÓN OPORTUNA"}
-                    fila_indicador = {"MÉTRICA / SEMANA": "INDICADOR SEMANAL (%)"}
+                    fila_unidades = {"MÉTRICA / DÍA": "UNIDADES CON NOTIFICACIÓN OPORTUNA"}
+                    fila_indicador = {"MÉTRICA / DÍA": "INDICADOR DIARIO (%)"}
 
                     for col_idx, sem_num in semanas_bloque:
                         suma_vertical_unidad = 0
@@ -398,11 +401,10 @@ if uploaded_file is not None:
                                 except ValueError:
                                     pass
                         
-                        # Guardamos en la columna nombrada con la semana
-                        sem_key = f"Sem. {sem_num}"
-                        fila_unidades[sem_key] = suma_vertical_unidad
+                        dia_key = f"Día {sem_num}"
+                        fila_unidades[dia_key] = suma_vertical_unidad
                         ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
-                        fila_indicador[sem_key] = ind_val
+                        fila_indicador[dia_key] = ind_val
 
                     df_semanal = pd.DataFrame([fila_unidades, fila_indicador])
                     
@@ -424,7 +426,7 @@ if uploaded_file is not None:
                     st.dataframe(styled_sem, use_container_width=True, hide_index=True)
                     st.markdown("---")
 
-                # Acotación para indicador b
+                # Acotación específica para el Indicador b (Cobertura Oportuna)
                 st.markdown(f"""
                 <table class="acotacion-table">
                     <tr>
@@ -498,7 +500,7 @@ if uploaded_file is not None:
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
                     for t_name, _, _ in bloques_semanas:
-                        fila[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                        fila[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
                         fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
@@ -507,17 +509,17 @@ if uploaded_file is not None:
 
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
                 st.markdown("""
                 <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 220px; font-weight: bold; text-align: center;">
-                    SEMANAS POR TRIMESTRE: 13
+                    DÍAS POR TRIMESTRE: 13
                 </div>
                 """, unsafe_allow_html=True)
 
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
-                    sep_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name))
+                    sep_tuples.append(("DIAS NOTIFICADOS OPORTUNAMENTE", t_name))
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append(("INDICADOR", t_name))
 
@@ -555,7 +557,7 @@ if uploaded_file is not None:
 
                 delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
-                    delegacional_dict[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
+                    delegacional_dict[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
                 for t_name, _, _ in bloques_semanas:
                     delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
 
@@ -578,7 +580,7 @@ if uploaded_file is not None:
                 styled_del = df_del.style.apply(style_delegational, axis=1)
                 st.dataframe(styled_del, use_container_width=True, hide_index=True)
 
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <table class="acotacion-table">
