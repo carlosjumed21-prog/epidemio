@@ -16,7 +16,6 @@ st.markdown("""
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #374151; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
-    /* Estilos para el Encabezado Institucional Oficial del Reporte */
     .report-container {
         background-color: white;
         padding: 30px;
@@ -56,16 +55,6 @@ def render_institutional_header(titulo_extra=""):
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
-
-TARGET_UNITS = [
-    "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", 
-    "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
-    "FUENTES BROTANTES", "HG DRA. MATILDE PETRA MONTOYA LAFRAGUA",
-    "MILPA ALTA", "NARVARTE", "TLALPAN", "VILLA ALVARO OBREGON", "XOCHIMILCO"
-]
-
 def get_bg_color(val, ind_type):
     if val is None or pd.isna(val) or val == "NO APLICA":
         return ''
@@ -91,6 +80,33 @@ def get_bg_color(val, ind_type):
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
+
+def style_multi_table(row_data, is_delegacional=False):
+    styles = [''] * len(row_data)
+    for i, col_name in enumerate(row_data.index):
+        if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
+            subcol = col_name[1]
+            val = row_data.iloc[i]
+            if pd.notna(val) and val != "NO APLICA":
+                if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
+                    styles[i] = get_bg_color(val, "a")
+                elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
+                    styles[i] = get_bg_color(val, "b")
+                elif subcol == "CONSISTENCIA":
+                    styles[i] = get_bg_color(val, "c")
+                elif subcol == "CALIDAD" and is_delegacional:
+                    styles[i] = get_bg_color(val, "f")
+    return styles
+
+st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
+
+TARGET_UNITS = [
+    "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", 
+    "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
+    "FUENTES BROTANTES", "HG DRA. MATILDE PETRA MONTOYA LAFRAGUA",
+    "MILPA ALTA", "NARVARTE", "TLALPAN", "VILLA ALVARO OBREGON", "XOCHIMILCO"
+]
 
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE", type=["xlsx", "xls"])
 
@@ -289,101 +305,11 @@ if uploaded_file is not None:
             delegational_b_trim[t_name] = round(np.mean(cob_semanas), 2) if len(cob_semanas) > 0 else 0.0
 
         # ==========================================
-        # BOTÓN DE DESCARGA / VISTA DE REPORTE OFICIAL
-        # ==========================================
-        st.markdown("---")
-        st.subheader("📥 Exportar Reporte Oficial")
-        
-        if st.button("🖨️ Generar Vista Oficial para Impresión / PDF"):
-            st.markdown("""
-            <div style="background-color: #FEF08A; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: center; font-weight: bold;">
-                💡 Tip de impresión: Presiona <code>Ctrl + P</code> (o <code>Cmd + P</code> en Mac) y selecciona "Guardar como PDF" para obtener tu documento oficial con el membrete y formato institucional.
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Contenedor con formato de impresión oficial idéntico al PDF de referencia
-            st.markdown('<div class="report-container">', unsafe_allow_html=True)
-            render_institutional_header("REPORTE CONSOLIDADO DE INDICADORES SUAVE")
-            
-            # Tabla general integrada en el reporte
-            general_table_data = []
-            for unidad in TARGET_UNITS:
-                fila = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): unidad}
-                for t_name, _, _ in bloques_semanas:
-                    val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
-                    val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
-                    
-                    fila[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = val_a
-                    fila[(t_name, "COBERTURA OPORTUNA")] = "NO APLICA"
-                    fila[(t_name, "CONSISTENCIA")] = val_c
-                    fila[(t_name, "CALIDAD")] = "NO APLICA"
-                general_table_data.append(fila)
-
-            df_gen_multi = pd.DataFrame(general_table_data)
-            gen_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
-            for t_name, _, _ in bloques_semanas:
-                gen_tuples.append((t_name, "CUMPLIMIENTO U OPORTUNIDAD"))
-                gen_tuples.append((t_name, "COBERTURA OPORTUNA"))
-                gen_tuples.append((t_name, "CONSISTENCIA"))
-                gen_tuples.append((t_name, "CALIDAD"))
-
-            df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
-            
-            def style_multi_table(row_data, is_delegacional=False):
-                styles = [''] * len(row_data)
-                for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
-                        subcol = col_name[1]
-                        val = row_data.iloc[i]
-                        if pd.notna(val) and val != "NO APLICA":
-                            if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
-                                styles[i] = get_bg_color(val, "a")
-                            elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
-                                styles[i] = get_bg_color(val, "b")
-                            elif subcol == "CONSISTENCIA":
-                                styles[i] = get_bg_color(val, "c")
-                            elif subcol == "CALIDAD" and is_delegacional:
-                                styles[i] = get_bg_color(val, "f")
-                return styles
-
-            styled_gen_main = df_gen_multi.style.format(
-                formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
-                subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-            ).apply(style_multi_table, axis=1, is_delegacional=False)
-
-            st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
-
-            # Fila Delegacional
-            fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
-            for t_name, _, _ in bloques_semanas:
-                vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
-                min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
-                avg_b = delegational_b_trim.get(t_name, np.nan)
-                vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
-                max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
-                global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
-                
-                fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
-                fila_del[(t_name, "COBERTURA OPORTUNA")] = avg_b
-                fila_del[(t_name, "CONSISTENCIA")] = max_c
-                fila_del[(t_name, "CALIDAD")] = global_cal
-
-            df_del_gen = pd.DataFrame([fila_del])
-            df_del_gen.columns = pd.MultiIndex.from_tuples(gen_tuples)
-            styled_del_gen = df_del_gen.style.format(
-                formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
-                subset=[col for col in df_del_gen.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-            ).apply(style_multi_table, axis=1, is_delegacional=True)
-
-            st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
-            st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024.</p>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # ==========================================
-        # 1. APARTADO GENERAL EN INTERFAZ
+        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
         # ==========================================
         st.markdown("---")
         st.subheader("📊 Tabla Comparativa General (Panorama por Trimestres)")
+
         general_table_data = []
         for unidad in TARGET_UNITS:
             fila = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): unidad}
@@ -398,6 +324,7 @@ if uploaded_file is not None:
             general_table_data.append(fila)
 
         df_gen_multi = pd.DataFrame(general_table_data)
+
         gen_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
         for t_name, _, _ in bloques_semanas:
             gen_tuples.append((t_name, "CUMPLIMIENTO U OPORTUNIDAD"))
@@ -406,6 +333,7 @@ if uploaded_file is not None:
             gen_tuples.append((t_name, "CALIDAD"))
 
         df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
+
         styled_gen_main = df_gen_multi.style.format(
             formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
             subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
@@ -413,13 +341,17 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
+        # Fila Delegacional independiente abajo (General)
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
             min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
+            
             avg_b = delegational_b_trim.get(t_name, np.nan)
+            
             vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
+            
             global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
             
             fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
@@ -435,7 +367,7 @@ if uploaded_file is not None:
         ).apply(style_multi_table, axis=1, is_delegacional=True)
 
         st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
-        st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024.</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
         # ==========================================
         # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR
@@ -474,7 +406,7 @@ if uploaded_file is not None:
                 render_institutional_header("INDICADOR EVALUADO: Cobertura Oportuna")
                 st.markdown(f"""
                 <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 310px; font-weight: bold; text-align: center;">
-                    UNIDADES HABILITADAS POR SEMANA: 15
+                    UNIDADES HABILITADAS POR SEMANA: 15[cite: 2]
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -530,7 +462,7 @@ if uploaded_file is not None:
                     subset=df_del_b.columns[1:]
                 )
                 st.dataframe(styled_del_b, use_container_width=True, hide_index=True)
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
             elif ind_key == "c":
                 render_institutional_header("INDICADOR EVALUADO: Consistencia")
@@ -588,7 +520,7 @@ if uploaded_file is not None:
                 ).apply(style_c_table, axis=1)
 
                 st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día[cite: 2].</p>", unsafe_allow_html=True)
 
             elif ind_key == "f":
                 render_institutional_header("INDICADOR EVALUADO: Calidad (Descriptivo)")
@@ -617,7 +549,7 @@ if uploaded_file is not None:
 
                 st.markdown("### 📋 Reporte Global de Calidad (Delegacional)")
                 st.dataframe(styled_f, use_container_width=True, hide_index=True)
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día[cite: 2].</p>", unsafe_allow_html=True)
 
             else:
                 render_institutional_header("INDICADOR EVALUADO: Cumplimiento u Oportunidad")
@@ -688,7 +620,7 @@ if uploaded_file is not None:
                 ).apply(style_sep_table, axis=1)
 
                 st.dataframe(styled_del_a, use_container_width=True, hide_index=True)
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día[cite: 2].</p>", unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
