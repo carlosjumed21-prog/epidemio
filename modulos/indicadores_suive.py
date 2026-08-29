@@ -116,18 +116,12 @@ if uploaded_file is not None:
             results = []
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
                 
-                acumulado_periodo = 0.0
-                if row_semanas_casos is not None and len(cols_indices) > 0:
-                    # Tomamos el valor acumulado ubicado en la última columna/semana del bloque de este periodo
-                    ultima_col_bloque = cols_indices[-1]
-                    val_acumulado = row_semanas_casos[ultima_col_bloque]
-                    if pd.notna(val_acumulado):
-                        try:
-                            acumulado_periodo = float(val_acumulado)
-                        except ValueError:
-                            acumulado_periodo = 0.0
+                # Fila "Unidades con casos oportunos" para sumar el bloque del trimestre
+                row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                suma_casos_oportunos = 0.0
+                if row_casos_oportunos is not None and len(cols_indices) > 0:
+                    suma_casos_oportunos = sum([float(row_casos_oportunos[c]) for c in cols_indices if pd.notna(row_casos_oportunos[c])])
 
                 def get_ab_val(metric_key):
                     r = m_rows.get(metric_key, None)
@@ -149,11 +143,12 @@ if uploaded_file is not None:
                 base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
                 divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
 
-                # Aplicación exacta de la fórmula: (Acumulado de la semana de corte / 13) * 100
-                ind_a = (acumulado_periodo / divisor_calc) * 100
+                # Aplicación exacta de la fórmula del Indicador a):
+                # (Sumatoria de la fila "Unidades con casos oportunos" en el bloque del trimestre / 13) * 100
+                ind_a = (suma_casos_oportunos / divisor_calc) * 100
                 
                 ind_b = (u_oportunas / base_hab) * 100
-                ind_c = (acumulado_periodo / divisor_calc) * 100
+                ind_c = (suma_casos_oportunos / divisor_calc) * 100
                 ind_d = (u_sin_notificar / base_hab) * 100
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
@@ -168,7 +163,7 @@ if uploaded_file is not None:
                     "e": round(ind_e, 2),
                     "f": round(ind_f, 2),
                     "_metrics": {
-                        "Acumulado en semana de corte": acumulado_periodo,
+                        "Suma casos oportunos en el bloque": suma_casos_oportunos,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
@@ -236,7 +231,7 @@ if uploaded_file is not None:
                 stop_gen = False
 
             if not stop_gen:
-                total_sem_gen = float(len(cols_gen_indices)) if len(cols_gen_indices) > 0 else 26.0
+                total_sem_gen = float(len(cols_gen_indices)) if len(cols_gen_indices) > 0 else 13.0
                 raw_gen_res = calcular_resultados_periodo(cols_gen_indices, total_sem_gen)
                 
                 processed_gen = []
@@ -311,7 +306,7 @@ if uploaded_file is not None:
         
         if trimestre_opcion_unit:
             cols_unit_indices, rango_unit_etiqueta = get_indices_semanas(trimestre_opcion_unit)
-            total_sem_unit = float(len(cols_unit_indices)) if len(cols_unit_indices) > 0 else 26.0
+            total_sem_unit = float(len(cols_unit_indices)) if len(cols_unit_indices) > 0 else 13.0
 
             unit_options = ["TODAS"] + TARGET_UNITS
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo de datos):", [""] + unit_options, index=0)
@@ -319,17 +314,11 @@ if uploaded_file is not None:
             if selected_unit and selected_unit != "":
                 def render_unit_details(unit_name):
                     m_rows = unit_rows_map.get(unit_name, {})
-                    row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
+                    row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                     
-                    acumulado_periodo = 0.0
-                    if row_semanas_casos is not None and len(cols_unit_indices) > 0:
-                        ultima_col_bloque = cols_unit_indices[-1]
-                        val_acumulado = row_semanas_casos[ultima_col_bloque]
-                        if pd.notna(val_acumulado):
-                            try:
-                                acumulado_periodo = float(val_acumulado)
-                            except ValueError:
-                                acumulado_periodo = 0.0
+                    suma_casos_oportunos = 0.0
+                    if row_casos_oportunos is not None and len(cols_unit_indices) > 0:
+                        suma_casos_oportunos = sum([float(row_casos_oportunos[c]) for c in cols_unit_indices if pd.notna(row_casos_oportunos[c])])
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -349,7 +338,7 @@ if uploaded_file is not None:
                     u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                     unit_metrics = {
-                        "Acumulado en semana de corte": acumulado_periodo,
+                        "Sumatoria casos oportunos en el periodo": suma_casos_oportunos,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
