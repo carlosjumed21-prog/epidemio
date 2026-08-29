@@ -15,14 +15,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones inferior
+# Estilos CSS personalizados para la interfaz web, tabla de acotaciones anterior y el botón de impresión
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #1E3A8A; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #1E3A8A; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
-    /* Estilos para la tabla de acotaciones inferior */
+    /* Estilos para la tabla de acotaciones anterior */
     .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
     .acotacion-table th { background-color: #1E3A8A; color: white; font-weight: bold; }
@@ -30,6 +30,11 @@ st.markdown("""
     .bg-bueno { background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1; }
     .bg-regular { background-color: #FEF08A; color: black; font-weight: bold; }
     .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
+
+    /* Ocultar elementos de UI durante la impresión nativa si se desea */
+    @media print {
+        .no-print { display: none !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -535,7 +540,7 @@ if uploaded_file is not None:
             # Pie de fuente requerido
             st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
 
-            # Acotación de evaluación idéntica a la imagen oficial
+            # Acotación de evaluación idéntica a la imagen oficial (con diseño anterior)
             st.markdown("""
             <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
                 <table style="border-collapse: collapse; font-size: 0.85rem; width: 320px;">
@@ -553,7 +558,7 @@ if uploaded_file is not None:
                     <tr>
                         <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">95.0 - 97.4</td>
                         <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #FEF08A; color: black; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
+                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
                     </tr>
                     <tr>
                         <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">94.9 ó menos</td>
@@ -565,11 +570,11 @@ if uploaded_file is not None:
             """, unsafe_allow_html=True)
 
             # ==========================================
-            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF (REPORTLAB)
+            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF Y VENTANA DE IMPRESIÓN
             # ==========================================
             st.markdown("---")
-            st.subheader("📑 Generación de Reporte Oficial en PDF")
-            st.info("Haz clic en el botón para descargar el reporte institucional en formato PDF.")
+            st.subheader("📑 Generación de Reporte Oficial en PDF / Impresión")
+            st.info("Descarga el archivo PDF o haz clic en imprimir para visualizar el reporte en una ventana emergente lista para impresión.")
 
             def generar_pdf_reportlab():
                 buffer = io.BytesIO()
@@ -689,12 +694,22 @@ if uploaded_file is not None:
                 return buffer
 
             pdf_buffer = generar_pdf_reportlab()
-            st.download_button(
-                label="📥 Descargar Reporte Oficial en PDF",
-                data=pdf_buffer,
-                file_name=f"Reporte_SUAVE_{ind_label.replace(' ', '_')}.pdf",
-                mime="application/pdf"
-            )
+            
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                st.download_button(
+                    label="📥 Descargar Reporte en PDF",
+                    data=pdf_buffer,
+                    file_name=f"Reporte_SUAVE_{ind_label.replace(' ', '_')}.pdf",
+                    mime="application/pdf"
+                )
+            with col_b2:
+                # Botón con Javascript para activar la ventana emergente nativa de impresión del navegador
+                st.markdown("""
+                <button onclick="window.print();" style="background-color: #1E3A8A; color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%;">
+                    🖨️ Vista de Impresión / Ventana Emergente
+                </button>
+                """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
