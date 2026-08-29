@@ -416,10 +416,13 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
         t_c_data.append(row)
         row_i += 1
         
-    # Fila Delegacional C corregida y robusta sin fallos de índice
+    # Fila Delegacional C blindada contra errores de índice
     row_del_c = ["DELEGACIONAL"]
-    for t_name, _, _ in bloques_semanas:
-        dat_ref = next((trim_results_c_data[t_name].get(u, {}) for u in TARGET_UNITS if trim_results_c_data[t_name].get(u, {}).get("porc") == max_c_por_trim[bloques_semanas.index((t_name, _, _))]), {"sem_cons": 0, "tot_sem": 13})
+    for idx_t, (t_name, _, _) in enumerate(bloques_semanas):
+        mx = max_c_por_trim[idx_t]
+        # Buscar unidad que contenga este valor máximo de forma segura
+        match_unit = next((u for u in TARGET_UNITS if trim_results_c_data[t_name].get(u, {}).get("porc") == mx), None)
+        dat_ref = trim_results_c_data[t_name].get(match_unit, {"sem_cons": 0, "tot_sem": 13}) if match_unit else {"sem_cons": 0, "tot_sem": 13}
         row_del_c.append(f"{dat_ref.get('sem_cons', 0)}/{dat_ref.get('tot_sem', 13)}")
         
     for idx_t, (t_name, _, _) in enumerate(bloques_semanas):
