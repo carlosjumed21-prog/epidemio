@@ -71,71 +71,127 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
 
-# Función auxiliar para obtener color hexadecimal basado en valor e indicador para ReportLab
+# Función auxiliar para obtener color hexadecimal y color de texto para ReportLab con sombreados exactos
 def get_hex_color(val, ind_type):
     if val is None or pd.isna(val) or val == "NO APLICA":
-        return colors.white
+        return colors.white, colors.black
+    
+    bg_hex, text_color = colors.white, colors.black
+    
     if ind_type == "a":
-        if val == 100.0: return colors.HexColor('#10B981')
-        elif 97.5 <= val <= 99.9: return colors.white
-        elif 95.0 <= val <= 97.4: return colors.HexColor('#FEF08A')
-        else: return colors.HexColor('#EF4444')
+        if val == 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 97.5 <= val <= 99.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 95.0 <= val <= 97.4:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
     elif ind_type in ["b", "e"]:
-        if 95.0 <= val <= 100.0: return colors.HexColor('#10B981')
-        elif 90.0 <= val <= 94.9: return colors.white
-        elif 80.0 <= val <= 89.9: return colors.HexColor('#FEF08A')
-        else: return colors.HexColor('#EF4444')
+        if 95.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 90.0 <= val <= 94.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
     elif ind_type == "c":
-        if 90.0 <= val <= 100.0: return colors.HexColor('#10B981')
-        elif 80.0 <= val <= 89.9: return colors.white
-        elif 70.0 <= val <= 79.9: return colors.HexColor('#FEF08A')
-        else: return colors.HexColor('#EF4444')
+        if 90.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 70.0 <= val <= 79.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
     elif ind_type == "f":
-        if 90.0 <= val <= 100.0: return colors.HexColor('#10B981')
-        elif 80.0 <= val <= 89.9: return colors.white
-        elif 60.0 <= val <= 79.9: return colors.HexColor('#FEF08A')
-        else: return colors.HexColor('#EF4444')
-    return colors.white
+        if 90.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 60.0 <= val <= 79.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
+            
+    return bg_hex, text_color
 
-# Función para generar el reporte completo en PDF
-def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_multi, df_del_gen, trim_results_ind_a, trim_results_c_data, global_trim_results_f, delegational_b_trim, unit_rows_map, bloques_semanas, semanas_info):
+# Función para generar el reporte completo en PDF con sombreados y autoajuste
+def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_results_ind_a, trim_results_c_data, global_trim_results_f, delegational_b_trim, unit_rows_map, bloques_semanas, semanas_info):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
     story = []
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#111827'), spaceAfter=6)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#4B5563'), spaceAfter=12)
-    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#1F2937'), spaceBefore=12, spaceAfter=6)
-    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#374151'))
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor('#111827'), spaceAfter=4)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#4B5563'), spaceAfter=10)
+    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#1F2937'), spaceBefore=10, spaceAfter=4)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#374151'))
     
     # Encabezado del PDF
     story.append(Paragraph("Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE", title_style))
     story.append(Paragraph(f"<b>Delegación:</b> {delegacion} | <b>Año:</b> {anio} | <b>Periodo:</b> {periodo_str}", subtitle_style))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 5))
     
     # 1. SECCIÓN GENERAL
     story.append(Paragraph("Tabla Comparativa General (Panorama por Trimestres)", h2_style))
     
-    # Construir tabla general para ReportLab
     gen_headers = ["Unidad Médica"]
     for t_name, _, _ in bloques_semanas:
         gen_headers.extend([f"{t_name}\nOportunidad", f"{t_name}\nCob. Oportuna", f"{t_name}\nConsistencia", f"{t_name}\nCalidad"])
     
     table_data = [gen_headers]
+    style_commands = [
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 7),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+    ]
+    
+    row_idx = 1
     for unidad in TARGET_UNITS:
         row = [unidad]
+        col_c = 1
         for t_name, _, _ in bloques_semanas:
             val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
             val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
+            
+            # Oportunidad (a)
             row.append(f"{val_a:.2f}%" if pd.notna(val_a) else "-")
+            bg_a, tc_a = get_hex_color(val_a, "a")
+            if pd.notna(val_a):
+                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
+                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
+            col_c += 1
+            
+            # Cob Oportuna (b) - N/A en general unitario
             row.append("N/A")
+            col_c += 1
+            
+            # Consistencia (c)
             row.append(f"{val_c:.2f}%" if pd.notna(val_c) else "-")
+            bg_c, tc_c = get_hex_color(val_c, "c")
+            if pd.notna(val_c):
+                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
+                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
+            col_c += 1
+            
+            # Calidad (f) - N/A en general unitario
             row.append("N/A")
+            col_c += 1
+            
         table_data.append(row)
+        row_idx += 1
         
     # Fila Delegacional General
     row_del = ["DELEGACIONAL"]
+    col_c = 1
     for t_name, _, _ in bloques_semanas:
         vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
         min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
@@ -145,29 +201,45 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
         global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
         
         row_del.append(f"{min_a:.2f}%" if pd.notna(min_a) else "-")
+        bg_a, tc_a = get_hex_color(min_a, "a")
+        if pd.notna(min_a):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
+        col_c += 1
+        
         row_del.append(f"{avg_b:.2f}%" if pd.notna(avg_b) else "-")
+        bg_b, tc_b = get_hex_color(avg_b, "b")
+        if pd.notna(avg_b):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_b))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_b))
+        col_c += 1
+        
         row_del.append(f"{max_c:.2f}%" if pd.notna(max_c) else "-")
+        bg_c, tc_c = get_hex_color(max_c, "c")
+        if pd.notna(max_c):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
+        col_c += 1
+        
         row_del.append(f"{global_cal:.2f}%" if pd.notna(global_cal) else "-")
+        bg_f, tc_f = get_hex_color(global_cal, "f")
+        if pd.notna(global_cal):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_f))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_f))
+        col_c += 1
+        
     table_data.append(row_del)
+    style_commands.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#E2E8F0')))
+    style_commands.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
     
-    t_gen = Table(table_data, colWidths=[110] + [53]*len(bloques_semanas)*4)
-    t_gen.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 7),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#E2E8F0')),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-    ]))
+    # Autoajuste de columnas de la tabla general (ancho total disponible ~740 pts)
+    col_w = [110] + [62]*len(bloques_semanas)*4
+    t_gen = Table(table_data, colWidths=col_w)
+    t_gen.setStyle(TableStyle(style_commands))
     story.append(t_gen)
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 10))
     
-    # 2. SECCIÓN DESGLOSADA POR INDICADOR
+    # 2. SECCIÓN DESGLOSADA POR INDICADOR CON SUS RESPECTIVAS TABLAS DELEGAIONALES Y ACOTACIONES
     story.append(Paragraph("Análisis Desglosado por Indicador", h2_style))
     
     def agregar_tabla_acotaciones(story, titulo, rango_exc, rango_buen, rango_reg, rango_mal):
@@ -176,7 +248,7 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
             ["Indicador", "Excelente", "Bueno", "Regular", "Malo"],
             [titulo, rango_exc, rango_buen, rango_reg, rango_mal]
         ]
-        t_acot = Table(acot_data, colWidths=[150, 120, 120, 120, 120])
+        t_acot = Table(acot_data, colWidths=[160, 140, 140, 140, 140])
         t_acot.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
@@ -189,17 +261,30 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
             ('TEXTCOLOR', (4,1), (4,1), colors.whitesmoke),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
             ('FONTSIZE', (0,0), (-1,-1), 7),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-            ('TOPPADDING', (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
         ]))
         story.append(t_acot)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 8))
 
     # --- INDICADOR A ---
     story.append(Paragraph("<b>Cumplimiento u Oportunidad (a)</b>", h2_style))
     for t_name, start_col, end_col in bloques_semanas:
         story.append(Paragraph(f"<b>{t_name}</b>", normal_style))
         t_a_data = [["Unidad Médica", "Días Oportunos", "Indicador (%)"]]
+        style_a = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+            ('FONTSIZE', (0,0), (-1,-1), 7),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+        ]
+        
+        row_i = 1
+        vals_trim_a = []
+        abs_trim_a = []
         for unidad in TARGET_UNITS:
             m_rows = unit_rows_map.get(unidad, {})
             row_casos = m_rows.get("Unidades con casos oportunos", None)
@@ -210,22 +295,32 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
                         try: suma_bloque += float(row_casos[c_idx])
                         except ValueError: pass
             ind_val = round((suma_bloque / 13.0) * 100, 2)
+            vals_trim_a.append(ind_val)
+            abs_trim_a.append(suma_bloque)
+            
             t_a_data.append([unidad, f"{suma_bloque:.0f}", f"{ind_val:.2f}%"])
+            bg_a, tc_a = get_hex_color(ind_val, "a")
+            style_a.append(('BACKGROUND', (2, row_i), (2, row_i), bg_a))
+            style_a.append(('TEXTCOLOR', (2, row_i), (2, row_i), tc_a))
+            row_i += 1
+            
+        # Fila Delegacional A por Trimestre
+        min_ind_a = min([v for v in vals_trim_a if pd.notna(v)], default=0.0)
+        min_abs_a = abs_trim_a[vals_trim_a.index(min_ind_a)] if vals_trim_a else 0.0
+        t_a_data.append(["DELEGACIONAL", f"{min_abs_a:.0f}", f"{min_ind_a:.2f}%"])
+        bg_da, tc_da = get_hex_color(min_ind_a, "a")
+        style_a.append(('BACKGROUND', (0, row_i), (-1, row_i), colors.HexColor('#E2E8F0')))
+        style_a.append(('BACKGROUND', (2, row_i), (2, row_i), bg_da))
+        style_a.append(('TEXTCOLOR', (2, row_i), (2, row_i), tc_da))
+        style_a.append(('FONTNAME', (0, row_i), (-1, row_i), 'Helvetica-Bold'))
         
-        t_a = Table(t_a_data, colWidths=[200, 100, 100])
-        t_a.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTSIZE', (0,0), (-1,-1), 7),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-            ('TOPPADDING', (0,0), (-1,-1), 3),
-        ]))
+        t_a = Table(t_a_data, colWidths=[240, 140, 140])
+        t_a.setStyle(TableStyle(style_a))
         story.append(t_a)
-        story.append(Spacer(1, 8))
+        story.append(Spacer(1, 6))
+        
     agregar_tabla_acotaciones(story, "Cumplimiento u Oportunidad", "100.0%", "97.5 - 99.9%", "95.0 - 97.4%", "≤ 94.9%")
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 10))
 
     # --- INDICADOR B ---
     story.append(Paragraph("<b>Cobertura Oportuna (b)</b>", h2_style))
@@ -236,6 +331,17 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
         
         row_u = ["Unidades Notificadas"]
         row_ind = ["Indicador Diario (%)"]
+        row_del_b_vals = ["DELEGACIONAL"]
+        avg_b_val = delegational_b_trim.get(t_name, 0.0)
+        
+        style_b = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+            ('FONTSIZE', (0,0), (-1,-1), 6),
+        ]
+        
         for col_idx, sem_num in semanas_bloque:
             suma_v = 0
             for unidad in TARGET_UNITS:
@@ -246,65 +352,122 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, df_gen_mul
                         if float(row_casos[col_idx]) > 0: suma_v += 1
                     except ValueError: pass
             row_u.append(str(suma_v))
-            row_ind.append(f"{(suma_v/15.0)*100:.2f}%")
+            ind_d = (suma_v/15.0)*100
+            row_ind.append(f"{ind_d:.2f}%")
+            row_del_b_vals.append(f"{avg_b_val:.2f}%")
             
-        col_widths = [130] + [max(35, 450 / len(semanas_bloque))] * len(semanas_bloque)
-        t_b = Table([["Métrica"] + [f"Día {s[1]}" for s in semanas_bloque], row_u, row_ind], colWidths=col_widths)
-        t_b.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTSIZE', (0,0), (-1,-1), 6),
-        ]))
+        col_widths = [130] + [max(30, 580 / len(semanas_bloque))] * len(semanas_bloque)
+        t_b = Table([["Métrica"] + [f"Día {s[1]}" for s in semanas_bloque], row_u, row_ind, row_del_b_vals], colWidths=col_widths)
+        
+        # Sombreados para fila indicador y delegacional en B
+        for col_idx in range(1, len(semanas_bloque) + 1):
+            val_ind_col = float(row_ind[col_idx].replace('%',''))
+            bg_bi, tc_bi = get_hex_color(val_ind_col, "b")
+            style_b.append(('BACKGROUND', (col_idx, 2), (col_idx, 2), bg_bi))
+            style_b.append(('TEXTCOLOR', (col_idx, 2), (col_idx, 2), tc_bi))
+            
+            bg_db, tc_db = get_hex_color(avg_b_val, "b")
+            style_b.append(('BACKGROUND', (col_idx, 3), (col_idx, 3), bg_db))
+            style_b.append(('TEXTCOLOR', (col_idx, 3), (col_idx, 3), tc_db))
+            
+        style_b.append(('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#E2E8F0')))
+        style_b.append(('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'))
+        
+        t_b.setStyle(TableStyle(style_b))
         story.append(t_b)
         story.append(Spacer(1, 8))
+        
     agregar_tabla_acotaciones(story, "Cobertura Oportuna", "95.0 - 100%", "90.0 - 94.9%", "80.0 - 89.9%", "≤ 79.9%")
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 10))
 
     # --- INDICADOR C ---
     story.append(Paragraph("<b>Consistencia (c)</b>", h2_style))
     t_c_data = [["Unidad Médica"] + [f"{t}\nConsist./Tot." for t,_,_ in bloques_semanas] + [f"{t}\n% Consist." for t,_,_ in bloques_semanas]]
+    style_c = [
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+        ('FONTSIZE', (0,0), (-1,-1), 6),
+    ]
+    
+    row_i = 1
+    max_c_por_trim = []
+    for t_name, _, _ in bloques_semanas:
+        col_vals = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+        mx = max([v for v in col_vals if pd.notna(v)], default=0.0)
+        max_c_por_trim.append(mx)
+
     for unidad in TARGET_UNITS:
         row = [unidad]
         for t_name, _, _ in bloques_semanas:
             dat = trim_results_c_data[t_name].get(unidad, {"sem_cons": 0, "tot_sem": 13, "porc": np.nan})
             row.append(f"{dat['sem_cons']}/{dat['tot_sem']}")
+        
+        col_idx_porc = len(bloques_semanas) + 1
         for t_name, _, _ in bloques_semanas:
             dat = trim_results_c_data[t_name].get(unidad, {"porc": np.nan})
-            row.append(f"{dat['porc']:.2f}%" if pd.notna(dat['porc']) else "-")
+            porc_val = dat['porc']
+            row.append(f"{porc_val:.2f}%" if pd.notna(porc_val) else "-")
+            bg_c, tc_c = get_hex_color(porc_val, "c")
+            if pd.notna(porc_val):
+                style_c.append(('BACKGROUND', (col_idx_porc, row_i), (col_idx_porc, row_i), bg_c))
+                style_c.append(('TEXTCOLOR', (col_idx_porc, row_i), (col_idx_porc, row_i), tc_c))
+            col_idx_porc += 1
+            
         t_c_data.append(row)
+        row_i += 1
         
-    t_c = Table(t_c_data, colWidths=[120] + [70]*len(bloques_semanas)*2)
-    t_c.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-    ]))
+    # Fila Delegacional C
+    row_del_c = ["DELEGACIONAL"]
+    for t_name, _, _ in bloques_semanas:
+        dat_ref = next((trim_results_c_data[t_name].get(u, {}) for u in TARGET_UNITS if trim_results_c_data[t_name].get(u, {}).get("porc") == max_c_por_trim[bloques_semanas.index((t_name, _, _))]), {"sem_cons": 0, "tot_sem": 13})
+        row_del_c.append(f"{dat_ref.get('sem_cons', 0)}/{dat_ref.get('tot_sem', 13)}")
+        
+    for idx_t, (t_name, _, _) in enumerate(bloques_semanas):
+        mx = max_c_por_trim[idx_t]
+        row_del_c.append(f"{mx:.2f}%" if pd.notna(mx) else "-")
+        
+    t_c_data.append(row_del_c)
+    style_c.append(('BACKGROUND', (0, row_i), (-1, row_i), colors.HexColor('#E2E8F0')))
+    style_c.append(('FONTNAME', (0, row_i), (-1, row_i), 'Helvetica-Bold'))
+    
+    col_w_c = [110] + [48]*len(bloques_semanas)*2
+    t_c = Table(t_c_data, colWidths=col_w_c)
+    t_c.setStyle(TableStyle(style_c))
     story.append(t_c)
     story.append(Spacer(1, 8))
+    
     agregar_tabla_acotaciones(story, "Consistencia", "90.0 - 100%", "80.0 - 89.9%", "70.0 - 79.9%", "≤ 69.9%")
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 10))
 
     # --- INDICADOR F ---
     story.append(Paragraph("<b>Calidad - Global / Delegacional (f)</b>", h2_style))
     t_f_data = [["Trimestre", "% Cobertura", "% Consistencia", "Indicador de Calidad"]]
-    for t_name, _, _ in bloques_semanas:
-        res = global_trim_results_f[t_name]
-        t_f_data.append([t_name, f"{res['cobertura']:.2f}%", f"{res['consistencia']:.2f}%", f"{res['calidad']:.2f}%"])
-        
-    t_f = Table(t_f_data, colWidths=[150, 110, 110, 110])
-    t_f.setStyle(TableStyle([
+    style_f = [
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
         ('FONTSIZE', (0,0), (-1,-1), 7),
-    ]))
+    ]
+    
+    row_i = 1
+    for t_name, _, _ in bloques_semanas:
+        res = global_trim_results_f[t_name]
+        cal_val = res['calidad']
+        t_f_data.append([t_name, f"{res['cobertura']:.2f}%", f"{res['consistencia']:.2f}%", f"{cal_val:.2f}%"])
+        bg_f, tc_f = get_hex_color(cal_val, "f")
+        style_f.append(('BACKGROUND', (3, row_i), (3, row_i), bg_f))
+        style_f.append(('TEXTCOLOR', (3, row_i), (3, row_i), tc_f))
+        row_i += 1
+        
+    t_f = Table(t_f_data, colWidths=[180, 140, 140, 140])
+    t_f.setStyle(TableStyle(style_f))
     story.append(t_f)
     story.append(Spacer(1, 8))
+    
     agregar_tabla_acotaciones(story, "Calidad", "90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%")
 
     doc.build(story)
@@ -521,7 +684,7 @@ if uploaded_file is not None:
         st.markdown("---")
         pdf_bytes = generar_pdf_reporte(
             delegacion, anio, periodo_str, ultima_semana, 
-            None, None, trim_results_ind_a, trim_results_c_data, 
+            trim_results_ind_a, trim_results_c_data, 
             global_trim_results_f, delegational_b_trim, unit_rows_map, 
             bloques_semanas, semanas_info
         )
