@@ -48,7 +48,7 @@ def get_bg_color(val, ind_type):
         elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-    elif ind_type in ["b", "e"]:
+    elif ind_type == "b":
         if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -57,11 +57,6 @@ def get_bg_color(val, ind_type):
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-    elif ind_type == "d":
-        if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-        elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
@@ -245,18 +240,6 @@ if uploaded_file is not None:
                 t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
             trim_results_cob_b[t_name] = t_vals_cob
 
-        # Pre-cálculo Calidad (f) Individual
-        trim_results_ind_f = {}
-        for t_name, start_col, end_col in bloques_semanas:
-            t_vals_f = {}
-            for unidad in TARGET_UNITS:
-                prom_cob = trim_results_cob_b[t_name].get(unidad, 0.0)
-                val_c_unidad = trim_results_c_data[t_name].get(unidad, {}).get("porc", 0.0)
-                if pd.isna(val_c_unidad): val_c_unidad = 0.0
-                val_f = (prom_cob + val_c_unidad) / 2.0
-                t_vals_f[unidad] = round(val_f, 2)
-            trim_results_ind_f[t_name] = t_vals_f
-
         # Pre-cálculo Global de Calidad (f) por Trimestre
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
@@ -286,7 +269,7 @@ if uploaded_file is not None:
             }
 
         # ==========================================
-        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
+        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 4 INDICADORES ACTIVOS: a, b, c, f)
         # ==========================================
         st.markdown("---")
         st.subheader("🗓️ Selección de Periodo / Trimestre (Panorama General)")
@@ -329,30 +312,14 @@ if uploaded_file is not None:
                     
                     val_a_estatico = np.nan
                     val_c_estatico = np.nan
-                    val_f_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
                         val_c_estatico = trim_results_c_data[trim_match].get(unidad, {}).get("porc", np.nan)
-                        val_f_estatico = trim_results_ind_f[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
                         vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
                         vals_trim_c = [trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan) for t in bloques_semanas if pd.notna(trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan))]
-                        vals_trim_f = [trim_results_ind_f[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_f[t[0]].get(unidad, np.nan))]
                         if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
                         if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
-                        if vals_trim_f: val_f_estatico = round(sum(vals_trim_f) / len(vals_trim_f), 2)
-
-                    def get_ab_val(metric_key):
-                        r = m_rows.get(metric_key, None)
-                        if r is not None:
-                            for col_idx in range(len(r) - 1, 0, -1):
-                                val_celda = r[col_idx]
-                                try:
-                                    if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                        return float(val_celda)
-                                except ValueError:
-                                    continue
-                        return 0.0
 
                     row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                     suma_casos_oportunos = 0.0
@@ -364,25 +331,18 @@ if uploaded_file is not None:
                                 except ValueError:
                                     pass
 
-                    u_sin_notificar = get_ab_val("Unidades sin notificar")
-                    base_hab = float(len(TARGET_UNITS))
                     divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
 
                     ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
                     ind_b = "NO APLICA"
                     ind_c = val_c_estatico if pd.notna(val_c_estatico) else ind_a
-                    ind_d = round((u_sin_notificar / base_hab) * 100, 2)
-                    excedente_rsm = max(0.0, ind_d - 5.0)
-                    ind_e = round(max(0.0, 100.0 - excedente_rsm), 2)
-                    ind_f = val_f_estatico if pd.notna(val_f_estatico) else "NO APLICA"
+                    ind_f = "NO APLICA"
 
                     results.append({
                         "Unidad": unidad,
                         "a": ind_a if pd.notna(ind_a) else None,
                         "b": ind_b,
                         "c": ind_c if pd.notna(ind_c) else None,
-                        "d": ind_d,
-                        "e": ind_e,
                         "f": ind_f
                     })
                 return results
@@ -396,10 +356,8 @@ if uploaded_file is not None:
                     "a) Cumplimiento u Oportunidad (%)": item["a"],
                     "b) Cobertura Oportuna (%)": item["b"],
                     "c) Consistencia (%)": item["c"],
-                    "d) Reporta Sin Movimiento (RSM) (%)": item["d"],
-                    "e) Cobertura Ajustada (%)": item["e"],
                     "f) Calidad (Descriptivo) (%)": item["f"],
-                    "_raw": {"a": item["a"], "b": item["b"], "c": item["c"], "d": item["d"], "e": item["e"], "f": item["f"]}
+                    "_raw": {"a": item["a"], "b": item["b"], "c": item["c"], "f": item["f"]}
                 })
             df_gen = pd.DataFrame(processed_gen)
 
@@ -409,8 +367,6 @@ if uploaded_file is not None:
                     "a) Cumplimiento u Oportunidad (%)": "a",
                     "b) Cobertura Oportuna (%)": "b",
                     "c) Consistencia (%)": "c",
-                    "d) Reporta Sin Movimiento (RSM) (%)": "d",
-                    "e) Cobertura Ajustada (%)": "e",
                     "f) Calidad (Descriptivo) (%)": "f"
                 }
                 idx = row_data.name
@@ -423,15 +379,13 @@ if uploaded_file is not None:
                         styles[i] = get_bg_color(val, itype)
                 return styles
 
-            st.subheader(f"📊 Tabla Comparativa General (6 Indicadores) — {etiqueta_gen}")
+            st.subheader(f"📊 Tabla Comparativa General — {etiqueta_gen}")
             display_df = df_gen.drop(columns=["_raw"])
             multi_columns = pd.MultiIndex.from_tuples([
                 ("Unidades Operativas", "Unidad"),
                 (etiqueta_gen, "a) Cumplimiento u Oportunidad (%)"),
                 (etiqueta_gen, "b) Cobertura Oportuna (%)"),
                 (etiqueta_gen, "c) Consistencia (%)"),
-                (etiqueta_gen, "d) Reporta Sin Movimiento (RSM) (%)"),
-                (etiqueta_gen, "e) Cobertura Ajustada (%)"),
                 (etiqueta_gen, "f) Calidad (Descriptivo) (%)")
             ])
             display_df.columns = multi_columns
@@ -764,7 +718,7 @@ if uploaded_file is not None:
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
 
-                st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
+                st.dataframe(styled_sep, use_container_width=True, height=580)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
