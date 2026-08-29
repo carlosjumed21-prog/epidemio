@@ -455,7 +455,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con su fila Delegacional de Valor Máximo
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -592,7 +592,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento)
+                # ESTRUCTURA PARA A (Cumplimiento) - Con su fila Delegacional de Valor Máximo
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
