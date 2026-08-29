@@ -218,7 +218,7 @@ if uploaded_file is not None:
                     t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
             trim_results_c_data[t_name] = t_vals_c
 
-        # Pre-cálculo Global de Calidad (f) por Trimestre (Promedio Cobertura y Consistencia Delegacional)
+        # Pre-cálculo Global de Calidad (f) por Trimestre
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -237,7 +237,6 @@ if uploaded_file is not None:
                 cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
             global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
             
-            # Consistencia delegacional (máximo de consistencia)
             vals_c_trim = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             valid_c_trim = [v for v in vals_c_trim if pd.notna(v)]
             delegational_c = max(valid_c_trim) if valid_c_trim else 0.0
@@ -250,7 +249,7 @@ if uploaded_file is not None:
                 "calidad": round(global_cal, 2)
             }
 
-        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional para la tabla general
+        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional
         delegational_b_trim = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -323,8 +322,8 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Fila Delegacional independiente abajo (General): 
-        # a) más bajo, b) promedio del trimestre, c) más alto, f) indicador de calidad
+        # Tabla Delegacional independiente (abajo de la principal en el General)
+        # a) más bajo, b) promedio del trimestre, c) más alto, f) calidad según trimestre
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -384,7 +383,7 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad (Descriptivo)"
 
-            # CASO ESPECIAL PARA EL INDICADOR B
+            # CASO ESPECIAL PARA EL INDICADOR B (Promedio de cada trimestre)
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -445,7 +444,8 @@ if uploaded_file is not None:
                     st.dataframe(styled_sem, use_container_width=True, hide_index=True)
                     st.markdown("---")
 
-                # Fila Delegacional independiente abajo para b (promedio de cada trimestre)
+                # Fila Delegacional abajo para b (promedio del trimestre)
+                st.markdown("##### Resultado Delegacional (Promedio por Trimestre)")
                 fila_del_b = {"MÉTRICA / DÍA": "DELEGACIONAL"}
                 for t_name, start_col, end_col in bloques_semanas:
                     avg_b = delegational_b_trim.get(t_name, np.nan)
@@ -529,9 +529,18 @@ if uploaded_file is not None:
                     col_ts = [(t_name, "TOTAL SEMANAS")]
                     col_pc = [(t_name, "%CONSISTENCIA")]
                     
-                    max_sc = df_c[col_sc].max().values[0]
-                    max_ts = df_c[col_ts].max().values[0]
+                    # Para la fila delegacional de C, extraemos los valores de la unidad que tenga el % más alto
                     max_pc = df_c[col_pc].max().values[0]
+                    # Encontramos la fila con ese max_pc para asociar sus semanas consistentes y totales correspondientes
+                    sub_df = df_c[col_pc]
+                    match_row = sub_df[sub_df.iloc[:, 0] == max_pc].index
+                    if len(match_row) > 0:
+                        r_idx = match_row[0]
+                        max_sc = df_c.loc[r_idx, col_sc].values[0]
+                        max_ts = df_c.loc[r_idx, col_ts].values[0]
+                    else:
+                        max_sc = df_c[col_sc].max().values[0]
+                        max_ts = df_c[col_ts].max().values[0]
                     
                     fila_delegacional[(t_name, "SEMANAS CONSISTENTES")] = max_sc
                     fila_delegacional[(t_name, "TOTAL SEMANAS")] = max_ts
@@ -624,7 +633,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Delegacional = valor más bajo
+                # ESTRUCTURA PARA A (Cumplimiento) - Delegacional = valor más bajo (respetando unidad completa)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -687,14 +696,20 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo (valor más bajo para A)
+                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
                     col_ind = [("INDICADOR", t_name)]
                     
-                    min_abs = df_sep[col_abs].min().values[0]
                     min_ind = df_sep[col_ind].min().values[0]
+                    sub_df = df_sep[col_ind]
+                    match_row = sub_df[sub_df.iloc[:, 0] == min_ind].index
+                    if len(match_row) > 0:
+                        r_idx = match_row[0]
+                        min_abs = df_sep.loc[r_idx, col_abs].values[0]
+                    else:
+                        min_abs = df_sep[col_abs].min().values[0]
                     
                     fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_abs
                     fila_delegacional_a[("INDICADOR", t_name)] = min_ind
