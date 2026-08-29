@@ -43,6 +43,7 @@ def get_bg_color(val, ind_type):
     if val is None or pd.isna(val) or val == "NO APLICA":
         return ''
     
+    # Colorimetría original recuperada del archivo anexado para el indicador a)[cite: 1]
     if ind_type == "a":
         if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -177,7 +178,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia con Semanas Consistentes, Total Semanas y Porcentaje)
+        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -256,6 +257,34 @@ if uploaded_file is not None:
                 val_f = (prom_cob + val_c_unidad) / 2.0
                 t_vals_f[unidad] = round(val_f, 2)
             trim_results_ind_f[t_name] = t_vals_f
+
+        # Pre-cálculo Global de Calidad (f) por Trimestre
+        global_trim_results_f = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
+            cob_semanas = []
+            for col_idx, _ in semanas_bloque_f:
+                suma_col_unidades = 0
+                for u_check in TARGET_UNITS:
+                    m_r = unit_rows_map.get(u_check, {})
+                    row_c = m_r.get("Unidades con casos oportunos", None)
+                    if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
+                        try:
+                            if float(row_c[col_idx]) > 0:
+                                suma_col_unidades += 1
+                        except ValueError:
+                            pass
+                cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
+            global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+            vals_cons_unidades = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+            valid_cons = [v for v in vals_cons_unidades if pd.notna(v)]
+            global_cons = np.mean(valid_cons) if len(valid_cons) > 0 else 0.0
+            global_cal = (global_cob + global_cons) / 2.0
+            global_trim_results_f[t_name] = {
+                "cobertura": round(global_cob, 2),
+                "consistencia": round(global_cons, 2),
+                "calidad": round(global_cal, 2)
+            }
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -524,7 +553,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Formato Multinivel exacto a la imagen
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Formato con fila Delegacional (Valor Máximo)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -541,6 +570,23 @@ if uploaded_file is not None:
                     tabla_c_data.append(fila)
 
                 df_c = pd.DataFrame(tabla_c_data)
+
+                # Fila Delegacional calculando el MÁXIMO de cada columna numérica
+                fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
+                for t_name, _, _ in bloques_semanas:
+                    col_sc = [(t_name, "SEMANAS CONSISTENTES")]
+                    col_ts = [(t_name, "TOTAL SEMANAS")]
+                    col_pc = [(t_name, "%CONSISTENCIA")]
+                    
+                    max_sc = df_c[col_sc].max().values[0]
+                    max_ts = df_c[col_ts].max().values[0]
+                    max_pc = df_c[col_pc].max().values[0]
+                    
+                    fila_delegacional[(t_name, "SEMANAS CONSISTENTES")] = max_sc
+                    fila_delegacional[(t_name, "TOTAL SEMANAS")] = max_ts
+                    fila_delegacional[(t_name, "%CONSISTENCIA")] = max_pc
+
+                df_c = pd.concat([df_c, pd.DataFrame([fila_delegacional])], ignore_index=True)
 
                 c_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
                 for t_name, _, _ in bloques_semanas:
@@ -594,8 +640,55 @@ if uploaded_file is not None:
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
-                # (Mantenemos la lógica de la tabla F global trimestral)
-                st.success("Sección de Calidad Global activa.")
+                tabla_f_data = []
+                for t_name, _, _ in bloques_semanas:
+                    res_global = global_trim_results_f[t_name]
+                    tabla_f_data.append({
+                        "TRIMESTRE": t_name,
+                        "PORCENTAJE DE COBERTURA": res_global["cobertura"],
+                        "PORCENTAJE DE CONSISTENCIA": res_global["consistencia"],
+                        "INDICADOR DE CALIDAD": res_global["calidad"]
+                    })
+
+                df_f = pd.DataFrame(tabla_f_data)
+
+                def style_calidad_table(row_data):
+                    styles = [''] * len(row_data)
+                    for i, col_name in enumerate(row_data.index):
+                        if col_name == "INDICADOR DE CALIDAD":
+                            val = row_data[col_name]
+                            if pd.notna(val):
+                                styles[i] = get_bg_color(val, "f")
+                    return styles
+
+                styled_f = df_f.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x),
+                    subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]
+                ).apply(style_calidad_table, axis=1)
+
+                st.markdown("### 📋 Reporte Global de Calidad (Delegacional)")
+                st.dataframe(styled_f, use_container_width=True, hide_index=True)
+
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <table class="acotacion-table">
+                    <tr>
+                        <th>Indicador</th>
+                        <th>Excelente</th>
+                        <th>Bueno</th>
+                        <th>Regular</th>
+                        <th>Malo</th>
+                    </tr>
+                    <tr>
+                        <td><b>{ind_label}</b></td>
+                        <td class="bg-excelente">90.0 - 100%</td>
+                        <td class="bg-bueno">80.0 - 89.9%</td>
+                        <td class="bg-regular">60.0 - 79.9%</td>
+                        <td class="bg-malo">≤ 59.9%</td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
 
             else:
                 # ESTRUCTURA PARA A (Cumplimiento)
