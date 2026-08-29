@@ -44,6 +44,67 @@ TARGET_UNITS = [
     "MILPA ALTA", "NARVARTE", "TLALPAN", "VILLA ALVARO OBREGON", "XOCHIMILCO"
 ]
 
+def get_bg_color(val, ind_type):
+    if val is None or pd.isna(val):
+        return ''
+    
+    if ind_type == "a":
+        if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    elif ind_type in ["b", "e"]:
+        if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    elif ind_type == "c":
+        if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    elif ind_type == "d":
+        if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    elif ind_type == "f":
+        if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    return ''
+
+def get_hex_color(val, ind_type):
+    if val is None or pd.isna(val):
+        return '#FFFFFF'
+    if ind_type == "a":
+        if val == 100.0: return '#10B981'
+        elif 97.5 <= val <= 99.9: return '#FFFFFF'
+        elif 95.0 <= val <= 97.4: return '#FEF08A'
+        else: return '#EF4444'
+    elif ind_type in ["b", "e"]:
+        if 95.0 <= val <= 100.0: return '#10B981'
+        elif 90.0 <= val <= 94.9: return '#FFFFFF'
+        elif 80.0 <= val <= 89.9: return '#FEF08A'
+        else: return '#EF4444'
+    elif ind_type == "c":
+        if 90.0 <= val <= 100.0: return '#10B981'
+        elif 80.0 <= val <= 89.9: return '#FFFFFF'
+        elif 70.0 <= val <= 79.9: return '#FEF08A'
+        else: return '#EF4444'
+    elif ind_type == "d":
+        if 0.0 <= val <= 1.9: return '#10B981'
+        elif 2.0 <= val <= 4.9: return '#FFFFFF'
+        elif 5.0 <= val <= 10.0: return '#FEF08A'
+        else: return '#EF4444'
+    elif ind_type == "f":
+        if 90.0 <= val <= 100.0: return '#10B981'
+        elif 80.0 <= val <= 89.9: return '#FFFFFF'
+        elif 60.0 <= val <= 79.9: return '#FEF08A'
+        else: return '#EF4444'
+    return '#FFFFFF'
+
 # Subir archivo Excel
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE", type=["xlsx", "xls"])
 
@@ -141,37 +202,6 @@ if uploaded_file is not None:
                                 pass
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
-
-        def get_bg_color(val, ind_type):
-            if val is None or pd.isna(val):
-                return ''
-            
-            if ind_type == "a":
-                if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            elif ind_type in ["b", "e"]:
-                if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            elif ind_type == "c":
-                if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            elif ind_type == "d":
-                if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
-                elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            elif ind_type == "f":
-                if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            return ''
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -448,7 +478,6 @@ if uploaded_file is not None:
                     if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
                         val = row_data.iloc[i]
                         if pd.notna(val):
-                            # Mapeo de color exacto según valor y umbrales del indicador
                             if ind_key == "a":
                                 if val == 100.0: styles[i] = 'background-color: #10B981; color: white; font-weight: bold;'
                                 elif 97.5 <= val <= 99.9: styles[i] = 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -524,7 +553,7 @@ if uploaded_file is not None:
                     <tr>
                         <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">95.0 - 97.4</td>
                         <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
+                        <td style="background-color: #FEF08A; color: black; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
                     </tr>
                     <tr>
                         <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">94.9 ó menos</td>
@@ -552,34 +581,19 @@ if uploaded_file is not None:
                 elements = []
                 styles = getSampleStyleSheet()
 
-                # Estilos personalizados
                 title_style = ParagraphStyle(
-                    'HeaderTitle',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=8,
-                    leading=10,
-                    alignment=1,
-                    textColor=colors.HexColor('#1E3A8A')
+                    'HeaderTitle', parent=styles['Normal'],
+                    fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=1, textColor=colors.HexColor('#1E3A8A')
                 )
                 sub_title_style = ParagraphStyle(
-                    'SubHeaderTitle',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=9,
-                    leading=12,
-                    alignment=1,
-                    textColor=colors.black
+                    'SubHeaderTitle', parent=styles['Normal'],
+                    fontName='Helvetica-Bold', fontSize=9, leading=12, alignment=1, textColor=colors.black
                 )
                 meta_style = ParagraphStyle(
-                    'MetaText',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=8,
-                    leading=11
+                    'MetaText', parent=styles['Normal'],
+                    fontName='Helvetica-Bold', fontSize=8, leading=11
                 )
 
-                # Encabezado institucional
                 elements.append(Paragraph("REPRESENTACIÓN REGIONAL SUR", title_style))
                 elements.append(Paragraph("SUBDELEGACIÓN MÉDICA", title_style))
                 elements.append(Paragraph("DEPARTAMENTO DE ATENCIÓN MÉDICA", title_style))
@@ -589,7 +603,6 @@ if uploaded_file is not None:
                 elements.append(Paragraph("INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)", sub_title_style))
                 elements.append(Spacer(1, 10))
 
-                # Metadatos y recuadro de semanas
                 meta_data = [
                     [Paragraph(f"<b>INDICADOR EVALUADO:</b> {ind_label}", meta_style), Paragraph("<b>SEMANAS POR TRIMESTRE</b>", ParagraphStyle('BoxH', parent=title_style, textColor=colors.white))],
                     [Paragraph(f"<b>AÑO:</b> {anio}", meta_style), Paragraph("<b>13</b>", ParagraphStyle('BoxV', parent=sub_title_style, fontSize=14, textColor=colors.white, alignment=1))],
@@ -605,7 +618,6 @@ if uploaded_file is not None:
                 elements.append(meta_table)
                 elements.append(Spacer(1, 15))
 
-                # Construcción de la tabla de datos principal
                 table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE"]
                 table_headers_2 = [""]
                 for t_name, _, _ in bloques_semanas:
@@ -624,7 +636,6 @@ if uploaded_file is not None:
                         row.extend([abs_str, ind_str])
                     table_data.append(row)
 
-                # Fila Delegacional
                 del_row = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     min_abs = min_row_abs[t_name]
@@ -632,7 +643,6 @@ if uploaded_file is not None:
                     del_row.extend([min_abs, min_ind])
                 table_data.append(del_row)
 
-                # Estilos de tabla PDF
                 t_style = [
                     ('BACKGROUND', (0,0), (-1,1), colors.HexColor('#1E3A8A')),
                     ('TEXTCOLOR', (0,0), (-1,1), colors.white),
@@ -651,7 +661,6 @@ if uploaded_file is not None:
                     ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
                 ]
 
-                # Aplicar colores de semáforo dinámicos en las celdas de indicador del PDF
                 col_idx_eval = 2
                 for t_idx, (_, _, _) in enumerate(bloques_semanas):
                     c_ind = col_idx_eval + (t_idx * 2)
@@ -673,7 +682,6 @@ if uploaded_file is not None:
                 elements.append(main_table)
                 elements.append(Spacer(1, 10))
 
-                # Fuente y tabla de evaluación
                 elements.append(Paragraph(f"Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.", ParagraphStyle('FText', fontName='Helvetica-Oblique', fontSize=7, textColor=colors.HexColor('#555555'))))
                 
                 doc.build(elements)
