@@ -54,7 +54,6 @@ def get_bg_color(val, ind_type):
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
-        # Umbrales específicos para Consistencia (c)
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -178,10 +177,12 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia usando estrictamente la fila "Casos oportunos")
+        # Pre-cálculo de Indicador C (Consistencia: guarda tanto el conteo de semanas consistentes como el porcentaje)
+        trim_results_abs_c = {}
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
-            t_vals_c = {}
+            t_vals_abs_c = {}
+            t_vals_ind_c = {}
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_casos = m_rows.get("Casos oportunos", None)
@@ -206,12 +207,18 @@ if uploaded_file is not None:
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
                         total_sem = len(semanas_valores)
                         val_ind = (semanas_consistentes / total_sem) * 100 if total_sem > 0 else 0.0
-                        t_vals_c[unidad] = round(val_ind, 2)
+                        
+                        t_vals_abs_c[unidad] = float(semanas_consistentes)
+                        t_vals_ind_c[unidad] = round(val_ind, 2)
                     else:
-                        t_vals_c[unidad] = 100.0 if sum(semanas_valores) == 0 else 0.0
+                        t_vals_abs_c[unidad] = float(len(semanas_valores)) if sum(semanas_valores) == 0 else 0.0
+                        t_vals_ind_c[unidad] = 100.0 if sum(semanas_valores) == 0 else 0.0
                 else:
-                    t_vals_c[unidad] = np.nan
-            trim_results_ind_c[t_name] = t_vals_c
+                    t_vals_abs_c[unidad] = np.nan
+                    t_vals_ind_c[unidad] = np.nan
+            
+            trim_results_abs_c[t_name] = t_vals_abs_c
+            trim_results_ind_c[t_name] = t_vals_ind_c
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -477,7 +484,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A, C, F (USANDO LA FILA CASOS OPORTUNOS PARA C)
+                # ESTRUCTURA PARA A, C, F
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -487,41 +494,43 @@ if uploaded_file is not None:
                     for unidad in TARGET_UNITS:
                         m_rows = unit_rows_map.get(unidad, {})
                         
-                        # Extraer valores absolutos acumulados o de referencia para la tabla izquierda
-                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                        suma_bloque = 0.0
-                        if row_casos_oportunos is not None:
-                            for c_idx in range(start_col, end_col + 1):
-                                if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
-                                    try:
-                                        suma_bloque += float(row_casos_oportunos[c_idx])
-                                    except ValueError:
-                                        pass
-
-                        t_vals_abs[unidad] = suma_bloque
-
-                        if ind_key == "a":
-                            val_ind = (suma_bloque / 13.0) * 100
-                        elif ind_key == "c":
+                        if ind_key == "c":
+                            # Para C, la columna izquierda muestra las semanas consistentes
+                            val_abs = trim_results_abs_c[t_name].get(unidad, np.nan)
                             val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
-                        else: # Calidad (f)
-                            def get_ab_val(metric_key):
-                                r = m_rows.get(metric_key, None)
-                                if r is not None:
-                                    for col_idx in range(len(r) - 1, 0, -1):
-                                        val_celda = r[col_idx]
+                        else:
+                            row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                            suma_bloque = 0.0
+                            if row_casos_oportunos is not None:
+                                for c_idx in range(start_col, end_col + 1):
+                                    if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
                                         try:
-                                            if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                                return float(val_celda)
+                                            suma_bloque += float(row_casos_oportunos[c_idx])
                                         except ValueError:
-                                            continue
-                                return 0.0
-                            u_oportunas = get_ab_val("Unidades con casos oportunos")
-                            base_hab = 15.0
-                            ind_a_temp = (suma_bloque / 13.0) * 100
-                            ind_b_temp = (u_oportunas / base_hab) * 100
-                            val_ind = (ind_b_temp + ind_a_temp) / 2.0
+                                            pass
+                            val_abs = suma_bloque
 
+                            if ind_key == "a":
+                                val_ind = (suma_bloque / 13.0) * 100
+                            else: # Calidad (f)
+                                def get_ab_val(metric_key):
+                                    r = m_rows.get(metric_key, None)
+                                    if r is not None:
+                                        for col_idx in range(len(r) - 1, 0, -1):
+                                            val_celda = r[col_idx]
+                                            try:
+                                                if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                                    return float(val_celda)
+                                            except ValueError:
+                                                continue
+                                    return 0.0
+                                u_oportunas = get_ab_val("Unidades con casos oportunos")
+                                base_hab = 15.0
+                                ind_a_temp = (suma_bloque / 13.0) * 100
+                                ind_b_temp = (u_oportunas / base_hab) * 100
+                                val_ind = (ind_b_temp + ind_a_temp) / 2.0
+
+                        t_vals_abs[unidad] = val_abs
                         t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
                         
                     trim_results_abs[t_name] = t_vals_abs
@@ -530,8 +539,9 @@ if uploaded_file is not None:
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
+                    label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                     for t_name, _, _ in bloques_semanas:
-                        fila[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                        fila[(label_izq, t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
                         fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
@@ -548,9 +558,10 @@ if uploaded_file is not None:
                 </div>
                 """, unsafe_allow_html=True)
 
+                label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
-                    sep_tuples.append(("DIAS NOTIFICADOS OPORTUNAMENTE", t_name))
+                    sep_tuples.append((label_izq, t_name))
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append(("INDICADOR", t_name))
 
@@ -588,7 +599,7 @@ if uploaded_file is not None:
 
                 delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
-                    delegacional_dict[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
+                    delegacional_dict[(label_izq, t_name)] = min_row_abs[t_name]
                 for t_name, _, _ in bloques_semanas:
                     delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
 
