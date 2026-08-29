@@ -15,14 +15,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones original
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #1E3A8A; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #1E3A8A; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
-    /* Estilos para la tabla de acotaciones */
+    /* Estilos para la tabla de acotaciones original */
     .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
     .acotacion-table th { background-color: #1E3A8A; color: white; font-weight: bold; }
@@ -448,10 +448,8 @@ if uploaded_file is not None:
             tabla_sep_data = []
             for unidad in TARGET_UNITS:
                 fila = {"UNIDAD MÉDICA": unidad}
-                # Bloque izquierdo: Semanas Notificadas por trimestre
                 for t_name, _, _ in bloques_semanas:
                     fila[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
-                # Bloque derecho: Indicador por trimestre
                 for t_name, _, _ in bloques_semanas:
                     fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                 tabla_sep_data.append(fila)
@@ -482,13 +480,7 @@ if uploaded_file is not None:
                     if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
                         val = row_data.iloc[i]
                         if pd.notna(val):
-                            if ind_key == "a":
-                                if val == 100.0: styles[i] = 'background-color: #10B981; color: white; font-weight: bold;'
-                                elif 97.5 <= val <= 99.9: styles[i] = 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                                elif 95.0 <= val <= 97.4: styles[i] = 'background-color: #FEF08A; color: black; font-weight: bold;'
-                                else: styles[i] = 'background-color: #EF4444; color: white; font-weight: bold;'
-                            else:
-                                styles[i] = get_bg_color(val, ind_key)
+                            styles[i] = get_bg_color(val, ind_key)
                 return styles
 
             styled_sep = df_sep.style.format(
@@ -540,33 +532,24 @@ if uploaded_file is not None:
             # Pie de fuente requerido
             st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
 
-            # Acotación de evaluación idéntica a la imagen oficial
-            st.markdown("""
-            <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
-                <table style="border-collapse: collapse; font-size: 0.85rem; width: 320px;">
-                    <tr>
-                        <td rowspan="4" style="vertical-align: middle; font-weight: bold; text-align: right; padding-right: 15px;">EVALUACIÓN:</td>
-                        <td style="background-color: #10B981; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">100 %</td>
-                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #10B981; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Excelente</td>
-                    </tr>
-                    <tr>
-                        <td style="background-color: #FFFFFF; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">97.5 - 99.9</td>
-                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #FFFFFF; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Bueno</td>
-                    </tr>
-                    <tr>
-                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">95.0 - 97.4</td>
-                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
-                    </tr>
-                    <tr>
-                        <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">94.9 ó menos</td>
-                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
-                        <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Malo</td>
-                    </tr>
-                </table>
-            </div>
+            # Acotación de evaluación original
+            st.markdown(f"""
+            <table class="acotacion-table">
+                <tr>
+                    <th>Indicador</th>
+                    <th>Excelente</th>
+                    <th>Bueno</th>
+                    <th>Regular</th>
+                    <th>Malo</th>
+                </tr>
+                <tr>
+                    <td><b>{ind_label}</b></td>
+                    <td class="bg-excelente">100%</td>
+                    <td class="bg-bueno">97.5 - 99.9%</td>
+                    <td class="bg-regular">95.0 - 97.4%</td>
+                    <td class="bg-malo">≤ 94.9%</td>
+                </tr>
+            </table>
             """, unsafe_allow_html=True)
 
             # ==========================================
@@ -623,11 +606,11 @@ if uploaded_file is not None:
                 elements.append(meta_table)
                 elements.append(Spacer(1, 15))
 
-                # Estructura separada en PDF (Semanas lado a lado, luego Indicadores lado a lado)
                 num_trim = len(bloques_semanas)
-                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE", f"SEMANAS NOTIFICADAS OPORTUNAMENTE {anio}"] + [""] * (num_trim - 1) + ["INDICADOR"] + [""] * (num_trim - 1)
+                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE", f"SEMANAS NOTIFICADAS OPORTUNAMENTE"] + [""] * (num_trim - 1) + ["INDICADOR"] + [""] * (num_trim - 1)
+                
                 table_headers_2 = [""]
-                for _ in range(num_trim):
+                for t in bloques_semanas:
                     table_headers_2.append(t[0])
                 for t in bloques_semanas:
                     table_headers_2.append(t[0])
@@ -673,7 +656,6 @@ if uploaded_file is not None:
                     ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
                 ]
 
-                # Aplicar colores de semáforo en el bloque de indicadores del PDF
                 for t_idx, (t_name, _, _) in enumerate(bloques_semanas):
                     c_ind = num_trim + 1 + t_idx
                     for row_idx in range(2, len(table_data)):
