@@ -40,7 +40,7 @@ TARGET_UNITS = [
 ]
 
 def get_bg_color(val, ind_type):
-    if val is None or pd.isna(val) or val == "NO APLICA":
+    if val is None or pd.isna(val):
         return ''
     
     if ind_type == "a":
@@ -49,6 +49,7 @@ def get_bg_color(val, ind_type):
         elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type in ["b", "e"]:
+        # Umbrales específicos para Cobertura Oportuna (b)
         if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -252,17 +253,21 @@ if uploaded_file is not None:
                                 except ValueError:
                                     pass
 
+                    u_oportunas = get_ab_val("Unidades con casos oportunos")
+                    u_habilitadas = get_ab_val("Unidades habilitadas")
+                    if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
                     u_sin_notificar = get_ab_val("Unidades sin notificar")
-                    base_hab = float(len(TARGET_UNITS))
+
+                    base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
                     divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
 
                     ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
-                    ind_b = "NO APLICA"
+                    ind_b = round((u_oportunas / base_hab) * 100, 2)
                     ind_c = ind_a
                     ind_d = round((u_sin_notificar / base_hab) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
-                    ind_e = round(max(0.0, 100.0 - excedente_rsm), 2) # Cobertura ajustada base
-                    ind_f = "NO APLICA"
+                    ind_e = round(max(0.0, ind_b - excedente_rsm), 2)
+                    ind_f = round((ind_b + ind_c) / 2.0, 2)
 
                     results.append({
                         "Unidad": unidad,
@@ -323,7 +328,7 @@ if uploaded_file is not None:
                 (etiqueta_gen, "f) Calidad (Descriptivo) (%)")
             ])
             display_df.columns = multi_columns
-            styled_general = display_df.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x), subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
+            styled_general = display_df.style.format(formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
             
             st.dataframe(styled_general, use_container_width=True, height=580)
 
