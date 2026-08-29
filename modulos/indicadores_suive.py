@@ -628,7 +628,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Con columnas agrupadas por trimestre ordenadas (Días y luego Indicador)
+                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -689,7 +689,7 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad manteniendo su fila correspondiente)
+                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
