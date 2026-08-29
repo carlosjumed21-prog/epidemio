@@ -287,7 +287,42 @@ if uploaded_file is not None:
                 fila[(t_name, "CALIDAD")] = "NO APLICA"
             general_table_data.append(fila)
 
-        # Fila Delegacional con los máximos / globales por columna
+        df_gen_multi = pd.DataFrame(general_table_data)
+
+        gen_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+        for t_name, _, _ in bloques_semanas:
+            gen_tuples.append((t_name, "CUMPLIMIENTO U OPORTUNIDAD"))
+            gen_tuples.append((t_name, "COBERTURA OPORTUNA"))
+            gen_tuples.append((t_name, "CONSISTENCIA"))
+            gen_tuples.append((t_name, "CALIDAD"))
+
+        df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
+
+        def style_multi_table(row_data, is_delegacional=False):
+            styles = [''] * len(row_data)
+            for i, col_name in enumerate(row_data.index):
+                if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
+                    subcol = col_name[1]
+                    val = row_data.iloc[i]
+                    if pd.notna(val) and val != "NO APLICA":
+                        if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
+                            styles[i] = get_bg_color(val, "a")
+                        elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
+                            styles[i] = get_bg_color(val, "b")
+                        elif subcol == "CONSISTENCIA":
+                            styles[i] = get_bg_color(val, "c")
+                        elif subcol == "CALIDAD" and is_delegacional:
+                            styles[i] = get_bg_color(val, "f")
+            return styles
+
+        styled_gen_main = df_gen_multi.style.format(
+            formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
+            subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+        ).apply(style_multi_table, axis=1, is_delegacional=False)
+
+        st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
+
+        # Tabla Delegacional independiente (abajo de la principal)
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -305,43 +340,14 @@ if uploaded_file is not None:
             fila_del[(t_name, "CONSISTENCIA")] = max_c
             fila_del[(t_name, "CALIDAD")] = global_cal
 
-        general_table_data.append(fila_del)
-        df_gen_multi = pd.DataFrame(general_table_data)
-
-        gen_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
-        for t_name, _, _ in bloques_semanas:
-            gen_tuples.append((t_name, "CUMPLIMIENTO U OPORTUNIDAD"))
-            gen_tuples.append((t_name, "COBERTURA OPORTUNA"))
-            gen_tuples.append((t_name, "CONSISTENCIA"))
-            gen_tuples.append((t_name, "CALIDAD"))
-
-        df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
-
-        def style_general_multi(row_data):
-            styles = [''] * len(row_data)
-            is_delegacional = (row_data.iloc[0] == "DELEGACIONAL")
-            for i, col_name in enumerate(row_data.index):
-                if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
-                    subcol = col_name[1]
-                    val = row_data.iloc[i]
-                    if pd.notna(val) and val != "NO APLICA":
-                        if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
-                            styles[i] = get_bg_color(val, "a")
-                        elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
-                            styles[i] = get_bg_color(val, "b")
-                        elif subcol == "CONSISTENCIA":
-                            styles[i] = get_bg_color(val, "c")
-                        elif subcol == "CALIDAD" and is_delegacional:
-                            styles[i] = get_bg_color(val, "f")
-            return styles
-
-        styled_gen_multi = df_gen_multi.style.format(
+        df_del_gen = pd.DataFrame([fila_del])
+        df_del_gen.columns = pd.MultiIndex.from_tuples(gen_tuples)
+        styled_del_gen = df_del_gen.style.format(
             formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
-            subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-        ).apply(style_general_multi, axis=1)
+            subset=[col for col in df_del_gen.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+        ).apply(style_multi_table, axis=1, is_delegacional=True)
 
-        # Se elimina el parámetro height para que la tabla se expanda completa y se vea la fila delegacional
-        st.dataframe(styled_gen_multi, use_container_width=True, hide_index=True)
+        st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
 
         # ==========================================
         # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
@@ -456,7 +462,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con tabla Delegacional independiente abajo
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -473,22 +479,6 @@ if uploaded_file is not None:
                     tabla_c_data.append(fila)
 
                 df_c = pd.DataFrame(tabla_c_data)
-
-                fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
-                for t_name, _, _ in bloques_semanas:
-                    col_sc = [(t_name, "SEMANAS CONSISTENTES")]
-                    col_ts = [(t_name, "TOTAL SEMANAS")]
-                    col_pc = [(t_name, "%CONSISTENCIA")]
-                    
-                    max_sc = df_c[col_sc].max().values[0]
-                    max_ts = df_c[col_ts].max().values[0]
-                    max_pc = df_c[col_pc].max().values[0]
-                    
-                    fila_delegacional[(t_name, "SEMANAS CONSISTENTES")] = max_sc
-                    fila_delegacional[(t_name, "TOTAL SEMANAS")] = max_ts
-                    fila_delegacional[(t_name, "%CONSISTENCIA")] = max_pc
-
-                df_c = pd.concat([df_c, pd.DataFrame([fila_delegacional])], ignore_index=True)
 
                 c_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
                 for t_name, _, _ in bloques_semanas:
@@ -513,8 +503,31 @@ if uploaded_file is not None:
                 ).apply(style_c_table, axis=1)
 
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
-                # Sin height fijo para visualizar completo
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
+
+                # Tabla Delegacional independiente abajo
+                fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
+                for t_name, _, _ in bloques_semanas:
+                    col_sc = [(t_name, "SEMANAS CONSISTENTES")]
+                    col_ts = [(t_name, "TOTAL SEMANAS")]
+                    col_pc = [(t_name, "%CONSISTENCIA")]
+                    
+                    max_sc = df_c[col_sc].max().values[0]
+                    max_ts = df_c[col_ts].max().values[0]
+                    max_pc = df_c[col_pc].max().values[0]
+                    
+                    fila_delegacional[(t_name, "SEMANAS CONSISTENTES")] = max_sc
+                    fila_delegacional[(t_name, "TOTAL SEMANAS")] = max_ts
+                    fila_delegacional[(t_name, "%CONSISTENCIA")] = max_pc
+
+                df_del_c = pd.DataFrame([fila_delegacional])
+                df_del_c.columns = pd.MultiIndex.from_tuples(c_tuples)
+                styled_del_c = df_del_c.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
+                    subset=[col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]
+                ).apply(style_c_table, axis=1)
+
+                st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
@@ -594,7 +607,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Con su fila Delegacional de Valor Máximo
+                # ESTRUCTURA PARA A (Cumplimiento) - Con tabla Delegacional independiente abajo
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -629,19 +642,6 @@ if uploaded_file is not None:
 
                 df_sep = pd.DataFrame(tabla_sep_data)
 
-                fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
-                for t_name, _, _ in bloques_semanas:
-                    col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
-                    col_ind = [("INDICADOR", t_name)]
-                    
-                    max_abs = df_sep[col_abs].max().values[0]
-                    max_ind = df_sep[col_ind].max().values[0]
-                    
-                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = max_abs
-                    fila_delegacional_a[("INDICADOR", t_name)] = max_ind
-
-                df_sep = pd.concat([df_sep, pd.DataFrame([fila_delegacional_a])], ignore_index=True)
-
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
                 st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
@@ -668,8 +668,28 @@ if uploaded_file is not None:
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
 
-                # Sin height fijo para visualizar completo
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
+
+                # Tabla Delegacional independiente abajo
+                fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
+                for t_name, _, _ in bloques_semanas:
+                    col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
+                    col_ind = [("INDICADOR", t_name)]
+                    
+                    max_abs = df_sep[col_abs].max().values[0]
+                    max_ind = df_sep[col_ind].max().values[0]
+                    
+                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = max_abs
+                    fila_delegacional_a[("INDICADOR", t_name)] = max_ind
+
+                df_del_a = pd.DataFrame([fila_delegacional_a])
+                df_del_a.columns = pd.MultiIndex.from_tuples(sep_tuples)
+                styled_del_a = df_del_a.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
+                    subset=[col for col in df_del_a.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+                ).apply(style_sep_table, axis=1)
+
+                st.dataframe(styled_del_a, use_container_width=True, hide_index=True)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
