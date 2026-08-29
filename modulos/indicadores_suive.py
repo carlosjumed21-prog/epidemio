@@ -2,7 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-from weasyprint import HTML
+
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # Configuración de la página
 st.set_page_config(
@@ -168,36 +172,6 @@ if uploaded_file is not None:
                 elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                 else: return 'background-color: #EF4444; color: white; font-weight: bold;'
             return ''
-
-        def get_hex_color(val, ind_type):
-            if val is None or pd.isna(val):
-                return '#FFFFFF'
-            if ind_type == "a":
-                if val == 100.0: return '#10B981'
-                elif 97.5 <= val <= 99.9: return '#FFFFFF'
-                elif 95.0 <= val <= 97.4: return '#FEF08A'
-                else: return '#EF4444'
-            elif ind_type in ["b", "e"]:
-                if 95.0 <= val <= 100.0: return '#10B981'
-                elif 90.0 <= val <= 94.9: return '#FFFFFF'
-                elif 80.0 <= val <= 89.9: return '#FEF08A'
-                else: return '#EF4444'
-            elif ind_type == "c":
-                if 90.0 <= val <= 100.0: return '#10B981'
-                elif 80.0 <= val <= 89.9: return '#FFFFFF'
-                elif 70.0 <= val <= 79.9: return '#FEF08A'
-                else: return '#EF4444'
-            elif ind_type == "d":
-                if 0.0 <= val <= 1.9: return '#10B981'
-                elif 2.0 <= val <= 4.9: return '#FFFFFF'
-                elif 5.0 <= val <= 10.0: return '#FEF08A'
-                else: return '#EF4444'
-            elif ind_type == "f":
-                if 90.0 <= val <= 100.0: return '#10B981'
-                elif 80.0 <= val <= 89.9: return '#FFFFFF'
-                elif 60.0 <= val <= 79.9: return '#FEF08A'
-                else: return '#EF4444'
-            return '#FFFFFF'
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -474,7 +448,14 @@ if uploaded_file is not None:
                     if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
                         val = row_data.iloc[i]
                         if pd.notna(val):
-                            styles[i] = get_bg_color(val, ind_key)
+                            # Mapeo de color exacto según valor y umbrales del indicador
+                            if ind_key == "a":
+                                if val == 100.0: styles[i] = 'background-color: #10B981; color: white; font-weight: bold;'
+                                elif 97.5 <= val <= 99.9: styles[i] = 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                                elif 95.0 <= val <= 97.4: styles[i] = 'background-color: #FEF08A; color: black; font-weight: bold;'
+                                else: styles[i] = 'background-color: #EF4444; color: white; font-weight: bold;'
+                            else:
+                                styles[i] = get_bg_color(val, ind_key)
                 return styles
 
             styled_fusion = df_fusion.style.format(
@@ -519,11 +500,7 @@ if uploaded_file is not None:
                                 pass
                 return styles
 
-            styled_del = df_del.style.format(
-                formatter=lambda x: f"{float(x):.2f}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.','',1).isdigit()) else str(x),
-                subset=[col for col in df_del.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-            ).apply(style_delegational, axis=1)
-
+            styled_del = df_del.style.apply(style_delegational, axis=1)
             st.dataframe(styled_del, use_container_width=True, hide_index=True)
 
             # Pie de fuente requerido
@@ -559,262 +536,155 @@ if uploaded_file is not None:
             """, unsafe_allow_html=True)
 
             # ==========================================
-            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF
+            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF (REPORTLAB)
             # ==========================================
             st.markdown("---")
             st.subheader("📑 Generación de Reporte Oficial en PDF")
-            st.info("Haz clic en el botón para descargar el reporte institucional en formato PDF idéntico al formato oficial.")
+            st.info("Haz clic en el botón para descargar el reporte institucional en formato PDF.")
 
-            def generar_pdf_oficial():
-                # HTML estructurado para WeasyPrint respetando el diseño exacto de la imagen
-                html_content = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        @page {{
-                            size: A4 portrait;
-                            margin: 10mm;
-                        }}
-                        body {{
-                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                            font-size: 8.5pt;
-                            color: #111;
-                            margin: 0;
-                            padding: 0;
-                        }}
-                        .header-text {{
-                            text-align: center;
-                            font-weight: bold;
-                            color: #1E3A8A;
-                            line-height: 1.3;
-                            font-size: 9pt;
-                            margin-bottom: 15px;
-                        }}
-                        .main-title {{
-                            text-align: center;
-                            font-weight: bold;
-                            font-size: 9.5pt;
-                            margin-bottom: 20px;
-                        }}
-                        .meta-container {{
-                            margin-bottom: 15px;
-                            font-size: 9pt;
-                        }}
-                        .meta-row {{
-                            margin-bottom: 5px;
-                        }}
-                        .meta-label {{
-                            font-weight: bold;
-                            display: inline-block;
-                            width: 140px;
-                        }}
-                        .meta-val {{
-                            display: inline-block;
-                            border-bottom: 1px solid #999;
-                            width: 250px;
-                            padding-left: 5px;
-                        }}
-                        .weeks-box {{
-                            float: right;
-                            background-color: #1E3A8A;
-                            color: white;
-                            text-align: center;
-                            font-weight: bold;
-                            font-size: 8.5pt;
-                            width: 180px;
-                            border: 1px solid #111;
-                        }}
-                        .weeks-box-title {{
-                            background-color: #1E3A8A;
-                            padding: 4px;
-                            border-bottom: 1px solid white;
-                        }}
-                        .weeks-box-val {{
-                            background-color: #1E3A8A;
-                            padding: 6px;
-                            font-size: 11pt;
-                        }}
-                        table.report-table {{
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin-top: 10px;
-                            font-size: 8.5pt;
-                        }}
-                        table.report-table th, table.report-table td {{
-                            border: 1px solid #444;
-                            padding: 5px 4px;
-                            text-align: center;
-                        }}
-                        table.report-table th {{
-                            background-color: #1E3A8A;
-                            color: white;
-                            font-weight: bold;
-                        }}
-                        .unidad-col {{
-                            text-align: left !important;
-                            padding-left: 6px !important;
-                            font-weight: bold;
-                            background-color: #1E3A8A;
-                            color: white;
-                            width: 35%;
-                        }}
-                        .delegacional-row td {{
-                            font-weight: bold;
-                            background-color: #1E3A8A !important;
-                            color: white !important;
-                        }}
-                        .footer-text {{
-                            font-size: 7.5pt;
-                            font-style: italic;
-                            color: #555;
-                            margin-top: 8px;
-                        }}
-                        .eval-table {{
-                            float: right;
-                            border-collapse: collapse;
-                            font-size: 8pt;
-                            margin-top: 25px;
-                            width: 260px;
-                        }}
-                        .eval-table td {{
-                            border: 1px solid #444;
-                            padding: 4px;
-                            text-align: center;
-                            font-weight: bold;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <div class="header-text">
-                        REPRESENTACIÓN REGIONAL SUR<br>
-                        SUBDELEGACIÓN MÉDICA<br>
-                        DEPARTAMENTO DE ATENCIÓN MÉDICA<br>
-                        COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA
-                    </div>
-                    
-                    <div class="main-title">
-                        INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)
-                    </div>
+            def generar_pdf_reportlab():
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=landscape(letter),
+                    rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20
+                )
+                elements = []
+                styles = getSampleStyleSheet()
 
-                    <div class="weeks-box">
-                        <div class="weeks-box-title">SEMANAS POR TRIMESTRE</div>
-                        <div class="weeks-box-val">13</div>
-                    </div>
+                # Estilos personalizados
+                title_style = ParagraphStyle(
+                    'HeaderTitle',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=8,
+                    leading=10,
+                    alignment=1,
+                    textColor=colors.HexColor('#1E3A8A')
+                )
+                sub_title_style = ParagraphStyle(
+                    'SubHeaderTitle',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=9,
+                    leading=12,
+                    alignment=1,
+                    textColor=colors.black
+                )
+                meta_style = ParagraphStyle(
+                    'MetaText',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=8,
+                    leading=11
+                )
 
-                    <div class="meta-container">
-                        <div class="meta-row">
-                            <span class="meta-label">INDICADOR EVALUADO:</span>
-                            <span class="meta-val">{ind_label}</span>
-                        </div>
-                        <div class="meta-row" style="margin-top: 8px;">
-                            <span class="meta-label">AÑO:</span>
-                            <span class="meta-val">{anio}</span>
-                        </div>
-                        <div class="meta-row" style="margin-top: 8px;">
-                            <span class="meta-label">FECHA DE CORTE:</span>
-                            <span class="meta-val">Semana {ultima_semana}</span>
-                        </div>
-                    </div>
-                    
-                    <div style="clear: both;"></div>
+                # Encabezado institucional
+                elements.append(Paragraph("REPRESENTACIÓN REGIONAL SUR", title_style))
+                elements.append(Paragraph("SUBDELEGACIÓN MÉDICA", title_style))
+                elements.append(Paragraph("DEPARTAMENTO DE ATENCIÓN MÉDICA", title_style))
+                elements.append(Paragraph("COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA", title_style))
+                elements.append(Spacer(1, 10))
+                
+                elements.append(Paragraph("INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)", sub_title_style))
+                elements.append(Spacer(1, 10))
 
-                    <table class="report-table">
-                        <thead>
-                            <tr>
-                                <th rowspan="2" style="vertical-align: middle; background-color: #1E3A8A; color: white;">UNIDAD MÉDICA / TRIMESTRE</th>
-                """
+                # Metadatos y recuadro de semanas
+                meta_data = [
+                    [Paragraph(f"<b>INDICADOR EVALUADO:</b> {ind_label}", meta_style), Paragraph("<b>SEMANAS POR TRIMESTRE</b>", ParagraphStyle('BoxH', parent=title_style, textColor=colors.white))],
+                    [Paragraph(f"<b>AÑO:</b> {anio}", meta_style), Paragraph("<b>13</b>", ParagraphStyle('BoxV', parent=sub_title_style, fontSize=14, textColor=colors.white, alignment=1))],
+                    [Paragraph(f"<b>FECHA DE CORTE:</b> Semana {ultima_semana}", meta_style), ""]
+                ]
+                meta_table = Table(meta_data, colWidths=[400, 150])
+                meta_table.setStyle(TableStyle([
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('BACKGROUND', (1,0), (1,0), colors.HexColor('#1E3A8A')),
+                    ('BACKGROUND', (1,1), (1,1), colors.HexColor('#1E3A8A')),
+                    ('BOX', (1,0), (1,1), 1, colors.black),
+                ]))
+                elements.append(meta_table)
+                elements.append(Spacer(1, 15))
 
-                # Cabeceras de Trimestres
+                # Construcción de la tabla de datos principal
+                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE"]
+                table_headers_2 = [""]
                 for t_name, _, _ in bloques_semanas:
-                    html_content += f'<th colspan="2" style="background-color: #1E3A8A; color: white;">{t_name}</th>'
-                html_content += "</tr><tr>"
+                    table_headers_1.extend([t_name, ""])
+                    table_headers_2.extend(["SEMANAS NOTIFICADAS OPORTUNAMENTE", "INDICADOR"])
 
-                for _ in bloques_semanas:
-                    html_content += '<th style="background-color: #1B365D; font-size:7.5pt;">SEMANAS NOTIFICADAS OPORTUNAMENTE</th>'
-                    html_content += '<th style="background-color: #1B365D; font-size:7.5pt;">INDICADOR</th>'
-                html_content += "</tr></thead><tbody>"
+                table_data = [table_headers_1, table_headers_2]
 
-                # Filas de Unidades
                 for unidad in TARGET_UNITS:
-                    html_content += f'<tr><td class="unidad-col">{unidad}</td>'
+                    row = [unidad]
                     for t_name, _, _ in bloques_semanas:
                         val_abs = trim_results_abs[t_name].get(unidad, np.nan)
                         val_ind = trim_results_ind[t_name].get(unidad, np.nan)
-                        
                         abs_str = f"{val_abs:.0f}" if pd.notna(val_abs) else "-"
-                        if pd.notna(val_ind):
-                            ind_str = f"{val_ind:.2f}"
-                            bg_hex = get_hex_color(val_ind, ind_key)
-                            # Color de texto legible según el fondo
-                            text_color = "white" if bg_hex in ["#10B981", "#EF4444"] else "black"
-                            if bg_hex == "#FFFFFF": text_color = "black"
-                            ind_cell = f'<td style="background-color: {bg_hex}; color: {text_color}; font-weight: bold;">{ind_str}</td>'
-                        else:
-                            ind_cell = '<td>-</td>'
-                        
-                        html_content += f'<td>{abs_str}</td>' + ind_cell
-                    html_content += "</tr>"
+                        ind_str = f"{val_ind:.2f}" if pd.notna(val_ind) else "-"
+                        row.extend([abs_str, ind_str])
+                    table_data.append(row)
 
-                # Fila Delegacional Mínimo Registrado
-                html_content += '<tr class="delegacional-row"><td class="unidad-col">DELEGACIONAL</td>'
+                # Fila Delegacional
+                del_row = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     min_abs = min_row_abs[t_name]
                     min_ind = min_row_ind[t_name]
-                    
-                    if min_ind != "-":
-                        bg_hex = get_hex_color(float(min_ind), ind_key)
-                        text_color = "white" if bg_hex in ["#10B981", "#EF4444"] else "black"
-                        ind_cell = f'<td style="background-color: {bg_hex}; color: {text_color}; font-weight: bold;">{min_ind}</td>'
-                    else:
-                        ind_cell = '<td>-</td>'
+                    del_row.extend([min_abs, min_ind])
+                table_data.append(del_row)
 
-                    html_content += f'<td>{min_abs}</td>' + ind_cell
-                html_content += "</tr></tbody></table>"
+                # Estilos de tabla PDF
+                t_style = [
+                    ('BACKGROUND', (0,0), (-1,1), colors.HexColor('#1E3A8A')),
+                    ('TEXTCOLOR', (0,0), (-1,1), colors.white),
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('FONTNAME', (0,0), (-1,1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0,0), (-1,-1), 7.5),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('TOPPADDING', (0,0), (-1,-1), 4),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#444444')),
+                    ('BACKGROUND', (0,2), (0,-2), colors.HexColor('#1E3A8A')),
+                    ('TEXTCOLOR', (0,2), (0,-2), colors.white),
+                    ('FONTNAME', (0,2), (0,-2), 'Helvetica-Bold'),
+                    ('ALIGN', (0,2), (0,-2), 'LEFT'),
+                    ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#1E3A8A')),
+                    ('TEXTCOLOR', (0,-1), (-1,-1), colors.white),
+                    ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                ]
 
-                # Pie de fuente
-                html_content += f'<div class="footer-text">Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</div>'
+                # Aplicar colores de semáforo dinámicos en las celdas de indicador del PDF
+                col_idx_eval = 2
+                for t_idx, (_, _, _) in enumerate(bloques_semanas):
+                    c_ind = col_idx_eval + (t_idx * 2)
+                    for row_idx in range(2, len(table_data)):
+                        val_str = table_data[row_idx][c_ind]
+                        if val_str != "-":
+                            try:
+                                v_float = float(val_str)
+                                hex_c = get_hex_color(v_float, ind_key)
+                                txt_c = colors.white if hex_c in ["#10B981", "#EF4444"] else colors.black
+                                t_style.append(('BACKGROUND', (c_ind, row_idx), (c_ind, row_idx), colors.HexColor(hex_c)))
+                                t_style.append(('TEXTCOLOR', (c_ind, row_idx), (c_ind, row_idx), txt_c))
+                            except ValueError:
+                                pass
 
-                # Tabla de Evaluación inferior derecha
-                html_content += """
-                    <table class="eval-table">
-                        <tr>
-                            <td rowspan="4" style="vertical-align: middle; width: 35%; background-color: #f8fafc;">EVALUACIÓN:</td>
-                            <td style="background-color: #10B981; color: white;">100 %</td>
-                            <td>=</td>
-                            <td style="background-color: #10B981; color: white;">Excelente</td>
-                        </tr>
-                        <tr>
-                            <td style="background-color: #FFFFFF; color: black;">97.5 - 99.9</td>
-                            <td>=</td>
-                            <td style="background-color: #FFFFFF; color: black;">Bueno</td>
-                        </tr>
-                        <tr>
-                            <td style="background-color: #FEF08A; color: black;">95.0 - 97.4</td>
-                            <td>=</td>
-                            <td style="background-color: #FEF08A; color: black;">Regular</td>
-                        </tr>
-                        <tr>
-                            <td style="background-color: #EF4444; color: white;">94.9 ó menos</td>
-                            <td>=</td>
-                            <td style="background-color: #EF4444; color: white;">Malo</td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-                """
+                col_widths = [150] + [90, 70] * len(bloques_semanas)
+                main_table = Table(table_data, colWidths=col_widths, repeatRows=2)
+                main_table.setStyle(TableStyle(t_style))
+                elements.append(main_table)
+                elements.append(Spacer(1, 10))
 
-                pdf_buffer = io.BytesIO()
-                HTML(string=html_content).write_pdf(pdf_buffer)
-                pdf_buffer.seek(0)
-                return pdf_buffer
+                # Fuente y tabla de evaluación
+                elements.append(Paragraph(f"Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.", ParagraphStyle('FText', fontName='Helvetica-Oblique', fontSize=7, textColor=colors.HexColor('#555555'))))
+                
+                doc.build(elements)
+                buffer.seek(0)
+                return buffer
 
-            pdf_file = generar_pdf_oficial()
+            pdf_buffer = generar_pdf_reportlab()
             st.download_button(
                 label="📥 Descargar Reporte Oficial en PDF",
-                data=pdf_file,
-                file_name=f"Reporte_Institucional_SUAVE_{ind_label.replace(' ', '_')}.pdf",
+                data=pdf_buffer,
+                file_name=f"Reporte_SUAVE_{ind_label.replace(' ', '_')}.pdf",
                 mime="application/pdf"
             )
 
