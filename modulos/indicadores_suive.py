@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #1E3A8A; font-weight: 700; margin-bottom: 0.2rem; }
@@ -22,15 +22,24 @@ st.markdown("""
     .legend-bueno { background-color: #FFFFFF; color: black; border: 1px solid #CBD5E1; }
     .legend-regular { background-color: #FEF08A; color: black; }
     .legend-malo { background-color: #EF4444; color: white; }
+    
+    /* Estilos para la tabla de acotaciones */
+    .acotacion-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.9rem; }
+    .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
+    .acotacion-table th { background-color: #1E3A8A; color: white; font-weight: bold; }
+    .bg-excelente { background-color: #10B981; color: white; font-weight: bold; }
+    .bg-bueno { background-color: #FFFFFF; color: black; font-weight: bold; }
+    .bg-regular { background-color: #FEF08A; color: black; font-weight: bold; }
+    .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
 
-# Lista completa de las 16 unidades operativas oficiales
+# Lista completa de unidades operativas oficiales (excluyendo CMN 20 DE NOVIEMBRE)
 TARGET_UNITS = [
-    "CHURUBUSCO", "CLIDDA", "CMN 20 DE NOVIEMBRE", "COYOACAN", "DEL VALLE", 
+    "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", 
     "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
     "FUENTES BROTANTES", "HG DRA. MATILDE PETRA MONTOYA LAFRAGUA",
     "MILPA ALTA", "NARVARTE", "TLALPAN", "VILLA ALVARO OBREGON", "XOCHIMILCO"
@@ -73,17 +82,21 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción de filas por unidad del Excel
+        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
             v = row[0]
-            if pd.notna(v) and str(v).strip() in TARGET_UNITS:
-                active_unit = str(v).strip()
-                unit_rows_map[active_unit] = {}
-            elif active_unit and pd.notna(v):
-                metric_name = str(v).strip()
-                unit_rows_map[active_unit][metric_name] = row
+            if pd.notna(v):
+                v_str = str(v).strip()
+                if v_str in TARGET_UNITS:
+                    active_unit = v_str
+                    unit_rows_map[active_unit] = {}
+                elif v_str == "CMN 20 DE NOVIEMBRE":
+                    active_unit = None
+                elif active_unit and pd.notna(v):
+                    metric_name = v_str
+                    unit_rows_map[active_unit][metric_name] = row
 
         def get_indices_semanas(opcion_periodo):
             if not opcion_periodo:
@@ -123,10 +136,10 @@ if uploaded_file is not None:
 
                 u_oportunas = get_ab_val("Unidades con casos oportunos")
                 u_habilitadas = get_ab_val("Unidades habilitadas")
-                if u_habilitadas == 0: u_habilitadas = 16.0
+                if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
                 u_sin_notificar = get_ab_val("Unidades sin notificar")
 
-                base_hab = u_habilitadas if u_habilitadas > 0 else 16.0
+                base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
                 promedio_semanas_unidad = (semanas_casos_bloque / base_hab) if base_hab > 0 else 0.0
                 divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
 
@@ -143,6 +156,8 @@ if uploaded_file is not None:
                     "a": round(ind_a, 2),
                     "b": round(ind_b, 2),
                     "c": round(ind_c, 2),
+                    "d": round(ind_d, 2),
+                    "e": round(ind_e, 2),
                     "f": round(ind_f, 2),
                     "_metrics": {
                         "Semanas con casos en el periodo": semanas_casos_bloque,
@@ -154,12 +169,15 @@ if uploaded_file is not None:
             return results
 
         def get_bg_color(val, ind_type):
+            if val is None or val == 0.0:
+                return ''
+            
             if ind_type == "a":
                 if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
                 elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                 elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                 else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-            elif ind_type in ["b"]:
+            elif ind_type in ["b", "e"]:
                 if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
                 elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                 elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -169,6 +187,11 @@ if uploaded_file is not None:
                 elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
                 elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                 else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+            elif ind_type == "d":
+                if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
+                elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+                elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+                else: return 'background-color: #EF4444; color: white; font-weight: bold;'
             elif ind_type == "f":
                 if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
                 elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -177,7 +200,7 @@ if uploaded_file is not None:
             return ''
 
         # ==========================================
-        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO)
+        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
         # ==========================================
         st.markdown("---")
         st.subheader("🗓️ Selección de Periodo / Trimestre (Panorama General)")
@@ -215,10 +238,10 @@ if uploaded_file is not None:
                         "a) Cumplimiento u Oportunidad (%)": item["a"],
                         "b) Cobertura Oportuna (%)": item["b"],
                         "c) Consistencia (%)": item["c"],
-                        "d) Reporta Sin Movimiento (RSM) (%)": 0.0, # Placeholder
-                        "e) Cobertura Ajustada (%)": 0.0, # Placeholder
+                        "d) Reporta Sin Movimiento (RSM) (%)": item["d"],
+                        "e) Cobertura Ajustada (%)": item["e"],
                         "f) Calidad (Descriptivo) (%)": item["f"],
-                        "_raw": {"a": item["a"], "b": item["b"], "c": item["c"], "f": item["f"]}
+                        "_raw": {"a": item["a"], "b": item["b"], "c": item["c"], "d": item["d"], "e": item["e"], "f": item["f"]}
                     })
                 df_gen = pd.DataFrame(processed_gen)
 
@@ -228,6 +251,8 @@ if uploaded_file is not None:
                         "a) Cumplimiento u Oportunidad (%)": "a",
                         "b) Cobertura Oportuna (%)": "b",
                         "c) Consistencia (%)": "c",
+                        "d) Reporta Sin Movimiento (RSM) (%)": "d",
+                        "e) Cobertura Ajustada (%)": "e",
                         "f) Calidad (Descriptivo) (%)": "f"
                     }
                     idx = row_data.name
@@ -240,7 +265,7 @@ if uploaded_file is not None:
                             styles[i] = get_bg_color(val, itype)
                     return styles
 
-                st.subheader(f"📊 Tabla Comparativa General — {rango_gen_etiqueta}")
+                st.subheader(f"📊 Tabla Comparativa General (6 Indicadores) — {rango_gen_etiqueta}")
                 display_df = df_gen.drop(columns=["_raw"])
                 multi_columns = pd.MultiIndex.from_tuples([
                     ("Unidades Operativas", "Unidad"),
@@ -299,7 +324,7 @@ if uploaded_file is not None:
 
                     u_oportunas = get_ab_val("Unidades con casos oportunos")
                     u_habilitadas = get_ab_val("Unidades habilitadas")
-                    if u_habilitadas == 0: u_habilitadas = 16.0
+                    if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
                     u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                     unit_metrics = {
@@ -322,7 +347,7 @@ if uploaded_file is not None:
                     render_unit_details(selected_unit)
 
         # ==========================================
-        # 3. APARTADO DE ANÁLISIS POR INDICADOR
+        # 3. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -341,21 +366,39 @@ if uploaded_file is not None:
         )
         
         if indicador_seleccionado and indicador_seleccionado != "":
-            # Mapeo de clave interna
             if "CUMPLIMIENTO" in indicador_seleccionado:
                 ind_key = "a"
-                ind_label = "CUMPLIMIENTO U OPORTUNIDAD"
+                ind_label = "Cumplimiento u Oportunidad"
             elif "COBERTURA" in indicador_seleccionado:
                 ind_key = "b"
-                ind_label = "COBERTURA OPORTUNA"
+                ind_label = "Cobertura Oportuna"
             elif "CONSISTENCIA" in indicador_seleccionado:
                 ind_key = "c"
-                ind_label = "CONSISTENCIA"
+                ind_label = "Consistencia"
             else:
                 ind_key = "f"
-                ind_label = "CALIDAD"
+                ind_label = "Calidad"
 
-            # Recopilamos datos de los 4 trimestres
+            # Tabla de Acotaciones solicitada
+            st.markdown(f"""
+            <table class="acotacion-table">
+                <tr>
+                    <th>Indicador</th>
+                    <th>Excelente</th>
+                    <th>Bueno</th>
+                    <th>Regular</th>
+                    <th>Malo</th>
+                </tr>
+                <tr>
+                    <td><b>{ind_label}</b></td>
+                    <td class="bg-excelente">100%</td>
+                    <td class="bg-bueno">97.5 - 99.9%</td>
+                    <td class="bg-regular">95.0 - 97.4%</td>
+                    <td class="bg-malo">≤ 94.9%</td>
+                </tr>
+            </table>
+            """, unsafe_allow_html=True)
+
             trimestres_config = [
                 ("PRIMER TRIMESTRE", [item[0] for item in semanas_info if 1 <= item[1] <= 13], 13.0),
                 ("SEGUNDO TRIMESTRE", [item[0] for item in semanas_info if 13 < item[1] <= 26], 13.0),
@@ -363,13 +406,11 @@ if uploaded_file is not None:
                 ("CUARTO TRIMESTRE", [item[0] for item in semanas_info if 39 < item[1] <= 52], 13.0)
             ]
 
-            # Generamos diccionario de resultados por unidad para cada trimestre
             trim_results = {}
             for t_name, t_cols, t_div in trimestres_config:
                 res_t = calcular_resultados_periodo(t_cols, t_div)
                 trim_results[t_name] = {item["Unidad"]: item[ind_key] for item in res_t}
 
-            # Construcción de la tabla final
             tabla_data = []
             for unidad in TARGET_UNITS:
                 fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
@@ -379,19 +420,16 @@ if uploaded_file is not None:
 
             df_ind = pd.DataFrame(tabla_data)
 
-            # Metadatos requeridos
-            st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
+            st.markdown(f"**INDICADOR EVALUADO:** {ind_label.upper()}")
             st.markdown(f"**AÑO:** {anio}")
             st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
 
-            # Recuadro informativo
             st.markdown("""
             <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; padding: 10px; border-radius: 4px; margin-bottom: 15px; width: 250px;">
                 <b>SEMANAS POR TRIMESTRE:</b> 13
             </div>
             """, unsafe_allow_html=True)
 
-            # MultiIndex cabecera: Columna 0 = UNIDAD MÉDICA / TRIMESTRE, Columnas 1-4 agrupadas bajo "INDICADOR"
             multi_cols_ind = pd.MultiIndex.from_tuples([
                 ("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"),
                 ("INDICADOR", "PRIMER TRIMESTRE"),
@@ -404,25 +442,23 @@ if uploaded_file is not None:
             def style_indicator_table(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if i > 0: # Las columnas de trimestres llevan semaforización
+                    if i > 0:
                         val = row_data.iloc[i]
-                        if pd.notna(val):
+                        if pd.notna(val) and val > 0.0:
                             styles[i] = get_bg_color(val, ind_key)
                 return styles
 
             styled_ind_table = df_ind.style.format(formatter="{:.2f}", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
             st.dataframe(styled_ind_table, use_container_width=True, hide_index=True)
 
-            # Mini tabla delegacional inferior (Valor más bajo por columna con su respectivo sombreado)
+            # Mini tabla delegacional inferior (Valor más bajo mayor a 0 por columna)
             st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
             
             min_row = {}
-            min_styles = {}
             for t_name, _, _ in trimestres_config:
-                vals = [trim_results[t_name][u] for u in TARGET_UNITS]
+                vals = [trim_results[t_name][u] for u in TARGET_UNITS if trim_results[t_name][u] > 0.0]
                 min_val = min(vals) if vals else 0.0
-                min_row[t_name] = f"{min_val:.2f}%"
-                min_styles[t_name] = get_bg_color(min_val, ind_key)
+                min_row[t_name] = f"{min_val:.2f}%" if min_val > 0.0 else "Sin datos"
 
             delegacional_data = [{
                 "DELEGACIONAL": "Mínimo Registrado",
@@ -438,9 +474,11 @@ if uploaded_file is not None:
                 t_keys = ["PRIMER TRIMESTRE", "SEGUNDO TRIMESTRE", "TERCER TRIMESTRE", "CUARTO TRIMESTRE"]
                 for i, col_name in enumerate(row_data.index):
                     if col_name in t_keys:
-                        # Extraemos el valor numérico limpio
-                        clean_val = float(row_data[col_name].replace("%", ""))
-                        styles[i] = get_bg_color(clean_val, ind_key)
+                        raw_str = row_data[col_name]
+                        if raw_str != "Sin datos":
+                            clean_val = float(raw_str.replace("%", ""))
+                            if clean_val > 0.0:
+                                styles[i] = get_bg_color(clean_val, ind_key)
                 return styles
 
             styled_del = df_del.style.apply(style_delegational, axis=1)
