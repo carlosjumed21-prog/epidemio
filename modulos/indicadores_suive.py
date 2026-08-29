@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
-# Configuración de la página
+# Configuración de la página (Debe ser la primera orden de Streamlit)
 st.set_page_config(
     page_title="Sistema de Evaluación Epidemiológica - SUIVE",
     page_icon="📊",
@@ -169,7 +169,7 @@ def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_resul
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor('#111827'), spaceAfter=3)
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor('#4B5563'], spaceAfter=8)
-    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'), spaceBefore=8, spaceAfter=3)
+    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'], spaceBefore=8, spaceAfter=3)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#374151'))
     
     # 1. SECCIÓN GENERAL
