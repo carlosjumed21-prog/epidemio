@@ -2,12 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 
 # Configuración de la página
 st.set_page_config(
@@ -32,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Herramienta de análisis por corte trimestral de semanas epidemiológicas, metadatos y semaforización</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Análisis segmentado por bloques trimestrales de Semanas Epidemiológicas</div>', unsafe_allow_html=True)
 
 # Lista completa de las 16 unidades operativas oficiales
 TARGET_UNITS = [
@@ -78,76 +72,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Selector de Trimestre basado en las semanas detectadas en el archivo
-        st.markdown("---")
-        st.subheader("🗓️ Corte y Filtrado por Trimestre (Semanas Epidemiológicas)")
-        
-        # Determinamos los rangos según las semanas reales disponibles
-        if semanas_info:
-            min_sem = semanas_info[0][1]
-            max_sem = semanas_info[-1][1]
-            
-            # Opciones dinámicas de trimestres
-            trimestre_opcion = st.selectbox(
-                "Seleccione el Trimestre o Rango de Semanas a analizar:",
-                [
-                    "TODOS LOS TRIMESTRES (Panorama Anual General)",
-                    "Trimestre 1 (Semanas 1 - 13 o iniciales)",
-                    "Trimestre 2 (Semanas intermedias 14 - 26 / 26 - 39)",
-                    "Trimestre 3 (Semanas finales 39 - 52)"
-                ]
-            )
-            
-            # Definir filtro de semanas según la opción elegida
-            cols_trimestre_indices = []
-            if "TODOS" in trimestre_opcion:
-                cols_trimestre_indices = [item[0] for item in semanas_info]
-            elif "Trimestre 1" in trimestre_opcion:
-                cols_trimestre_indices = [item[0] for item in semanas_info if item[1] <= 13]
-                if not cols_trimestre_indices: # Si el archivo empieza desde la semana 26 por ejemplo
-                    corte_1 = len(semanas_info) // 3
-                    cols_trimestre_indices = [item[0] for item in semanas_info[:corte_1]]
-            elif "Trimestre 2" in trimestre_opcion:
-                cols_trimestre_indices = [item[0] for item in semanas_info if 13 < item[1] <= 26]
-                if not cols_trimestre_indices:
-                    corte_1 = len(semanas_info) // 3
-                    corte_2 = (len(semanas_info) // 3) * 2
-                    cols_trimestre_indices = [item[0] for item in semanas_info[corte_1:corte_2]]
-            elif "Trimestre 3" in trimestre_opcion:
-                cols_trimestre_indices = [item[0] for item in semanas_info if item[1] > 26]
-                if not cols_trimestre_indices:
-                    corte_2 = (len(semanas_info) // 3) * 2
-                    cols_trimestre_indices = [item[0] for item in semanas_info[corte_2:]]
-            
-            # Si por rango específico quedó vacío, tomamos todas por seguridad
-            if not cols_trimestre_indices:
-                cols_trimestre_indices = [item[0] for item in semanas_info]
-        else:
-            cols_trimestre_indices = list(range(1, 27))
-            trimestre_opcion = "Panorama General"
-
-        # Extracción y procesamiento de datos por unidad recalculando con las columnas del trimestre seleccionado
-        data_dict = {}
-        current_unit = None
-        
-        for i, row in df.iterrows():
-            val = row[0]
-            if pd.notna(val):
-                val_str = str(val).strip()
-                if val_str in TARGET_UNITS:
-                    current_unit = val_str
-                    data_dict[current_unit] = row
-                elif current_unit and val_str in [
-                    "Casos acumulados", "Casos oportunos", "Semanas acumuladas con casos",
-                    "Unidades con casos oportunos", "Unidades habilitadas", "Unidades sin notificar"
-                ]:
-                    # Guardamos la fila completa para poder recalcular por columnas de semanas si es necesario
-                    pass
-
-        # Procesamiento avanzado extrayendo celdas directamente
-        processed_results = []
-        
-        # Mapeo exacto por filas de cada unidad en el Excel
+        # Extracción de filas por unidad del Excel
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -159,21 +84,53 @@ if uploaded_file is not None:
                 metric_name = str(v).strip()
                 unit_rows_map[active_unit][metric_name] = row
 
-        TOTAL_SEMANAS_TRIMESTRE = float(len(cols_trimestre_indices)) if len(cols_trimestre_indices) > 0 else 26.0
+        # Selector de Trimestre por bloques estrictos de semanas leídos de la fila 5
+        st.markdown("---")
+        st.subheader("🗓️ Selección de Trimestre (Bloques de Semanas Epidemiológicas)")
+        
+        trimestre_opcion = st.selectbox(
+            "Seleccione el bloque trimestral a analizar:",
+            [
+                "1er Trimestre (Semanas 1 a 13)",
+                "2º Trimestre (Semanas 13 a 26)",
+                "3er Trimestre (Semanas 26 a 39)",
+                "4º Trimestre (Semanas 39 a 52)",
+                "TODOS LOS TRIMESTRES (Comparativa Anual Completa)"
+            ]
+        )
+        
+        # Filtrado de índices de columnas según el bloque trimestral seleccionado
+        if "1er Trimestre" in trimestre_opcion:
+            cols_trimestre_indices = [item[0] for item in semanas_info if 1 <= item[1] <= 13]
+            rango_etiqueta = "1er Trimestre (Sem. 1-13)"
+        elif "2º Trimestre" in trimestre_opcion:
+            cols_trimestre_indices = [item[0] for item in semanas_info if 13 <= item[1] <= 26]
+            rango_etiqueta = "2º Trimestre (Sem. 13-26)"
+        elif "3er Trimestre" in trimestre_opcion:
+            cols_trimestre_indices = [item[0] for item in semanas_info if 26 <= item[1] <= 39]
+            rango_etiqueta = "3er Trimestre (Sem. 26-39)"
+        elif "4º Trimestre" in trimestre_opcion:
+            cols_trimestre_indices = [item[0] for item in semanas_info if 39 <= item[1] <= 52]
+            rango_etiqueta = "4º Trimestre (Sem. 39-52)"
+        else:
+            cols_trimestre_indices = [item[0] for item in semanas_info]
+            rango_etiqueta = "Panorama General Anual"
+
+        TOTAL_SEMANAS_BLOQUE = float(len(cols_trimestre_indices)) if len(cols_trimestre_indices) > 0 else 13.0
+
+        processed_results = []
 
         for unidad in TARGET_UNITS:
             m_rows = unit_rows_map.get(unidad, {})
             
-            # Recálculo dinámico basado en las columnas filtradas del trimestre
-            # Sumamos los casos o semanas con casos presentes en las columnas del trimestre seleccionado
+            # Analizamos estrictamente los datos de las columnas correspondientes al bloque de semanas del trimestre
             row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
             if row_semanas_casos is not None:
-                # Sumamos los valores numéricos de las columnas correspondientes a este trimestre
-                semanas_casos = sum([float(row_semanas_casos[c]) for c in cols_trimestre_indices if pd.notna(row_semanas_casos[c])])
+                semanas_casos_bloque = sum([float(row_semanas_casos[c]) for c in cols_trimestre_indices if pd.notna(row_semanas_casos[c])])
             else:
-                semanas_casos = 0.0
+                semanas_casos_bloque = 0.0
 
-            # Variables fijas o extraídas de la columna AB (índice 27 o última)
+            # Variables fijas o extraídas de la columna AB
             def get_ab_val(metric_key):
                 r = m_rows.get(metric_key, None)
                 if r is not None and len(r) > 27 and pd.notna(r[27]):
@@ -186,9 +143,10 @@ if uploaded_file is not None:
             u_sin_notificar = get_ab_val("Unidades sin notificar")
 
             base_hab = u_habilitadas if u_habilitadas > 0 else 16.0
-            promedio_semanas_unidad = (semanas_casos / base_hab) if base_hab > 0 else 0.0
-            divisor_calc = TOTAL_SEMANAS_TRIMESTRE if TOTAL_SEMANAS_TRIMESTRE > 0 else 1.0
+            promedio_semanas_unidad = (semanas_casos_bloque / base_hab) if base_hab > 0 else 0.0
+            divisor_calc = TOTAL_SEMANAS_BLOQUE if TOTAL_SEMANAS_BLOQUE > 0 else 1.0
 
+            # Cálculo de los indicadores para este bloque específico
             ind_a = (promedio_semanas_unidad / divisor_calc) * 100
             ind_b = (u_oportunas / base_hab) * 100
             ind_c = (promedio_semanas_unidad / divisor_calc) * 100
@@ -209,8 +167,7 @@ if uploaded_file is not None:
                     "a": ind_a, "b": ind_b, "c": ind_c, "d": ind_d, "e": ind_e, "f": ind_f
                 },
                 "_metrics": {
-                    "Casos acumulados": 0.0,
-                    "Semanas acumuladas con casos": semanas_casos,
+                    "Semanas con casos en el bloque": semanas_casos_bloque,
                     "Unidades con casos oportunos": u_oportunas,
                     "Unidades habilitadas": u_habilitadas,
                     "Unidades sin notificar": u_sin_notificar
@@ -268,23 +225,19 @@ if uploaded_file is not None:
             return styles
 
         st.markdown("---")
-        st.subheader(f"📊 Tabla Comparativa General — {trimestre_opcion}")
+        st.subheader(f"📊 Tabla Comparativa General — Segmentada por {rango_etiqueta}")
         
         display_df = df_resumen.drop(columns=["_raw", "_metrics"])
         
         # Estructura de cabecera agrupada (MultiIndex): Fila 1 = Trimestre / Fila 2 = Indicadores
-        trim_header_label = trimestre_opcion.split("(")[0].strip()
-        if "TODOS" in trim_header_label:
-            trim_header_label = "Panorama Anual General"
-
         multi_columns = pd.MultiIndex.from_tuples([
             ("Unidades Operativas", "Unidad"),
-            (trim_header_label, "a) Cumplimiento u Oportunidad (%)"),
-            (trim_header_label, "b) Cobertura Oportuna (%)"),
-            (trim_header_label, "c) Consistencia (%)"),
-            (trim_header_label, "d) Reporta Sin Movimiento (RSM) (%)"),
-            (trim_header_label, "e) Cobertura Ajustada (%)"),
-            (trim_header_label, "f) Calidad (Descriptivo) (%)")
+            (rango_etiqueta, "a) Cumplimiento u Oportunidad (%)"),
+            (rango_etiqueta, "b) Cobertura Oportuna (%)"),
+            (rango_etiqueta, "c) Consistencia (%)"),
+            (rango_etiqueta, "d) Reporta Sin Movimiento (RSM) (%)"),
+            (rango_etiqueta, "e) Cobertura Ajustada (%)"),
+            (rango_etiqueta, "f) Calidad (Descriptivo) (%)")
         ])
         
         display_df.columns = multi_columns
@@ -316,12 +269,12 @@ if uploaded_file is not None:
             col1, col2 = st.columns([1, 1])
             
             with col1:
-                st.markdown(f"##### Variables Base Recalculadas ({trim_header_label})")
-                var_df = pd.DataFrame(list(unit_metrics.items()), columns=["Variable", "Valor en el Corte"])
+                st.markdown(f"##### Datos del Periodo ({rango_etiqueta})")
+                var_df = pd.DataFrame(list(unit_metrics.items()), columns=["Métrica", "Valor en el Bloque"])
                 st.dataframe(var_df, use_container_width=True, hide_index=True)
             
             with col2:
-                st.markdown("##### Indicadores y Semáforo")
+                st.markdown("##### Indicadores y Semáforo del Periodo")
                 ind_summary = []
                 indicators_meta = [
                     ("a) Cumplimiento u Oportunidad", raw_vals["a"], "a"),
