@@ -15,14 +15,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web, tabla de acotaciones anterior y el botón de impresión
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #1E3A8A; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #1E3A8A; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
-    /* Estilos para la tabla de acotaciones anterior */
+    /* Estilos para la tabla de acotaciones */
     .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
     .acotacion-table th { background-color: #1E3A8A; color: white; font-weight: bold; }
@@ -30,11 +30,6 @@ st.markdown("""
     .bg-bueno { background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1; }
     .bg-regular { background-color: #FEF08A; color: black; font-weight: bold; }
     .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
-
-    /* Ocultar elementos de UI durante la impresión nativa si se desea */
-    @media print {
-        .no-print { display: none !important; }
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -367,7 +362,7 @@ if uploaded_file is not None:
             st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
-        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE)
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA: SEMANAS COMPLETAS + INDICADOR COMPLETO)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -449,16 +444,19 @@ if uploaded_file is not None:
                 trim_results_abs[t_name] = t_vals_abs
                 trim_results_ind[t_name] = t_vals_ind
 
-            # Construcción de la tabla fusionada por trimestres en parejas (Semanas Notificadas + Indicador)
-            tabla_fusión_data = []
+            # Construcción de la tabla separada tal como el formato oficial
+            tabla_sep_data = []
             for unidad in TARGET_UNITS:
                 fila = {"UNIDAD MÉDICA": unidad}
+                # Bloque izquierdo: Semanas Notificadas por trimestre
                 for t_name, _, _ in bloques_semanas:
-                    fila[(t_name, "Semanas Notificadas Oportunamente")] = trim_results_abs[t_name].get(unidad, np.nan)
-                    fila[(t_name, "Indicador")] = trim_results_ind[t_name].get(unidad, np.nan)
-                tabla_fusión_data.append(fila)
+                    fila[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                # Bloque derecho: Indicador por trimestre
+                for t_name, _, _ in bloques_semanas:
+                    fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
+                tabla_sep_data.append(fila)
 
-            df_fusion = pd.DataFrame(tabla_fusión_data)
+            df_sep = pd.DataFrame(tabla_sep_data)
 
             st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
             st.markdown(f"**AÑO:** {anio}")
@@ -470,17 +468,18 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
 
-            fusion_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+            sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
             for t_name, _, _ in bloques_semanas:
-                fusion_tuples.append((t_name, "SEMANAS NOTIFICADAS\nOPORTUNAMENTE"))
-                fusion_tuples.append((t_name, "INDICADOR"))
+                sep_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name))
+            for t_name, _, _ in bloques_semanas:
+                sep_tuples.append(("INDICADOR", t_name))
 
-            df_fusion.columns = pd.MultiIndex.from_tuples(fusion_tuples)
+            df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
 
-            def style_fusion_table(row_data):
+            def style_sep_table(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
+                    if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
                         val = row_data.iloc[i]
                         if pd.notna(val):
                             if ind_key == "a":
@@ -492,12 +491,12 @@ if uploaded_file is not None:
                                 styles[i] = get_bg_color(val, ind_key)
                 return styles
 
-            styled_fusion = df_fusion.style.format(
-                formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", 
-                subset=[col for col in df_fusion.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-            ).apply(style_fusion_table, axis=1)
+            styled_sep = df_sep.style.format(
+                formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
+                subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+            ).apply(style_sep_table, axis=1)
 
-            st.dataframe(styled_fusion, use_container_width=True, hide_index=True, height=580)
+            st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
 
             # Mini tabla delegacional inferior (Mínimos registrados por trimestre)
             min_row_ind = {}
@@ -515,16 +514,17 @@ if uploaded_file is not None:
 
             delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
             for t_name, _, _ in bloques_semanas:
-                delegacional_dict[(t_name, "SEMANAS NOTIFICADAS\nOPORTUNAMENTE")] = min_row_abs[t_name]
-                delegacional_dict[(t_name, "INDICADOR")] = min_row_ind[t_name]
+                delegacional_dict[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
+            for t_name, _, _ in bloques_semanas:
+                delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
 
             df_del = pd.DataFrame([delegacional_dict])
-            df_del.columns = pd.MultiIndex.from_tuples(fusion_tuples)
+            df_del.columns = pd.MultiIndex.from_tuples(sep_tuples)
             
             def style_delegational(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
+                    if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
                         raw_str = row_data[col_name]
                         if raw_str != "-":
                             try:
@@ -540,7 +540,7 @@ if uploaded_file is not None:
             # Pie de fuente requerido
             st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
 
-            # Acotación de evaluación idéntica a la imagen oficial (con diseño anterior)
+            # Acotación de evaluación idéntica a la imagen oficial
             st.markdown("""
             <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
                 <table style="border-collapse: collapse; font-size: 0.85rem; width: 320px;">
@@ -623,11 +623,14 @@ if uploaded_file is not None:
                 elements.append(meta_table)
                 elements.append(Spacer(1, 15))
 
-                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE"]
+                # Estructura separada en PDF (Semanas lado a lado, luego Indicadores lado a lado)
+                num_trim = len(bloques_semanas)
+                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE", f"SEMANAS NOTIFICADAS OPORTUNAMENTE {anio}"] + [""] * (num_trim - 1) + ["INDICADOR"] + [""] * (num_trim - 1)
                 table_headers_2 = [""]
-                for t_name, _, _ in bloques_semanas:
-                    table_headers_1.extend([t_name, ""])
-                    table_headers_2.extend(["SEMANAS NOTIFICADAS OPORTUNAMENTE", "INDICADOR"])
+                for _ in range(num_trim):
+                    table_headers_2.append(t[0])
+                for t in bloques_semanas:
+                    table_headers_2.append(t[0])
 
                 table_data = [table_headers_1, table_headers_2]
 
@@ -635,20 +638,24 @@ if uploaded_file is not None:
                     row = [unidad]
                     for t_name, _, _ in bloques_semanas:
                         val_abs = trim_results_abs[t_name].get(unidad, np.nan)
-                        val_ind = trim_results_ind[t_name].get(unidad, np.nan)
                         abs_str = f"{val_abs:.0f}" if pd.notna(val_abs) else "-"
+                        row.append(abs_str)
+                    for t_name, _, _ in bloques_semanas:
+                        val_ind = trim_results_ind[t_name].get(unidad, np.nan)
                         ind_str = f"{val_ind:.2f}" if pd.notna(val_ind) else "-"
-                        row.extend([abs_str, ind_str])
+                        row.append(ind_str)
                     table_data.append(row)
 
                 del_row = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
-                    min_abs = min_row_abs[t_name]
-                    min_ind = min_row_ind[t_name]
-                    del_row.extend([min_abs, min_ind])
+                    del_row.append(min_row_abs[t_name])
+                for t_name, _, _ in bloques_semanas:
+                    del_row.append(min_row_ind[t_name])
                 table_data.append(del_row)
 
                 t_style = [
+                    ('SPAN', (1, 0), (num_trim, 0)),
+                    ('SPAN', (num_trim + 1, 0), (num_trim * 2, 0)),
                     ('BACKGROUND', (0,0), (-1,1), colors.HexColor('#1E3A8A')),
                     ('TEXTCOLOR', (0,0), (-1,1), colors.white),
                     ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -666,9 +673,9 @@ if uploaded_file is not None:
                     ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
                 ]
 
-                col_idx_eval = 2
-                for t_idx, (_, _, _) in enumerate(bloques_semanas):
-                    c_ind = col_idx_eval + (t_idx * 2)
+                # Aplicar colores de semáforo en el bloque de indicadores del PDF
+                for t_idx, (t_name, _, _) in enumerate(bloques_semanas):
+                    c_ind = num_trim + 1 + t_idx
                     for row_idx in range(2, len(table_data)):
                         val_str = table_data[row_idx][c_ind]
                         if val_str != "-":
@@ -681,7 +688,7 @@ if uploaded_file is not None:
                             except ValueError:
                                 pass
 
-                col_widths = [150] + [90, 70] * len(bloques_semanas)
+                col_widths = [150] + [70] * (num_trim * 2)
                 main_table = Table(table_data, colWidths=col_widths, repeatRows=2)
                 main_table.setStyle(TableStyle(t_style))
                 elements.append(main_table)
@@ -704,7 +711,6 @@ if uploaded_file is not None:
                     mime="application/pdf"
                 )
             with col_b2:
-                # Botón con Javascript para activar la ventana emergente nativa de impresión del navegador
                 st.markdown("""
                 <button onclick="window.print();" style="background-color: #1E3A8A; color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%;">
                     🖨️ Vista de Impresión / Ventana Emergente
