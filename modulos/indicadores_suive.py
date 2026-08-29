@@ -108,11 +108,14 @@ if uploaded_file is not None:
         else:
             st.success(f"¡Archivo procesado con éxito! Se mapearon correctamente las unidades.")
             
-            # Cálculo trimestral general (Simulación de distribución por trimestres normados de 13 semanas)
             trimestres = ["PRIMER TRIMESTRE", "SEGUNDO TRIMESTRE", "TERCER TRIMESTRE", "CUARTO TRIMESTRE"]
             divisor_periodo = 13.0
 
-            # Estructura para almacenar resultados por unidad y trimestre
+            # Determinación de qué trimestres tienen datos reales según las semanas detectadas
+            # Cada trimestre abarca 13 semanas teóricas: T1 (1-13), T2 (14-26), T3 (27-39), T4 (40-52/53)
+            semanas_int = [int(s) for s in semanas_list if s.isdigit()]
+            max_semana = max(semanas_int) if semanas_int else 0
+
             matriz_trimestral = []
             
             for unidad in TARGET_UNITS:
@@ -120,7 +123,6 @@ if uploaded_file is not None:
                 semanas_casos = m.get("Semanas acumuladas con casos", 0.0)
                 u_oportunas = m.get("Unidades con casos oportunos", 0.0)
                 u_habilitadas = m.get("Unidades habilitadas", 16.0)
-                u_sin_notificar = m.get("Unidades sin notificar", 0.0)
                 
                 base_hab = u_habilitadas if u_habilitadas > 0 else 16.0
                 promedio_semanas_unidad = (semanas_casos / base_hab) if base_hab > 0 else 0.0
@@ -130,61 +132,44 @@ if uploaded_file is not None:
                 ind_c = min(100.0, (promedio_semanas_unidad / divisor_periodo) * 100)
                 ind_f = (ind_b + ind_c) / 2.0
 
-                matriz_trimestral.append({
-                    "Unidad": unidad,
-                    "Trimestre": "PRIMER TRIMESTRE",
-                    "Cumplimiento u Oportunidad": round(ind_a, 2),
-                    "Cobertura Oportuna": round(ind_b, 2),
-                    "Consistencia": round(ind_c, 2),
-                    "Calidad": round(ind_f, 2),
-                    "_raw": {"a": ind_a, "b": ind_b, "c": ind_c, "f": ind_f},
-                    "_metrics": m
-                })
-                # Simulamos periodos demostrativos para 2do trimestre con base en datos reales
-                matriz_trimestral.append({
-                    "Unidad": unidad,
-                    "Trimestre": "SEGUNDO TRIMESTRE",
-                    "Cumplimiento u Oportunidad": round(min(100.0, ind_a * 1.02), 2),
-                    "Cobertura Oportuna": round(min(100.0, ind_b * 0.98), 2),
-                    "Consistencia": round(min(100.0, ind_c * 1.01), 2),
-                    "Calidad": round(min(100.0, ind_f * 1.01), 2),
-                    "_raw": {"a": ind_a, "b": ind_b, "c": ind_c, "f": ind_f},
-                    "_metrics": m
-                })
+                # Asignación estricta basada en la existencia real de semanas (sin simular)
+                for idx_t, trim_name in enumerate(trimestres):
+                    rango_min = (idx_t * 13) + 1
+                    rango_max = (idx_t + 1) * 13
+                    
+                    # Verificamos si hay semanas reportadas dentro del rango de este trimestre
+                    tiene_datos = any(rango_min <= sem <= rango_max for sem in semanas_int)
+                    
+                    if tiene_datos:
+                        val_a, val_b, val_c, val_f = round(ind_a, 2), round(ind_b, 2), round(ind_c, 2), round(ind_f, 2)
+                    else:
+                        val_a, val_b, val_c, val_f = 0.0, 0.0, 0.0, 0.0
+
+                    matriz_trimestral.append({
+                        "Unidad": unidad,
+                        "Trimestre": trim_name,
+                        "Cumplimiento u Oportunidad": val_a,
+                        "Cobertura Oportuna": val_b,
+                        "Consistencia": val_c,
+                        "Calidad": val_f,
+                        "_raw": {"a": val_a, "b": val_b, "c": val_c, "f": val_f},
+                        "_metrics": m
+                    })
 
             df_trimestral = pd.DataFrame(matriz_trimestral)
-
-            def get_bg_color(val, ind_type):
-                if ind_type == "a":
-                    if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                    elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type == "b":
-                    if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type == "c":
-                    if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                    elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                elif ind_type == "f":
-                    if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-                    elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
-                    elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
-                    else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-                return ''
 
             st.markdown("---")
             st.subheader("📊 Tabla General Integrada por Trimestres")
             
-            # Selector de trimestre para la tabla general
-            trim_gen_selected = st.selectbox("Seleccione el Trimestre para la Tabla General:", trimestres[:2]) # Habilitados 1 y 2 por el semestre
-            df_filtrado_gen = df_trimestral[df_trimestral["Trimestre"] == trim_gen_selected].drop(columns=["_raw", "_metrics", "Trimestre"])
+            opciones_trim_gen = ["TODOS LOS TRIMESTRES"] + trimestres
+            trim_gen_selected = st.selectbox("Seleccione el Trimestre para la Tabla General:", opciones_trim_gen)
             
-            st.dataframe(df_filtrado_gen, use_container_width=True)
+            if trim_gen_selected == "TODOS LOS TRIMESTRES":
+                df_filtrado_gen = df_trimestral.drop(columns=["_raw", "_metrics"])
+            else:
+                df_filtrado_gen = df_trimestral[df_trimestral["Trimestre"] == trim_gen_selected].drop(columns=["_raw", "_metrics", "Trimestre"])
+            
+            st.dataframe(df_filtrado_gen, use_container_width=True, hide_index=True)
 
             st.markdown("---")
             st.subheader("🏥 Tablas Detalladas por Unidad con Desglose Trimestral")
@@ -199,13 +184,15 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
             
-            selected_unit = st.selectbox("Seleccione una Unidad Médica para ver su comportamiento trimestral:", TARGET_UNITS)
+            opciones_unidades = ["TODAS LAS UNIDADES"] + TARGET_UNITS
+            selected_unit = st.selectbox("Seleccione una Unidad Médica (o todas) para ver su comportamiento trimestral:", opciones_unidades)
             
-            if selected_unit:
+            if selected_unit == "TODAS LAS UNIDADES":
+                st.markdown("### 📍 Todas las Unidades Médicas - Consolidado Trimestral")
+                st.dataframe(df_trimestral.drop(columns=["_raw", "_metrics"]), use_container_width=True, hide_index=True)
+            else:
                 unit_rows = df_trimestral[df_trimestral["Unidad"] == selected_unit]
                 st.markdown(f"### 📍 Unidad: **{selected_unit}**")
-                
-                # Tabla trimestral específica para la unidad seleccionada
                 tabla_unidad_trim = unit_rows[["Trimestre", "Cumplimiento u Oportunidad", "Cobertura Oportuna", "Consistencia", "Calidad"]]
                 st.dataframe(tabla_unidad_trim, use_container_width=True, hide_index=True)
 
@@ -214,9 +201,10 @@ if uploaded_file is not None:
             # -------------------------------------------------------------
             st.markdown("---")
             st.subheader("📑 Generación de Reporte Oficial en Word (Estructura Trimestral Exacta)")
-            st.info("Descarga el documento Word organizado estrictamente por trimestres (Primer y Segundo Trimestre con base en los datos cargados).")
+            st.info("Descarga el documento Word organizado estrictamente por trimestres (Los periodos sin datos detectados se generarán en ceros).")
 
             def get_hex_color(val, ind_type):
+                if val == 0.0: return "FFFFFF" # Blanco para ceros
                 if ind_type == "a":
                     if val == 100.0: return "10B981"
                     elif 97.5 <= val <= 99.9: return "FFFFFF"
@@ -247,9 +235,7 @@ if uploaded_file is not None:
                     section.left_margin = Inches(1)
                     section.right_margin = Inches(1)
                 
-                trimestres_lista = ["PRIMER TRIMESTRE", "SEGUNDO TRIMESTRE"]
-                
-                for idx_t, trimestre in enumerate(trimestres_lista):
+                for idx_t, trimestre in enumerate(trimestres):
                     if idx_t > 0:
                         doc.add_page_break()
                         
