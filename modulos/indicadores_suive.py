@@ -3,11 +3,6 @@ import pandas as pd
 import numpy as np
 import io
 
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-
 # Configuración de la página
 st.set_page_config(
     page_title="Sistema de Evaluación Epidemiológica - SUIVE",
@@ -15,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados sin tonos azules en elementos de evaluación
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #111827; font-weight: 700; margin-bottom: 0.2rem; }
@@ -34,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades, desglose por indicador y reporte oficial PDF</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
 
 # Lista completa de unidades operativas oficiales (excluyendo CMN 20 DE NOVIEMBRE)
 TARGET_UNITS = [
@@ -74,36 +69,6 @@ def get_bg_color(val, ind_type):
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
-
-def get_hex_color(val, ind_type):
-    if val is None or pd.isna(val):
-        return '#FFFFFF'
-    if ind_type == "a":
-        if val == 100.0: return '#10B981'
-        elif 97.5 <= val <= 99.9: return '#FFFFFF'
-        elif 95.0 <= val <= 97.4: return '#FEF08A'
-        else: return '#EF4444'
-    elif ind_type in ["b", "e"]:
-        if 95.0 <= val <= 100.0: return '#10B981'
-        elif 90.0 <= val <= 94.9: return '#FFFFFF'
-        elif 80.0 <= val <= 89.9: return '#FEF08A'
-        else: return '#EF4444'
-    elif ind_type == "c":
-        if 90.0 <= val <= 100.0: return '#10B981'
-        elif 80.0 <= val <= 89.9: return '#FFFFFF'
-        elif 70.0 <= val <= 79.9: return '#FEF08A'
-        else: return '#EF4444'
-    elif ind_type == "d":
-        if 0.0 <= val <= 1.9: return '#10B981'
-        elif 2.0 <= val <= 4.9: return '#FFFFFF'
-        elif 5.0 <= val <= 10.0: return '#FEF08A'
-        else: return '#EF4444'
-    elif ind_type == "f":
-        if 90.0 <= val <= 100.0: return '#10B981'
-        elif 80.0 <= val <= 89.9: return '#FFFFFF'
-        elif 60.0 <= val <= 79.9: return '#FEF08A'
-        else: return '#EF4444'
-    return '#FFFFFF'
 
 # Subir archivo Excel
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE", type=["xlsx", "xls"])
@@ -552,147 +517,7 @@ if uploaded_file is not None:
             </table>
             """, unsafe_allow_html=True)
 
-            # ==========================================
-            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF (VERTICAL) CON SEMAFORIZACIÓN
-            # ==========================================
-            st.markdown("---")
-            st.subheader("📑 Generación de Reporte Oficial en PDF")
-            st.info("Haz clic en el botón para descargar el reporte institucional en formato PDF vertical con colores y semaforización.")
-
-            def generar_pdf_reportlab():
-                buffer = io.BytesIO()
-                doc = SimpleDocTemplate(
-                    buffer,
-                    pagesize=letter,
-                    rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15
-                )
-                elements = []
-                styles = getSampleStyleSheet()
-
-                title_style = ParagraphStyle(
-                    'HeaderTitle', parent=styles['Normal'],
-                    fontName='Helvetica-Bold', fontSize=7.5, leading=9, alignment=1, textColor=colors.HexColor('#111827')
-                )
-                sub_title_style = ParagraphStyle(
-                    'SubHeaderTitle', parent=styles['Normal'],
-                    fontName='Helvetica-Bold', fontSize=8.5, leading=11, alignment=1, textColor=colors.black
-                )
-                meta_style = ParagraphStyle(
-                    'MetaText', parent=styles['Normal'],
-                    fontName='Helvetica-Bold', fontSize=7.5, leading=10
-                )
-
-                elements.append(Paragraph("REPRESENTACIÓN REGIONAL SUR", title_style))
-                elements.append(Paragraph("SUBDELEGACIÓN MÉDICA", title_style))
-                elements.append(Paragraph("DEPARTAMENTO DE ATENCIÓN MÉDICA", title_style))
-                elements.append(Paragraph("COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA", title_style))
-                elements.append(Spacer(1, 8))
-                
-                elements.append(Paragraph("INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)", sub_title_style))
-                elements.append(Spacer(1, 8))
-
-                meta_data = [
-                    [Paragraph(f"<b>INDICADOR EVALUADO:</b> {ind_label}", meta_style), Paragraph("<b>SEMANAS POR TRIMESTRE</b>", ParagraphStyle('BoxH', parent=title_style, textColor=colors.white))],
-                    [Paragraph(f"<b>AÑO:</b> {anio}", meta_style), Paragraph("<b>13</b>", ParagraphStyle('BoxV', parent=sub_title_style, fontSize=12, textColor=colors.white, alignment=1))],
-                    [Paragraph(f"<b>FECHA DE CORTE:</b> Semana {ultima_semana}", meta_style), ""]
-                ]
-                meta_table = Table(meta_data, colWidths=[380, 140])
-                meta_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('BACKGROUND', (1,0), (1,0), colors.HexColor('#374151')),
-                    ('BACKGROUND', (1,1), (1,1), colors.HexColor('#374151')),
-                    ('BOX', (1,0), (1,1), 1, colors.black),
-                ]))
-                elements.append(meta_table)
-                elements.append(Spacer(1, 10))
-
-                num_trim = len(bloques_semanas)
-                table_headers_1 = ["UNIDAD MÉDICA / TRIMESTRE", "SEMANAS NOTIFICADAS OPORTUNAMENTE"] + [""] * (num_trim - 1) + ["INDICADOR"] + [""] * (num_trim - 1)
-                
-                table_headers_2 = [""]
-                for t in bloques_semanas:
-                    table_headers_2.append(t[0].replace(" TRIMESTRE", ""))
-                for t in bloques_semanas:
-                    table_headers_2.append(t[0].replace(" TRIMESTRE", ""))
-
-                table_data = [table_headers_1, table_headers_2]
-
-                for unidad in TARGET_UNITS:
-                    row = [unidad]
-                    for t_name, _, _ in bloques_semanas:
-                        val_abs = trim_results_abs[t_name].get(unidad, np.nan)
-                        abs_str = f"{val_abs:.0f}" if pd.notna(val_abs) else "-"
-                        row.append(abs_str)
-                    for t_name, _, _ in bloques_semanas:
-                        val_ind = trim_results_ind[t_name].get(unidad, np.nan)
-                        ind_str = f"{val_ind:.2f}" if pd.notna(val_ind) else "-"
-                        row.append(ind_str)
-                    table_data.append(row)
-
-                del_row = ["DELEGACIONAL"]
-                for t_name, _, _ in bloques_semanas:
-                    del_row.append(min_row_abs[t_name])
-                for t_name, _, _ in bloques_semanas:
-                    del_row.append(min_row_ind[t_name])
-                table_data.append(del_row)
-
-                t_style = [
-                    ('SPAN', (1, 0), (num_trim, 0)),
-                    ('SPAN', (num_trim + 1, 0), (num_trim * 2, 0)),
-                    ('BACKGROUND', (0,0), (-1,1), colors.HexColor('#374151')),
-                    ('TEXTCOLOR', (0,0), (-1,1), colors.white),
-                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                    ('FONTNAME', (0,0), (-1,1), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0,0), (-1,-1), 7),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-                    ('TOPPADDING', (0,0), (-1,-1), 3),
-                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#444444')),
-                    ('BACKGROUND', (0,2), (0,-2), colors.HexColor('#374151')),
-                    ('TEXTCOLOR', (0,2), (0,-2), colors.white),
-                    ('FONTNAME', (0,2), (0,-2), 'Helvetica-Bold'),
-                    ('ALIGN', (0,2), (0,-2), 'LEFT'),
-                    ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#374151')),
-                    ('TEXTCOLOR', (0,-1), (-1,-1), colors.white),
-                    ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-                ]
-
-                # Aplicar semaforización de colores en el PDF para la sección de indicadores con colores correctos
-                for t_idx, (t_name, _, _) in enumerate(bloques_semanas):
-                    c_ind = num_trim + 1 + t_idx
-                    for row_idx in range(2, len(table_data)):
-                        val_str = table_data[row_idx][c_ind]
-                        if val_str != "-":
-                            try:
-                                v_float = float(val_str)
-                                hex_c = get_hex_color(v_float, ind_key)
-                                # Color de texto legible: blanco para verde y rojo, negro para amarillo y blanco
-                                txt_c = colors.white if hex_c in ["#10B981", "#EF4444"] else colors.black
-                                t_style.append(('BACKGROUND', (c_ind, row_idx), (c_ind, row_idx), colors.HexColor(hex_c)))
-                                t_style.append(('TEXTCOLOR', (c_ind, row_idx), (c_ind, row_idx), txt_c))
-                            except ValueError:
-                                pass
-
-                col_widths = [140] + [55] * (num_trim * 2)
-                main_table = Table(table_data, colWidths=col_widths, repeatRows=2)
-                main_table.setStyle(TableStyle(t_style))
-                elements.append(main_table)
-                elements.append(Spacer(1, 8))
-
-                elements.append(Paragraph(f"Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.", ParagraphStyle('FText', fontName='Helvetica-Oblique', fontSize=6.5, textColor=colors.HexColor('#555555'))))
-                
-                doc.build(elements)
-                buffer.seek(0)
-                return buffer
-
-            pdf_buffer = generar_pdf_reportlab()
-            st.download_button(
-                label="📥 Descargar Reporte Oficial en PDF",
-                data=pdf_buffer,
-                file_name=f"Reporte_SUAVE_{ind_label.replace(' ', '_')}.pdf",
-                mime="application/pdf"
-            )
-
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
 else:
-    st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis y habilitar los reportes.")
+    st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis.")
