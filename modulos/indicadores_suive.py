@@ -54,8 +54,9 @@ def get_bg_color(val, ind_type):
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
+        # Umbrales específicos para Consistencia (c) según acotación estándar
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "d":
@@ -80,7 +81,6 @@ if uploaded_file is not None:
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "REPRESENTACIÓN REGIONAL SUR"
         anio = int(df.iloc[1, 1]) if df.shape[0] > 1 and df.shape[1] > 1 and str(df.iloc[1, 1]).isdigit() else 2024
         
-        # Mapeo estricto de columnas y números de periodos/días desde la fila 5 (índice 4)
         semanas_info = [] 
         if df.shape[0] > 4:
             for col_idx in range(1, df.shape[1] - 1):
@@ -123,7 +123,6 @@ if uploaded_file is not None:
                     metric_name = v_str
                     unit_rows_map[active_unit][metric_name] = row
 
-        # Conversor de letras de columnas a índices numéricos (A=0, B=1, etc.)
         def col_to_idx(col_str):
             col_str = col_str.upper()
             idx = 0
@@ -138,7 +137,6 @@ if uploaded_file is not None:
             ("CUARTO TRIMESTRE", col_to_idx("AO"), col_to_idx("BA"))
         ]
 
-        # Validar cuáles trimestres tienen datos reales
         bloques_semanas = []
         max_col_excel = df.shape[1] - 1
         for t_name, start_col, end_col in todos_bloques:
@@ -146,7 +144,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base unificado: Semanas/Días Notificadas Oportunamente (Valores Absolutos)
+        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -168,7 +166,7 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A para todos los trimestres disponibles
+        # Pre-cálculo de Indicador A
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -179,6 +177,39 @@ if uploaded_file is not None:
                 else:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
+
+        # Pre-cálculo de Indicador C con la nueva lógica de consistencia
+        trim_results_ind_c = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_c = {}
+            for unidad in TARGET_UNITS:
+                m_rows = unit_rows_map.get(unidad, {})
+                row_casos = m_rows.get("Unidades con casos oportunos", None)
+                semanas_valores = []
+                if row_casos is not None:
+                    for c_idx in range(start_col, end_col + 1):
+                        if c_idx < len(row_casos) and pd.notna(row_casos[c_idx]):
+                            try:
+                                semanas_valores.append(float(row_casos[c_idx]))
+                            except ValueError:
+                                pass
+                
+                if len(semanas_valores) > 0:
+                    arr_vals = np.array(semanas_valores)
+                    prom = np.mean(arr_vals)
+                    med = np.median(arr_vals)
+                    val_max_ref = max(prom, med)
+                    
+                    lim_inf = 0.75 * val_max_ref
+                    lim_sup = 1.25 * val_max_ref
+                    
+                    semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
+                    total_sem = len(semanas_valores)
+                    val_ind = (semanas_consistentes / total_sem) * 100 if total_sem > 0 else 0.0
+                    t_vals_c[unidad] = round(val_ind, 2)
+                else:
+                    t_vals_c[unidad] = np.nan
+            trim_results_ind_c[t_name] = t_vals_c
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -223,12 +254,15 @@ if uploaded_file is not None:
                     m_rows = unit_rows_map.get(unidad, {})
                     
                     val_a_estatico = np.nan
+                    val_c_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
+                        val_c_estatico = trim_results_ind_c[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
-                        vals_trim = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
-                        if vals_trim:
-                            val_a_estatico = round(sum(vals_trim) / len(vals_trim), 2)
+                        vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
+                        vals_trim_c = [trim_results_ind_c[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_c[t[0]].get(unidad, np.nan))]
+                        if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
+                        if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -258,17 +292,17 @@ if uploaded_file is not None:
 
                     ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
                     ind_b = "NO APLICA"
-                    ind_c = ind_a
+                    ind_c = val_c_estatico if pd.notna(val_c_estatico) else ind_a
                     ind_d = round((u_sin_notificar / base_hab) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
-                    ind_e = round(max(0.0, 100.0 - excedente_rsm), 2) # Cobertura ajustada base
+                    ind_e = round(max(0.0, 100.0 - excedente_rsm), 2)
                     ind_f = "NO APLICA"
 
                     results.append({
                         "Unidad": unidad,
                         "a": ind_a if pd.notna(ind_a) else None,
                         "b": ind_b,
-                        "c": ind_c,
+                        "c": ind_c if pd.notna(ind_c) else None,
                         "d": ind_d,
                         "e": ind_e,
                         "f": ind_f
@@ -360,7 +394,7 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad"
 
-            # CASO ESPECIAL PARA EL INDICADOR B: Sumatoria vertical por columna/día (denominador fijo 15)
+            # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -405,7 +439,7 @@ if uploaded_file is not None:
                     
                     def style_semanal(row_data):
                         styles = [''] * len(row_data)
-                        if row_data.name == 1:  # Fila de indicador
+                        if row_data.name == 1:
                             for i, col_name in enumerate(row_data.index):
                                 if i > 0:
                                     val = row_data.iloc[i]
@@ -421,7 +455,6 @@ if uploaded_file is not None:
                     st.dataframe(styled_sem, use_container_width=True, hide_index=True)
                     st.markdown("---")
 
-                # Acotación específica para el Indicador b (Cobertura Oportuna)
                 st.markdown(f"""
                 <table class="acotacion-table">
                     <tr>
@@ -442,7 +475,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA ESTÁNDAR PARA LOS DEMÁS INDICADORES (a, c, f)
+                # ESTRUCTURA PARA A, C, F (USANDO TRIM_RESULTS_IND_C PARA C)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -450,25 +483,6 @@ if uploaded_file is not None:
                     t_vals_ind = {}
                     t_vals_abs = {}
                     for unidad in TARGET_UNITS:
-                        m_rows = unit_rows_map.get(unidad, {})
-                        
-                        def get_ab_val(metric_key):
-                            r = m_rows.get(metric_key, None)
-                            if r is not None:
-                                for col_idx in range(len(r) - 1, 0, -1):
-                                    val_celda = r[col_idx]
-                                    try:
-                                        if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                            return float(val_celda)
-                                    except ValueError:
-                                        continue
-                            return 0.0
-
-                        u_oportunas = get_ab_val("Unidades con casos oportunos")
-                        u_habilitadas = get_ab_val("Unidades habilitadas")
-                        if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
-                        base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
-
                         num_oportunas = abs_results[t_name].get(unidad, None)
                         if num_oportunas is None:
                             t_vals_abs[unidad] = np.nan
@@ -480,13 +494,27 @@ if uploaded_file is not None:
                         if ind_key == "a":
                             val_ind = (num_oportunas / 13.0) * 100
                         elif ind_key == "c":
-                            val_ind = (num_oportunas / 13.0) * 100
+                            val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
                         else: # Calidad (f)
+                            m_rows = unit_rows_map.get(unidad, {})
+                            def get_ab_val(metric_key):
+                                r = m_rows.get(metric_key, None)
+                                if r is not None:
+                                    for col_idx in range(len(r) - 1, 0, -1):
+                                        val_celda = r[col_idx]
+                                        try:
+                                            if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                                return float(val_celda)
+                                        except ValueError:
+                                            continue
+                                return 0.0
+                            u_oportunas = get_ab_val("Unidades con casos oportunos")
+                            base_hab = 15.0
                             ind_a_temp = (num_oportunas / 13.0) * 100
                             ind_b_temp = (u_oportunas / base_hab) * 100
                             val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
-                        t_vals_ind[unidad] = round(val_ind, 2)
+                        t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
                         
                     trim_results_abs[t_name] = t_vals_abs
                     trim_results_ind[t_name] = t_vals_ind
