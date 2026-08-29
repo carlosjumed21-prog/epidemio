@@ -269,57 +269,6 @@ if uploaded_file is not None:
             }
 
         # ==========================================
-        # TABLA DE SCORE DELEGACIONAL (RESUMEN EJECUTIVO POR TRIMESTRE)
-        # ==========================================
-        st.markdown("---")
-        st.subheader("🏆 Score Delegacional (Resumen Ejecutivo)")
-
-        score_rows = []
-        # Definimos los indicadores a resumir en el score delegacional
-        indicadores_score = [
-            ("a) Cumplimiento u Oportunidad (%)", "a"),
-            ("c) Consistencia (%)", "c"),
-            ("f) Calidad (Descriptivo) (%)", "f")
-        ]
-
-        for ind_label_sc, ind_code in indicadores_score:
-            fila_sc = {"INDICADOR": ind_label_sc}
-            for t_name, _, _ in bloques_semanas:
-                if ind_code == "a":
-                    vals = [trim_results_ind_a[t_name].get(u, np.nan) for u in TARGET_UNITS]
-                    valid_vals = [v for v in vals if pd.notna(v)]
-                    fila_sc[t_name] = max(valid_vals) if valid_vals else np.nan
-                elif ind_code == "c":
-                    vals = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
-                    valid_vals = [v for v in vals if pd.notna(v)]
-                    fila_sc[t_name] = max(valid_vals) if valid_vals else np.nan
-                elif ind_code == "f":
-                    val_f = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
-                    fila_sc[t_name] = val_f
-            score_rows.append(fila_sc)
-
-        df_score = pd.DataFrame(score_rows)
-
-        def style_score_table(row_data):
-            styles = [''] * len(row_data)
-            idx = row_data.name
-            ind_code_map = {0: "a", 1: "c", 2: "f"}
-            itype = ind_code_map.get(idx, "a")
-            for i, col_name in enumerate(row_data.index):
-                if col_name != "INDICADOR":
-                    val = row_data.iloc[i]
-                    if pd.notna(val):
-                        styles[i] = get_bg_color(val, itype)
-            return styles
-
-        styled_score = df_score.style.format(
-            formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
-            subset=[col for col in df_score.columns if col != "INDICADOR"]
-        ).apply(style_score_table, axis=1)
-
-        st.dataframe(styled_score, use_container_width=True, hide_index=True)
-
-        # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 4 INDICADORES ACTIVOS: a, b, c, f)
         # ==========================================
         st.markdown("---")
@@ -557,7 +506,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con su fila Delegacional de Valor Máximo
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -694,7 +643,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) con fila Delegacional de Valor Máximo
+                # ESTRUCTURA PARA A (Cumplimiento) - Con su fila Delegacional de Valor Máximo
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
