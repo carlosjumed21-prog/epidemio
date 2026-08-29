@@ -100,14 +100,23 @@ if uploaded_file is not None:
                 idx = idx * 26 + (ord(char) - ord('A') + 1)
             return idx - 1
 
-        bloques_semanas = [
+        todos_bloques = [
             ("PRIMER TRIMESTRE", col_to_idx("B"), col_to_idx("N")),
             ("SEGUNDO TRIMESTRE", col_to_idx("O"), col_to_idx("AA")),
             ("TERCER TRIMESTRE", col_to_idx("AB"), col_to_idx("AN")),
             ("CUARTO TRIMESTRE", col_to_idx("AO"), col_to_idx("BA"))
         ]
 
-        # 1. Cálculo base unificado: Semanas Notificadas Oportunamente (Valores Absolutos)
+        # Validar cuáles trimestres tienen datos reales según las semanas detectadas en el archivo
+        bloques_semanas = []
+        max_col_excel = df.shape[1] - 1
+        for t_name, start_col, end_col in todos_bloques:
+            # Verificamos si al menos una columna de este bloque existe en el Excel y tiene número de semana válido
+            columnas_validas_en_bloque = [c for c in range(start_col, end_col + 1) if c <= max_col_excel and any(c == s[0] for s in semanas_info)]
+            if len(columnas_validas_en_bloque) > 0:
+                bloques_semanas.append((t_name, start_col, end_col))
+
+        # Cálculo base unificado: Semanas Notificadas Oportunamente (Valores Absolutos) solo para trimestres con datos
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -115,18 +124,22 @@ if uploaded_file is not None:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                 suma_bloque = 0.0
+                tiene_datos_bloque = False
                 if row_casos_oportunos is not None:
                     for c_idx in range(start_col, end_col + 1):
                         if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
                             try:
-                                suma_bloque += float(row_casos_oportunos[c_idx])
+                                val_c = float(row_casos_oportunos[c_idx])
+                                suma_bloque += val_c
+                                if val_c > 0:
+                                    tiene_datos_bloque = True
                             except ValueError:
                                 pass
-                t_vals[unidad] = suma_bloque
+                t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
         def get_bg_color(val, ind_type):
-            if val is None:
+            if val is None or pd.isna(val):
                 return ''
             
             if ind_type == "a":
@@ -157,224 +170,11 @@ if uploaded_file is not None:
             return ''
 
         # ==========================================
-        # 1. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (PRIMERO EN LA VISTA)
-        # ==========================================
-        st.markdown("---")
-        st.subheader("📈 Análisis Desglosado por Indicador")
-        
-        indicador_seleccionado = st.selectbox(
-            "Habilite el indicador a analizar:",
-            [
-                "",
-                "CUMPLIMIENTO U OPORTUNIDAD (a)",
-                "COBERTURA OPORTUNA (b)",
-                "CONSISTENCIA (c)",
-                "CALIDAD (f)"
-            ],
-            index=0,
-            key="sel_indicador"
-        )
-        
-        if indicador_seleccionado and indicador_seleccionado != "":
-            if "CUMPLIMIENTO" in indicador_seleccionado:
-                ind_key = "a"
-                ind_label = "Cumplimiento u Oportunidad"
-            elif "COBERTURA" in indicador_seleccionado:
-                ind_key = "b"
-                ind_label = "Cobertura Oportuna"
-            elif "CONSISTENCIA" in indicador_seleccionado:
-                ind_key = "c"
-                ind_label = "Consistencia"
-            else:
-                ind_key = "f"
-                ind_label = "Calidad"
-
-            trim_results = {}
-            for t_name, _, _ in bloques_semanas:
-                t_vals_ind = {}
-                for unidad in TARGET_UNITS:
-                    m_rows = unit_rows_map.get(unidad, {})
-                    
-                    def get_ab_val(metric_key):
-                        r = m_rows.get(metric_key, None)
-                        if r is not None:
-                            for col_idx in range(len(r) - 1, 0, -1):
-                                val_celda = r[col_idx]
-                                try:
-                                    if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                        return float(val_celda)
-                                except ValueError:
-                                    continue
-                        return 0.0
-
-                    u_oportunas = get_ab_val("Unidades con casos oportunos")
-                    u_habilitadas = get_ab_val("Unidades habilitadas")
-                    if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
-                    u_sin_notificar = get_ab_val("Unidades sin notificar")
-                    base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
-
-                    # Para el indicador a), tomamos directamente el valor de la tabla de Semanas Notificadas Oportunamente / 13 * 100
-                    if ind_key == "a":
-                        num_oportunas = abs_results[t_name].get(unidad, 0.0)
-                        val_ind = (num_oportunas / 13.0) * 100
-                    elif ind_key == "b":
-                        val_ind = (u_oportunas / base_hab) * 100
-                    elif ind_key == "c":
-                        num_oportunas = abs_results[t_name].get(unidad, 0.0)
-                        val_ind = (num_oportunas / 13.0) * 100
-                    else: # Calidad (f)
-                        num_oportunas = abs_results[t_name].get(unidad, 0.0)
-                        ind_a_temp = (num_oportunas / 13.0) * 100
-                        ind_b_temp = (u_oportunas / base_hab) * 100
-                        val_ind = (ind_b_temp + ind_a_temp) / 2.0
-
-                    t_vals_ind[unidad] = round(val_ind, 2)
-                trim_results[t_name] = t_vals_ind
-
-            tabla_data = []
-            for unidad in TARGET_UNITS:
-                fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
-                for t_name, _, _ in bloques_semanas:
-                    fila[t_name] = trim_results[t_name].get(unidad, 0.0)
-                tabla_data.append(fila)
-
-            df_ind = pd.DataFrame(tabla_data)
-
-            st.markdown(f"**INDICADOR EVALUADO:** {ind_label.upper()}")
-            st.markdown(f"**AÑO:** {anio}")
-            st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
-
-            st.markdown("""
-            <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; padding: 10px; border-radius: 4px; margin-bottom: 15px; width: 250px;">
-                <b>SEMANAS POR TRIMESTRE:</b> 13
-            </div>
-            """, unsafe_allow_html=True)
-
-            multi_cols_ind = pd.MultiIndex.from_tuples([
-                ("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"),
-                ("INDICADOR", "PRIMER TRIMESTRE"),
-                ("INDICADOR", "SEGUNDO TRIMESTRE"),
-                ("INDICADOR", "TERCER TRIMESTRE"),
-                ("INDICADOR", "CUARTO TRIMESTRE")
-            ])
-            df_ind.columns = multi_cols_ind
-
-            def style_indicator_table(row_data):
-                styles = [''] * len(row_data)
-                for i, col_name in enumerate(row_data.index):
-                    if i > 0:
-                        val = row_data.iloc[i]
-                        if pd.notna(val):
-                            styles[i] = get_bg_color(val, ind_key)
-                return styles
-
-            styled_ind_table = df_ind.style.format(formatter="{:.2f}", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
-            st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
-
-            # Mini tabla delegacional inferior
-            st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
-            
-            min_row = {}
-            for t_name, _, _ in bloques_semanas:
-                vals = [trim_results[t_name][u] for u in TARGET_UNITS]
-                min_val = min(vals) if vals else 0.0
-                min_row[t_name] = f"{min_val:.2f}%"
-
-            delegacional_data = [{
-                "DELEGACIONAL": "Mínimo Registrado",
-                "PRIMER TRIMESTRE": min_row["PRIMER TRIMESTRE"],
-                "SEGUNDO TRIMESTRE": min_row["SEGUNDO TRIMESTRE"],
-                "TERCER TRIMESTRE": min_row["TERCER TRIMESTRE"],
-                "CUARTO TRIMESTRE": min_row["CUARTO TRIMESTRE"]
-            }]
-            df_del = pd.DataFrame(delegacional_data)
-            
-            def style_delegational(row_data):
-                styles = [''] * len(row_data)
-                t_keys = ["PRIMER TRIMESTRE", "SEGUNDO TRIMESTRE", "TERCER TRIMESTRE", "CUARTO TRIMESTRE"]
-                for i, col_name in enumerate(row_data.index):
-                    if col_name in t_keys:
-                        raw_str = row_data[col_name]
-                        clean_val = float(raw_str.replace("%", ""))
-                        styles[i] = get_bg_color(clean_val, ind_key)
-                return styles
-
-            styled_del = df_del.style.apply(style_delegational, axis=1)
-            st.dataframe(styled_del, use_container_width=True, hide_index=True)
-
-            # Acotación colocada en la parte inferior
-            st.markdown(f"""
-            <table class="acotacion-table">
-                <tr>
-                    <th>Indicador</th>
-                    <th>Excelente</th>
-                    <th>Bueno</th>
-                    <th>Regular</th>
-                    <th>Malo</th>
-                </tr>
-                <tr>
-                    <td><b>{ind_label}</b></td>
-                    <td class="bg-excelente">100%</td>
-                    <td class="bg-bueno">97.5 - 99.9%</td>
-                    <td class="bg-regular">95.0 - 97.4%</td>
-                    <td class="bg-malo">≤ 94.9%</td>
-                </tr>
-            </table>
-            """, unsafe_allow_html=True)
-
-        # ==========================================
-        # 2. APARTADO DE SEMANAS NOTIFICADAS OPORTUNAMENTE (ABSOLUTAS)
-        # ==========================================
-        st.markdown("---")
-        st.subheader("📊 Semanas Notificadas Oportunamente (Valores Absolutos por Trimestre)")
-        
-        tabla_abs_data = []
-        for unidad in TARGET_UNITS:
-            fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
-            for t_name, _, _ in bloques_semanas:
-                fila[t_name] = abs_results[t_name].get(unidad, 0.0)
-            tabla_abs_data.append(fila)
-
-        df_abs = pd.DataFrame(tabla_abs_data)
-
-        st.markdown(f"**SEMANAS NOTIFICADAS OPORTUNAMENTE 2024:** {anio}")
-        st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
-
-        multi_cols_abs = pd.MultiIndex.from_tuples([
-            ("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"),
-            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "PRIMER TRIMESTRE"),
-            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "SEGUNDO TRIMESTRE"),
-            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "TERCER TRIMESTRE"),
-            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "CUARTO TRIMESTRE")
-        ])
-        df_abs.columns = multi_cols_abs
-
-        st.dataframe(df_abs.style.format(formatter="{:.0f}", subset=df_abs.columns[1:]), use_container_width=True, hide_index=True, height=580)
-
-        # ==========================================
-        # 3. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
+        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
         # ==========================================
         st.markdown("---")
         st.subheader("🗓️ Selección de Periodo / Trimestre (Panorama General)")
         
-        def get_indices_semanas(opcion_periodo):
-            if not opcion_periodo:
-                return [], ""
-            if "1er Trimestre" in opcion_periodo or "Primer" in opcion_periodo:
-                indices = [item[0] for item in semanas_info if 1 <= item[1] <= 13]
-                etiqueta = "1er Trimestre (Sem. 1-13)"
-            elif "2º Trimestre" in opcion_periodo or "Segundo" in opcion_periodo:
-                indices = [item[0] for item in semanas_info.items() if False] # Placeholder
-                etiqueta = "2º Trimestre (Sem. 14-26)"
-            elif "3er Trimestre" in opcion_periodo or "Tercer" in opcion_periodo:
-                etiqueta = "3er Trimestre (Sem. 27-39)"
-            elif "4º Trimestre" in opcion_periodo or "Cuarto" in opcion_periodo:
-                etiqueta = "4º Trimestre (Sem. 40-52)"
-            else:
-                indices = [item[0] for item in semanas_info]
-                etiqueta = "Total"
-            return indices, etiqueta
-
         trimestre_opcion_gen = st.selectbox(
             "Seleccione el periodo general a analizar:",
             [
@@ -390,14 +190,52 @@ if uploaded_file is not None:
         )
         
         if trimestre_opcion_gen:
+            def get_indices_semanas(opcion_periodo):
+                if not opcion_periodo:
+                    return [], ""
+                if "1er Trimestre" in opcion_periodo or "Primer" in opcion_periodo:
+                    indices = [item[0] for item in semanas_info if 1 <= item[1] <= 13]
+                    etiqueta = "1er Trimestre (Sem. 1-13)"
+                elif "2º Trimestre" in opcion_periodo or "Segundo" in opcion_periodo:
+                    indices = [item[0] for item in semanas_info if 13 < item[1] <= 26]
+                    etiqueta = "2º Trimestre (Sem. 14-26)"
+                elif "3er Trimestre" in opcion_periodo or "Tercer" in opcion_periodo:
+                    indices = [item[0] for item in semanas_info if 26 < item[1] <= 39]
+                    etiqueta = "3er Trimestre (Sem. 27-39)"
+                elif "4º Trimestre" in opcion_periodo or "Cuarto" in opcion_periodo:
+                    indices = [item[0] for item in semanas_info if 39 < item[1] <= 52]
+                    etiqueta = "4º Trimestre (Sem. 40-52)"
+                else:
+                    indices = [item[0] for item in semanas_info]
+                    etiqueta = "Total"
+                return indices, etiqueta
+
+            indices_gen, etiqueta_gen = get_indices_semanas(trimestre_opcion_gen)
+
             def calcular_resultados_periodo_gen(cols_indices, total_sem_bloque):
                 results = []
                 for unidad in TARGET_UNITS:
                     m_rows = unit_rows_map.get(unidad, {})
                     row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                     suma_casos_oportunos = 0.0
+                    tiene_datos = False
                     if row_casos_oportunos is not None and len(cols_indices) > 0:
-                        suma_casos_oportunos = sum([float(row_casos_oportunos[c]) for c in cols_indices if pd.notna(row_casos_oportunos[c])])
+                        for c in cols_indices:
+                            if pd.notna(row_casos_oportunos[c]):
+                                try:
+                                    val_c = float(row_casos_oportunos[c])
+                                    suma_casos_oportunos += val_c
+                                    if val_c > 0:
+                                        tiene_datos = True
+                                except ValueError:
+                                    pass
+
+                    if not tiene_datos and trimestre_opcion_gen != "Total":
+                        # Si no hay datos en este periodo, retornamos None para no falsear ceros
+                        results.append({
+                            "Unidad": unidad, "a": None, "b": None, "c": None, "d": None, "e": None, "f": None
+                        })
+                        continue
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -437,17 +275,6 @@ if uploaded_file is not None:
                         "f": round(ind_f, 2)
                     })
                 return results
-
-            if "1er" in trimestre_opcion_gen:
-                indices_gen, etiqueta_gen = [item[0] for item in semanas_info if 1 <= item[1] <= 13], "1er Trimestre (Sem. 1-13)"
-            elif "2º" in trimestre_opcion_gen:
-                indices_gen, etiqueta_gen = [item[0] for item in semanas_info if 13 < item[1] <= 26], "2º Trimestre (Sem. 14-26)"
-            elif "3er" in trimestre_opcion_gen:
-                indices_gen, etiqueta_gen = [item[0] for item in semanas_info if 26 < item[1] <= 39], "3er Trimestre (Sem. 27-39)"
-            elif "4º" in trimestre_opcion_gen:
-                indices_gen, etiqueta_gen = [item[0] for item in semanas_info if 39 < item[1] <= 52], "4º Trimestre (Sem. 40-52)"
-            else:
-                indices_gen, etiqueta_gen = [item[0] for item in semanas_info], "Total"
 
             raw_gen_res = calcular_resultados_periodo_gen(indices_gen, 13.0)
             
@@ -497,9 +324,204 @@ if uploaded_file is not None:
                 (etiqueta_gen, "f) Calidad (Descriptivo) (%)")
             ])
             display_df.columns = multi_columns
-            styled_general = display_df.style.format(formatter="{:.2f}", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
+            styled_general = display_df.style.format(formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
             
             st.dataframe(styled_general, use_container_width=True, height=580)
+
+        # ==========================================
+        # 2. APARTADO DE SEMANAS NOTIFICADAS OPORTUNAMENTE (ABSOLUTAS) - SOLO TRIMESTRES ACTIVOS
+        # ==========================================
+        st.markdown("---")
+        st.subheader("📊 Semanas Notificadas Oportunamente (Valores Absolutos por Trimestre)")
+        
+        tabla_abs_data = []
+        for unidad in TARGET_UNITS:
+            fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
+            for t_name, start_col, end_col in bloques_semanas:
+                val = abs_results[t_name].get(unidad, None)
+                fila[t_name] = val if val is not None and val > 0 else np.nan
+            tabla_abs_data.append(fila)
+
+        df_abs = pd.DataFrame(tabla_abs_data)
+
+        st.markdown(f"**SEMANAS NOTIFICADAS OPORTUNAMENTE 2024:** {anio}")
+        st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+
+        # Dinámica de MultiIndex solo con los trimestres que tienen datos reales
+        abs_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+        for t_name, _, _ in bloques_semanas:
+            abs_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", t_name))
+
+        multi_cols_abs = pd.MultiIndex.from_tuples(abs_tuples)
+        df_abs.columns = multi_cols_abs
+
+        st.dataframe(df_abs.style.format(formatter=lambda x: f"{x:.0f}" if pd.notna(x) else "-", subset=df_abs.columns[1:]), use_container_width=True, hide_index=True, height=580)
+
+        # ==========================================
+        # 3. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR - SOLO TRIMESTRES ACTIVOS
+        # ==========================================
+        st.markdown("---")
+        st.subheader("📈 Análisis Desglosado por Indicador")
+        
+        indicador_seleccionado = st.selectbox(
+            "Habilite el indicador a analizar:",
+            [
+                "",
+                "CUMPLIMIENTO U OPORTUNIDAD (a)",
+                "COBERTURA OPORTUNA (b)",
+                "CONSISTENCIA (c)",
+                "CALIDAD (f)"
+            ],
+            index=0,
+            key="sel_indicador"
+        )
+        
+        if indicador_seleccionado and indicador_seleccionado != "":
+            if "CUMPLIMIENTO" in indicador_seleccionado:
+                ind_key = "a"
+                ind_label = "Cumplimiento u Oportunidad"
+            elif "COBERTURA" in indicador_seleccionado:
+                ind_key = "b"
+                ind_label = "Cobertura Oportuna"
+            elif "CONSISTENCIA" in indicador_seleccionado:
+                ind_key = "c"
+                ind_label = "Consistencia"
+            else:
+                ind_key = "f"
+                ind_label = "Calidad"
+
+            trim_results = {}
+            for t_name, start_col, end_col in bloques_semanas:
+                t_vals_ind = {}
+                for unidad in TARGET_UNITS:
+                    m_rows = unit_rows_map.get(unidad, {})
+                    
+                    def get_ab_val(metric_key):
+                        r = m_rows.get(metric_key, None)
+                        if r is not None:
+                            for col_idx in range(len(r) - 1, 0, -1):
+                                val_celda = r[col_idx]
+                                try:
+                                    if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                        return float(val_celda)
+                                except ValueError:
+                                    continue
+                        return 0.0
+
+                    u_oportunas = get_ab_val("Unidades con casos oportunos")
+                    u_habilitadas = get_ab_val("Unidades habilitadas")
+                    if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
+                    base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
+
+                    num_oportunas = abs_results[t_name].get(unidad, None)
+                    if num_oportunas is None:
+                        t_vals_ind[unidad] = np.nan
+                        continue
+
+                    if ind_key == "a":
+                        val_ind = (num_oportunas / 13.0) * 100
+                    elif ind_key == "b":
+                        val_ind = (u_oportunas / base_hab) * 100
+                    elif ind_key == "c":
+                        val_ind = (num_oportunas / 13.0) * 100
+                    else: # Calidad (f)
+                        ind_a_temp = (num_oportunas / 13.0) * 100
+                        ind_b_temp = (u_oportunas / base_hab) * 100
+                        val_ind = (ind_b_temp + ind_a_temp) / 2.0
+
+                    t_vals_ind[unidad] = round(val_ind, 2)
+                trim_results[t_name] = t_vals_ind
+
+            tabla_data = []
+            for unidad in TARGET_UNITS:
+                fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
+                for t_name, _, _ in bloques_semanas:
+                    fila[t_name] = trim_results[t_name].get(unidad, np.nan)
+                tabla_data.append(fila)
+
+            df_ind = pd.DataFrame(tabla_data)
+
+            st.markdown(f"**INDICADOR EVALUADO:** {ind_label.upper()}")
+            st.markdown(f"**AÑO:** {anio}")
+            st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+
+            st.markdown("""
+            <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; padding: 10px; border-radius: 4px; margin-bottom: 15px; width: 250px;">
+                <b>SEMANAS POR TRIMESTRE:</b> 13
+            </div>
+            """, unsafe_allow_html=True)
+
+            ind_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+            for t_name, _, _ in bloques_semanas:
+                ind_tuples.append(("INDICADOR", t_name))
+
+            multi_cols_ind = pd.MultiIndex.from_tuples(ind_tuples)
+            df_ind.columns = multi_cols_ind
+
+            def style_indicator_table(row_data):
+                styles = [''] * len(row_data)
+                for i, col_name in enumerate(row_data.index):
+                    if i > 0:
+                        val = row_data.iloc[i]
+                        if pd.notna(val):
+                            styles[i] = get_bg_color(val, ind_key)
+                return styles
+
+            styled_ind_table = df_ind.style.format(formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
+            st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
+
+            # Mini tabla delegacional inferior (solo para trimestres activos)
+            st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
+            
+            min_row = {}
+            for t_name, _, _ in bloques_semanas:
+                vals = [trim_results[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results[t_name][u])]
+                if vals:
+                    min_val = min(vals)
+                    min_row[t_name] = f"{min_val:.2f}%"
+                else:
+                    min_row[t_name] = "-"
+
+            delegacional_dict = {"DELEGACIONAL": "Mínimo Registrado"}
+            for t_name, _, _ in bloques_semanas:
+                delegacional_dict[t_name] = min_row[t_name]
+
+            df_del = pd.DataFrame([delegacional_dict])
+            
+            def style_delegational(row_data):
+                styles = [''] * len(row_data)
+                for i, col_name in enumerate(row_data.index):
+                    raw_str = row_data[col_name]
+                    if raw_str != "-" and raw_str != "Mínimo Registrado":
+                        try:
+                            clean_val = float(raw_str.replace("%", ""))
+                            styles[i] = get_bg_color(clean_val, ind_key)
+                        except ValueError:
+                            pass
+                return styles
+
+            styled_del = df_del.style.apply(style_delegational, axis=1)
+            st.dataframe(styled_del, use_container_width=True, hide_index=True)
+
+            # Acotación colocada en la parte inferior
+            st.markdown(f"""
+            <table class="acotacion-table">
+                <tr>
+                    <th>Indicador</th>
+                    <th>Excelente</th>
+                    <th>Bueno</th>
+                    <th>Regular</th>
+                    <th>Malo</th>
+                </tr>
+                <tr>
+                    <td><b>{ind_label}</b></td>
+                    <td class="bg-excelente">100%</td>
+                    <td class="bg-bueno">97.5 - 99.9%</td>
+                    <td class="bg-regular">95.0 - 97.4%</td>
+                    <td class="bg-malo">≤ 94.9%</td>
+                </tr>
+            </table>
+            """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
