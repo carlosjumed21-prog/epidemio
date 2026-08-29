@@ -5,12 +5,12 @@ import io
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Sistema de Evaluación Epidemiológica - SUIVE",
+    page_title="Sistema de Evaluación Epidemiológica - SUAVE / SUIVE",
     page_icon="📊",
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
+# Estilos CSS personalizados
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #111827; font-weight: 700; margin-bottom: 0.2rem; }
@@ -168,7 +168,7 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A para todos los trimestres disponibles (fuente estática unificada)
+        # Pre-cálculo de Indicador A para todos los trimestres disponibles
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -222,12 +222,10 @@ if uploaded_file is not None:
                 for unidad in TARGET_UNITS:
                     m_rows = unit_rows_map.get(unidad, {})
                     
-                    # Migración estática y directa del Indicador A desde la tabla de desglose si es un trimestre específico
                     val_a_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
-                        # Para "Total", calculamos el promedio ponderado estático de los trimestres disponibles
                         vals_trim = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
                         if vals_trim:
                             val_a_estatico = round(sum(vals_trim) / len(vals_trim), 2)
@@ -264,7 +262,7 @@ if uploaded_file is not None:
 
                     ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
                     ind_b = round((u_oportunas / base_hab) * 100, 2)
-                    ind_c = ind_a  # Consistencia comparte base
+                    ind_c = ind_a
                     ind_d = round((u_sin_notificar / base_hab) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
                     ind_e = round(max(0.0, ind_b - excedente_rsm), 2)
@@ -366,163 +364,240 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad"
 
-            trim_results_ind = {}
-            trim_results_abs = {}
-            
-            for t_name, start_col, end_col in bloques_semanas:
-                t_vals_ind = {}
-                t_vals_abs = {}
-                for unidad in TARGET_UNITS:
-                    m_rows = unit_rows_map.get(unidad, {})
+            # CASO ESPECIAL PARA EL INDICADOR B: Sumatoria vertical por columna/semana (denominador fijo 15)
+            if ind_key == "b":
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Semanal / 15 Unidades)")
+                st.markdown(f"**AÑO:** {anio}")
+                st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+
+                for t_name, start_col, end_col in bloques_semanas:
+                    st.markdown(f"#### 📅 {t_name}")
                     
-                    def get_ab_val(metric_key):
-                        r = m_rows.get(metric_key, None)
-                        if r is not None:
-                            for col_idx in range(len(r) - 1, 0, -1):
-                                val_celda = r[col_idx]
-                                try:
-                                    if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                        return float(val_celda)
-                                except ValueError:
-                                    continue
-                        return 0.0
-
-                    u_oportunas = get_ab_val("Unidades con casos oportunos")
-                    u_habilitadas = get_ab_val("Unidades habilitadas")
-                    if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
-                    base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
-
-                    num_oportunas = abs_results[t_name].get(unidad, None)
-                    if num_oportunas is None:
-                        t_vals_abs[unidad] = np.nan
-                        t_vals_ind[unidad] = np.nan
+                    # Obtenemos las semanas reales mapeadas en este bloque
+                    semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+                    if not semanas_bloque:
+                        st.info(f"No hay registros activos para el {t_name}.")
                         continue
 
-                    t_vals_abs[unidad] = num_oportunas
+                    # Construcción de las 2 filas: 
+                    # Fila 1: UNIDADES CON NOTIFICACIÓN OPORTUNA (Sumatoria vertical de 1s)
+                    # Fila 2: INDICADOR SEMANAL (%)
+                    fila_unidades = {"MÉTRICA / SEMANA": "UNIDADES CON NOTIFICACIÓN OPORTUNA"}
+                    fila_indicador = {"MÉTRICA / SEMANA": "INDICADOR SEMANAL (%)"}
 
-                    if ind_key == "a":
-                        val_ind = (num_oportunas / 13.0) * 100
-                    elif ind_key == "b":
-                        val_ind = (u_oportunas / base_hab) * 100
-                    elif ind_key == "c":
-                        val_ind = (num_oportunas / 13.0) * 100
-                    else: # Calidad (f)
-                        ind_a_temp = (num_oportunas / 13.0) * 100
-                        ind_b_temp = (u_oportunas / base_hab) * 100
-                        val_ind = (ind_b_temp + ind_a_temp) / 2.0
+                    for col_idx, sem_num in semanas_bloque:
+                        suma_vertical_unidad = 0
+                        for unidad in TARGET_UNITS:
+                            m_rows = unit_rows_map.get(unidad, {})
+                            row_casos = m_rows.get("Unidades con casos oportunos", None)
+                            if row_casos is not None and col_idx < len(row_casos) and pd.notna(row_casos[col_idx]):
+                                try:
+                                    val_c = float(row_casos[col_idx])
+                                    if val_c > 0:
+                                        suma_vertical_unidad += 1
+                                except ValueError:
+                                    pass
+                        
+                        # Guardamos en la columna nombrada con la semana
+                        sem_key = f"Sem. {sem_num}"
+                        fila_unidades[sem_key] = suma_vertical_unidad
+                        ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
+                        fila_indicador[sem_key] = ind_val
 
-                    t_vals_ind[unidad] = round(val_ind, 2)
+                    df_semanal = pd.DataFrame([fila_unidades, fila_indicador])
                     
-                trim_results_abs[t_name] = t_vals_abs
-                trim_results_ind[t_name] = t_vals_ind
+                    def style_semanal(row_data):
+                        styles = [''] * len(row_data)
+                        if row_data.name == 1:  # Fila de indicador
+                            for i, col_name in enumerate(row_data.index):
+                                if i > 0:
+                                    val = row_data.iloc[i]
+                                    if pd.notna(val):
+                                        styles[i] = get_bg_color(val, ind_key)
+                        return styles
 
-            # Construcción de la tabla separada tal como el formato oficial
-            tabla_sep_data = []
-            for unidad in TARGET_UNITS:
-                fila = {"UNIDAD MÉDICA": unidad}
-                for t_name, _, _ in bloques_semanas:
-                    fila[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
-                for t_name, _, _ in bloques_semanas:
-                    fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
-                tabla_sep_data.append(fila)
+                    styled_sem = df_semanal.style.format(
+                        formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else str(x)),
+                        subset=df_semanal.columns[1:]
+                    ).apply(style_semanal, axis=1)
 
-            df_sep = pd.DataFrame(tabla_sep_data)
+                    st.dataframe(styled_sem, use_container_width=True, hide_index=True)
+                    st.markdown("---")
 
-            st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
-            st.markdown(f"**AÑO:** {anio}")
-            st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+                # Acotación para indicador b
+                st.markdown(f"""
+                <table class="acotacion-table">
+                    <tr>
+                        <th>Indicador</th>
+                        <th>Excelente</th>
+                        <th>Bueno</th>
+                        <th>Regular</th>
+                        <th>Malo</th>
+                    </tr>
+                    <tr>
+                        <td><b>{ind_label}</b></td>
+                        <td class="bg-excelente">95.0 - 100%</td>
+                        <td class="bg-bueno">90.0 - 94.9%</td>
+                        <td class="bg-regular">80.0 - 89.9%</td>
+                        <td class="bg-malo">≤ 79.9%</td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
 
-            st.markdown("""
-            <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 220px; font-weight: bold; text-align: center;">
-                SEMANAS POR TRIMESTRE: 13
-            </div>
-            """, unsafe_allow_html=True)
-
-            sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
-            for t_name, _, _ in bloques_semanas:
-                sep_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name))
-            for t_name, _, _ in bloques_semanas:
-                sep_tuples.append(("INDICADOR", t_name))
-
-            df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
-
-            def style_sep_table(row_data):
-                styles = [''] * len(row_data)
-                for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
-                        val = row_data.iloc[i]
-                        if pd.notna(val):
-                            styles[i] = get_bg_color(val, ind_key)
-                return styles
-
-            styled_sep = df_sep.style.format(
-                formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
-                subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-            ).apply(style_sep_table, axis=1)
-
-            st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
-
-            # Mini tabla delegacional inferior (Mínimos registrados por trimestre)
-            min_row_ind = {}
-            min_row_abs = {}
-            for t_name, _, _ in bloques_semanas:
-                vals_ind = [trim_results_ind[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_ind[t_name][u])]
-                vals_abs = [trim_results_abs[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_abs[t_name][u])]
+            else:
+                # ESTRUCTURA ESTÁNDAR PARA LOS DEMÁS INDICADORES (a, c, f)
+                trim_results_ind = {}
+                trim_results_abs = {}
                 
-                if vals_ind:
-                    min_row_ind[t_name] = f"{min(vals_ind):.2f}"
-                    min_row_abs[t_name] = f"{min(vals_abs):.0f}"
-                else:
-                    min_row_ind[t_name] = "-"
-                    min_row_abs[t_name] = "-"
+                for t_name, start_col, end_col in bloques_semanas:
+                    t_vals_ind = {}
+                    t_vals_abs = {}
+                    for unidad in TARGET_UNITS:
+                        m_rows = unit_rows_map.get(unidad, {})
+                        
+                        def get_ab_val(metric_key):
+                            r = m_rows.get(metric_key, None)
+                            if r is not None:
+                                for col_idx in range(len(r) - 1, 0, -1):
+                                    val_celda = r[col_idx]
+                                    try:
+                                        if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                            return float(val_celda)
+                                    except ValueError:
+                                        continue
+                            return 0.0
 
-            delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
-            for t_name, _, _ in bloques_semanas:
-                delegacional_dict[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
-            for t_name, _, _ in bloques_semanas:
-                delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
+                        u_oportunas = get_ab_val("Unidades con casos oportunos")
+                        u_habilitadas = get_ab_val("Unidades habilitadas")
+                        if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
+                        base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
 
-            df_del = pd.DataFrame([delegacional_dict])
-            df_del.columns = pd.MultiIndex.from_tuples(sep_tuples)
-            
-            def style_delegational(row_data):
-                styles = [''] * len(row_data)
-                for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
-                        raw_str = row_data[col_name]
-                        if raw_str != "-":
-                            try:
-                                clean_val = float(raw_str)
-                                styles[i] = get_bg_color(clean_val, ind_key)
-                            except ValueError:
-                                pass
-                return styles
+                        num_oportunas = abs_results[t_name].get(unidad, None)
+                        if num_oportunas is None:
+                            t_vals_abs[unidad] = np.nan
+                            t_vals_ind[unidad] = np.nan
+                            continue
 
-            styled_del = df_del.style.apply(style_delegational, axis=1)
-            st.dataframe(styled_del, use_container_width=True, hide_index=True)
+                        t_vals_abs[unidad] = num_oportunas
 
-            # Pie de fuente requerido
-            st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
+                        if ind_key == "a":
+                            val_ind = (num_oportunas / 13.0) * 100
+                        elif ind_key == "c":
+                            val_ind = (num_oportunas / 13.0) * 100
+                        else: # Calidad (f)
+                            ind_a_temp = (num_oportunas / 13.0) * 100
+                            ind_b_temp = (u_oportunas / base_hab) * 100
+                            val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
-            # Acotación de evaluación original
-            st.markdown(f"""
-            <table class="acotacion-table">
-                <tr>
-                    <th>Indicador</th>
-                    <th>Excelente</th>
-                    <th>Bueno</th>
-                    <th>Regular</th>
-                    <th>Malo</th>
-                </tr>
-                <tr>
-                    <td><b>{ind_label}</b></td>
-                    <td class="bg-excelente">100%</td>
-                    <td class="bg-bueno">97.5 - 99.9%</td>
-                    <td class="bg-regular">95.0 - 97.4%</td>
-                    <td class="bg-malo">≤ 94.9%</td>
-                </tr>
-            </table>
-            """, unsafe_allow_html=True)
+                        t_vals_ind[unidad] = round(val_ind, 2)
+                        
+                    trim_results_abs[t_name] = t_vals_abs
+                    trim_results_ind[t_name] = t_vals_ind
+
+                tabla_sep_data = []
+                for unidad in TARGET_UNITS:
+                    fila = {"UNIDAD MÉDICA": unidad}
+                    for t_name, _, _ in bloques_semanas:
+                        fila[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                    for t_name, _, _ in bloques_semanas:
+                        fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
+                    tabla_sep_data.append(fila)
+
+                df_sep = pd.DataFrame(tabla_sep_data)
+
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
+                st.markdown(f"**AÑO:** {anio}")
+                st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+
+                st.markdown("""
+                <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 220px; font-weight: bold; text-align: center;">
+                    SEMANAS POR TRIMESTRE: 13
+                </div>
+                """, unsafe_allow_html=True)
+
+                sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+                for t_name, _, _ in bloques_semanas:
+                    sep_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name))
+                for t_name, _, _ in bloques_semanas:
+                    sep_tuples.append(("INDICADOR", t_name))
+
+                df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
+
+                def style_sep_table(row_data):
+                    styles = [''] * len(row_data)
+                    for i, col_name in enumerate(row_data.index):
+                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
+                            val = row_data.iloc[i]
+                            if pd.notna(val):
+                                styles[i] = get_bg_color(val, ind_key)
+                    return styles
+
+                styled_sep = df_sep.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
+                    subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+                ).apply(style_sep_table, axis=1)
+
+                st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
+
+                # Mini tabla delegacional inferior
+                min_row_ind = {}
+                min_row_abs = {}
+                for t_name, _, _ in bloques_semanas:
+                    vals_ind = [trim_results_ind[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_ind[t_name][u])]
+                    vals_abs = [trim_results_abs[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_abs[t_name][u])]
+                    
+                    if vals_ind:
+                        min_row_ind[t_name] = f"{min(vals_ind):.2f}"
+                        min_row_abs[t_name] = f"{min(vals_abs):.0f}"
+                    else:
+                        min_row_ind[t_name] = "-"
+                        min_row_abs[t_name] = "-"
+
+                delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
+                for t_name, _, _ in bloques_semanas:
+                    delegacional_dict[("SEMANAS NOTIFICADAS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
+                for t_name, _, _ in bloques_semanas:
+                    delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
+
+                df_del = pd.DataFrame([delegacional_dict])
+                df_del.columns = pd.MultiIndex.from_tuples(sep_tuples)
+                
+                def style_delegational(row_data):
+                    styles = [''] * len(row_data)
+                    for i, col_name in enumerate(row_data.index):
+                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
+                            raw_str = row_data[col_name]
+                            if raw_str != "-":
+                                try:
+                                    clean_val = float(raw_str)
+                                    styles[i] = get_bg_color(clean_val, ind_key)
+                                except ValueError:
+                                    pass
+                    return styles
+
+                styled_del = df_del.style.apply(style_delegational, axis=1)
+                st.dataframe(styled_del, use_container_width=True, hide_index=True)
+
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <table class="acotacion-table">
+                    <tr>
+                        <th>Indicador</th>
+                        <th>Excelente</th>
+                        <th>Bueno</th>
+                        <th>Regular</th>
+                        <th>Malo</th>
+                    </tr>
+                    <tr>
+                        <td><b>{ind_label}</b></td>
+                        <td class="bg-excelente">100%</td>
+                        <td class="bg-bueno">97.5 - 99.9%</td>
+                        <td class="bg-regular">95.0 - 97.4%</td>
+                        <td class="bg-malo">≤ 94.9%</td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
