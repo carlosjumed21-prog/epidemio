@@ -54,14 +54,14 @@ def get_bg_color(val, ind_type):
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
-        # Umbrales específicos para Consistencia (c)
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "d":
+        # Umbrales específicos para Reporta sin Movimiento (RSM)
         if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
@@ -178,13 +178,13 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia usando estrictamente la fila "Casos oportunos")
+        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                row_casos = m_rows.get("Casos oportunos", None)
+                row_casos = m_rows.get("Unidades con casos oportunos", None)
                 semanas_valores = []
                 if row_casos is not None:
                     for c_idx in range(start_col, end_col + 1):
@@ -212,6 +212,30 @@ if uploaded_file is not None:
                 else:
                     t_vals_c[unidad] = np.nan
             trim_results_ind_c[t_name] = t_vals_c
+
+        # Pre-cálculo de Indicador D (RSM - Promedio trimestral de la sumatoria semanal / 15 * 100)
+        trim_results_ind_d = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_d = {}
+            # Como el RSM es delegacional/sectorial por semana, calculamos el promedio de los porcentajes semanales del trimestre para cada unidad o nivel delegacional
+            # O bien el porcentaje promedio de unidades sin notificar del trimestre:
+            for unidad in TARGET_UNITS:
+                m_rows = unit_rows_map.get(unidad, {})
+                row_sin_notificar = m_rows.get("Unidades sin notificar", None)
+                semanas_rsm = []
+                if row_sin_notificar is not None:
+                    for c_idx in range(start_col, end_col + 1):
+                        if c_idx < len(row_sin_notificar) and pd.notna(row_sin_notificar[c_idx]):
+                            try:
+                                val_sn = float(row_sin_notificar[c_idx])
+                                semanas_rsm.append((val_sn / 15.0) * 100)
+                            except ValueError:
+                                pass
+                if len(semanas_rsm) > 0:
+                    t_vals_d[unidad] = round(sum(semanas_rsm) / len(semanas_rsm), 2)
+                else:
+                    t_vals_d[unidad] = 0.0
+            trim_results_ind_d[t_name] = t_vals_d
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -257,14 +281,18 @@ if uploaded_file is not None:
                     
                     val_a_estatico = np.nan
                     val_c_estatico = np.nan
+                    val_d_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
                         val_c_estatico = trim_results_ind_c[trim_match].get(unidad, np.nan)
+                        val_d_estatico = trim_results_ind_d[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
                         vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
                         vals_trim_c = [trim_results_ind_c[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_c[t[0]].get(unidad, np.nan))]
+                        vals_trim_d = [trim_results_ind_d[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_d[t[0]].get(unidad, np.nan))]
                         if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
                         if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
+                        if vals_trim_d: val_d_estatico = round(sum(vals_trim_d) / len(vals_trim_d), 2)
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -288,14 +316,23 @@ if uploaded_file is not None:
                                 except ValueError:
                                     pass
 
-                    u_sin_notificar = get_ab_val("Unidades sin notificar")
+                    row_sin_notificar = m_rows.get("Unidades sin notificar", None)
+                    suma_sin_notificar = 0.0
+                    if row_sin_notificar is not None and len(cols_indices) > 0:
+                        for c in cols_indices:
+                            if pd.notna(row_sin_notificar[c]):
+                                try:
+                                    suma_sin_notificar += float(row_sin_notificar[c])
+                                except ValueError:
+                                    pass
+
                     base_hab = float(len(TARGET_UNITS))
                     divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
 
                     ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
                     ind_b = "NO APLICA"
                     ind_c = val_c_estatico if pd.notna(val_c_estatico) else ind_a
-                    ind_d = round((u_sin_notificar / base_hab) * 100, 2)
+                    ind_d = val_d_estatico if pd.notna(val_d_estatico) else round((suma_sin_notificar / (base_hab * divisor_calc)) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
                     ind_e = round(max(0.0, 100.0 - excedente_rsm), 2)
                     ind_f = "NO APLICA"
@@ -305,7 +342,7 @@ if uploaded_file is not None:
                         "a": ind_a if pd.notna(ind_a) else None,
                         "b": ind_b,
                         "c": ind_c if pd.notna(ind_c) else None,
-                        "d": ind_d,
+                        "d": ind_d if pd.notna(ind_d) else None,
                         "e": ind_e,
                         "f": ind_f
                     })
@@ -376,6 +413,7 @@ if uploaded_file is not None:
                 "CUMPLIMIENTO U OPORTUNIDAD (a)",
                 "COBERTURA OPORTUNA (b)",
                 "CONSISTENCIA (c)",
+                "REPORTA SIN MOVIMIENTO - RSM (d)",
                 "CALIDAD (f)"
             ],
             index=0,
@@ -392,6 +430,9 @@ if uploaded_file is not None:
             elif "CONSISTENCIA" in indicador_seleccionado:
                 ind_key = "c"
                 ind_label = "Consistencia"
+            elif "RSM" in indicador_seleccionado or "(d)" in indicador_seleccionado:
+                ind_key = "d"
+                ind_label = "Reporta sin Movimiento (RSM)"
             else:
                 ind_key = "f"
                 ind_label = "Calidad"
@@ -410,10 +451,8 @@ if uploaded_file is not None:
 
                 for t_name, start_col, end_col in bloques_semanas:
                     st.markdown(f"#### 📅 {t_name}")
-                    
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
                     if not semanas_bloque:
-                        st.info(f"No hay registros activos para el {t_name}.")
                         continue
 
                     fila_unidades = {"MÉTRICA / DÍA": "UNIDADES CON NOTIFICACIÓN OPORTUNA"}
@@ -426,16 +465,14 @@ if uploaded_file is not None:
                             row_casos = m_rows.get("Unidades con casos oportunos", None)
                             if row_casos is not None and col_idx < len(row_casos) and pd.notna(row_casos[col_idx]):
                                 try:
-                                    val_c = float(row_casos[col_idx])
-                                    if val_c > 0:
+                                    if float(row_casos[col_idx]) > 0:
                                         suma_vertical_unidad += 1
                                 except ValueError:
                                     pass
                         
                         dia_key = f"Día {sem_num}"
                         fila_unidades[dia_key] = suma_vertical_unidad
-                        ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
-                        fila_indicador[dia_key] = ind_val
+                        fila_indicador[dia_key] = round((suma_vertical_unidad / 15.0) * 100, 2)
 
                     df_semanal = pd.DataFrame([fila_unidades, fila_indicador])
                     
@@ -477,7 +514,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A, C, F (USANDO LA FILA CASOS OPORTUNOS PARA C)
+                # ESTRUCTURA PARA A, C, D, F
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -487,40 +524,55 @@ if uploaded_file is not None:
                     for unidad in TARGET_UNITS:
                         m_rows = unit_rows_map.get(unidad, {})
                         
-                        # Extraer valores absolutos acumulados o de referencia para la tabla izquierda
-                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                        suma_bloque = 0.0
-                        if row_casos_oportunos is not None:
-                            for c_idx in range(start_col, end_col + 1):
-                                if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
-                                    try:
-                                        suma_bloque += float(row_casos_oportunos[c_idx])
-                                    except ValueError:
-                                        pass
-
-                        t_vals_abs[unidad] = suma_bloque
-
-                        if ind_key == "a":
-                            val_ind = (suma_bloque / 13.0) * 100
-                        elif ind_key == "c":
-                            val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
-                        else: # Calidad (f)
-                            def get_ab_val(metric_key):
-                                r = m_rows.get(metric_key, None)
-                                if r is not None:
-                                    for col_idx in range(len(r) - 1, 0, -1):
-                                        val_celda = r[col_idx]
+                        if ind_key == "d":
+                            # Para RSM (d), extraemos la fila "Unidades sin notificar"
+                            row_sin_notif = m_rows.get("Unidades sin notificar", None)
+                            suma_bloque = 0.0
+                            count_sem = 0
+                            if row_sin_notif is not None:
+                                for c_idx in range(start_col, end_col + 1):
+                                    if c_idx < len(row_sin_notif) and pd.notna(row_sin_notif[c_idx]):
                                         try:
-                                            if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                                return float(val_celda)
+                                            suma_bloque += float(row_sin_notif[c_idx])
+                                            count_sem += 1
                                         except ValueError:
-                                            continue
-                                return 0.0
-                            u_oportunas = get_ab_val("Unidades con casos oportunos")
-                            base_hab = 15.0
-                            ind_a_temp = (suma_bloque / 13.0) * 100
-                            ind_b_temp = (u_oportunas / base_hab) * 100
-                            val_ind = (ind_b_temp + ind_a_temp) / 2.0
+                                            pass
+                            t_vals_abs[unidad] = suma_bloque
+                            prom_sn = (suma_bloque / count_sem) if count_sem > 0 else 0.0
+                            val_ind = (prom_sn / 15.0) * 100
+                        else:
+                            row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                            suma_bloque = 0.0
+                            if row_casos_oportunos is not None:
+                                for c_idx in range(start_col, end_col + 1):
+                                    if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
+                                        try:
+                                            suma_bloque += float(row_casos_oportunos[c_idx])
+                                        except ValueError:
+                                            pass
+                            t_vals_abs[unidad] = suma_bloque
+
+                            if ind_key == "a":
+                                val_ind = (suma_bloque / 13.0) * 100
+                            elif ind_key == "c":
+                                val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
+                            else: # Calidad (f)
+                                def get_ab_val(metric_key):
+                                    r = m_rows.get(metric_key, None)
+                                    if r is not None:
+                                        for col_idx in range(len(r) - 1, 0, -1):
+                                            val_celda = r[col_idx]
+                                            try:
+                                                if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                                    return float(val_celda)
+                                            except ValueError:
+                                                continue
+                                    return 0.0
+                                u_oportunas = get_ab_val("Unidades con casos oportunos")
+                                base_hab = 15.0
+                                ind_a_temp = (suma_bloque / 13.0) * 100
+                                ind_b_temp = (u_oportunas / base_hab) * 100
+                                val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
                         t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
                         
@@ -530,8 +582,9 @@ if uploaded_file is not None:
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
+                    label_izq = "DIAS SIN NOTIFICAR (RSM)" if ind_key == "d" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                     for t_name, _, _ in bloques_semanas:
-                        fila[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                        fila[(label_izq, t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
                         fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
@@ -548,9 +601,10 @@ if uploaded_file is not None:
                 </div>
                 """, unsafe_allow_html=True)
 
+                label_izq = "DIAS SIN NOTIFICAR (RSM)" if ind_key == "d" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
-                    sep_tuples.append(("DIAS NOTIFICADOS OPORTUNAMENTE", t_name))
+                    sep_tuples.append((label_izq, t_name))
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append(("INDICADOR", t_name))
 
@@ -588,7 +642,7 @@ if uploaded_file is not None:
 
                 delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
-                    delegacional_dict[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_row_abs[t_name]
+                    delegacional_dict[(label_izq, t_name)] = min_row_abs[t_name]
                 for t_name, _, _ in bloques_semanas:
                     delegacional_dict[("INDICADOR", t_name)] = min_row_ind[t_name]
 
@@ -613,24 +667,45 @@ if uploaded_file is not None:
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
-                st.markdown(f"""
-                <table class="acotacion-table">
-                    <tr>
-                        <th>Indicador</th>
-                        <th>Excelente</th>
-                        <th>Bueno</th>
-                        <th>Regular</th>
-                        <th>Malo</th>
-                    </tr>
-                    <tr>
-                        <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">100%</td>
-                        <td class="bg-bueno">97.5 - 99.9%</td>
-                        <td class="bg-regular">95.0 - 97.4%</td>
-                        <td class="bg-malo">≤ 94.9%</td>
-                    </tr>
-                </table>
-                """, unsafe_allow_html=True)
+                # Acotaciones específicas según el indicador (d o estándar)
+                if ind_key == "d":
+                    st.markdown(f"""
+                    <table class="acotacion-table">
+                        <tr>
+                            <th>Indicador</th>
+                            <th>Excelente</th>
+                            <th>Bueno</th>
+                            <th>Regular</th>
+                            <th>Malo</th>
+                        </tr>
+                        <tr>
+                            <td><b>{ind_label}</b></td>
+                            <td class="bg-excelente">0.0 - 1.9%</td>
+                            <td class="bg-bueno">2.0 - 4.9%</td>
+                            <td class="bg-regular">5.0 - 10.0%</td>
+                            <td class="bg-malo">> 10.0%</td>
+                        </tr>
+                    </table>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <table class="acotacion-table">
+                        <tr>
+                            <th>Indicador</th>
+                            <th>Excelente</th>
+                            <th>Bueno</th>
+                            <th>Regular</th>
+                            <th>Malo</th>
+                        </tr>
+                        <tr>
+                            <td><b>{ind_label}</b></td>
+                            <td class="bg-excelente">100%</td>
+                            <td class="bg-bueno">97.5 - 99.9%</td>
+                            <td class="bg-regular">95.0 - 97.4%</td>
+                            <td class="bg-malo">≤ 94.9%</td>
+                        </tr>
+                    </table>
+                    """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
