@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+from weasyprint import HTML
 
 # Configuración de la página
 st.set_page_config(
@@ -29,7 +30,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades, desglose por indicador y reporte oficial PDF</div>', unsafe_allow_html=True)
 
 # Lista completa de unidades operativas oficiales (excluyendo CMN 20 DE NOVIEMBRE)
 TARGET_UNITS = [
@@ -167,6 +168,36 @@ if uploaded_file is not None:
                 elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
                 else: return 'background-color: #EF4444; color: white; font-weight: bold;'
             return ''
+
+        def get_hex_color(val, ind_type):
+            if val is None or pd.isna(val):
+                return '#FFFFFF'
+            if ind_type == "a":
+                if val == 100.0: return '#10B981'
+                elif 97.5 <= val <= 99.9: return '#FFFFFF'
+                elif 95.0 <= val <= 97.4: return '#FEF08A'
+                else: return '#EF4444'
+            elif ind_type in ["b", "e"]:
+                if 95.0 <= val <= 100.0: return '#10B981'
+                elif 90.0 <= val <= 94.9: return '#FFFFFF'
+                elif 80.0 <= val <= 89.9: return '#FEF08A'
+                else: return '#EF4444'
+            elif ind_type == "c":
+                if 90.0 <= val <= 100.0: return '#10B981'
+                elif 80.0 <= val <= 89.9: return '#FFFFFF'
+                elif 70.0 <= val <= 79.9: return '#FEF08A'
+                else: return '#EF4444'
+            elif ind_type == "d":
+                if 0.0 <= val <= 1.9: return '#10B981'
+                elif 2.0 <= val <= 4.9: return '#FFFFFF'
+                elif 5.0 <= val <= 10.0: return '#FEF08A'
+                else: return '#EF4444'
+            elif ind_type == "f":
+                if 90.0 <= val <= 100.0: return '#10B981'
+                elif 80.0 <= val <= 89.9: return '#FFFFFF'
+                elif 60.0 <= val <= 79.9: return '#FEF08A'
+                else: return '#EF4444'
+            return '#FFFFFF'
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -327,7 +358,7 @@ if uploaded_file is not None:
             st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
-        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE DE DOS EN DOS)
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -420,28 +451,27 @@ if uploaded_file is not None:
 
             df_fusion = pd.DataFrame(tabla_fusión_data)
 
-            st.markdown(f"**INDICADOR EVALUADO:** {ind_label.upper()}")
+            st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
             st.markdown(f"**AÑO:** {anio}")
             st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
 
             st.markdown("""
-            <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; padding: 10px; border-radius: 4px; margin-bottom: 15px; width: 250px;">
-                <b>SEMANAS POR TRIMESTRE:</b> 13
+            <div style="background-color: #1E3A8A; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 220px; font-weight: bold; text-align: center;">
+                SEMANAS POR TRIMESTRE: 13
             </div>
             """, unsafe_allow_html=True)
 
-            # MultiIndex agrupado de dos en dos por Trimestre
-            fusion_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
+            fusion_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
             for t_name, _, _ in bloques_semanas:
-                fusion_tuples.append((t_name, "Semanas Notificadas Oportunamente"))
-                fusion_tuples.append((t_name, "Indicador"))
+                fusion_tuples.append((t_name, "SEMANAS NOTIFICADAS\nOPORTUNAMENTE"))
+                fusion_tuples.append((t_name, "INDICADOR"))
 
             df_fusion.columns = pd.MultiIndex.from_tuples(fusion_tuples)
 
             def style_fusion_table(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[1] == "Indicador":
+                    if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
                         val = row_data.iloc[i]
                         if pd.notna(val):
                             styles[i] = get_bg_color(val, ind_key)
@@ -449,14 +479,12 @@ if uploaded_file is not None:
 
             styled_fusion = df_fusion.style.format(
                 formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", 
-                subset=[col for col in df_fusion.columns if col[0] != "UNIDAD MÉDICA"]
+                subset=[col for col in df_fusion.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
             ).apply(style_fusion_table, axis=1)
 
             st.dataframe(styled_fusion, use_container_width=True, hide_index=True, height=580)
 
             # Mini tabla delegacional inferior (Mínimos registrados por trimestre)
-            st.markdown(f"##### 📉 Resumen Delegacional ({ind_label} - Mínimo por Trimestre)")
-            
             min_row_ind = {}
             min_row_abs = {}
             for t_name, _, _ in bloques_semanas:
@@ -464,16 +492,16 @@ if uploaded_file is not None:
                 vals_abs = [trim_results_abs[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_abs[t_name][u])]
                 
                 if vals_ind:
-                    min_row_ind[t_name] = f"{min(vals_ind):.2f}%"
+                    min_row_ind[t_name] = f"{min(vals_ind):.2f}"
                     min_row_abs[t_name] = f"{min(vals_abs):.0f}"
                 else:
                     min_row_ind[t_name] = "-"
                     min_row_abs[t_name] = "-"
 
-            delegacional_dict = {("UNIDAD MÉDICA", "UNIDAD MÉDICA"): "Mínimo Registrado"}
+            delegacional_dict = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
             for t_name, _, _ in bloques_semanas:
-                delegacional_dict[(t_name, "Semanas Notificadas Oportunamente")] = min_row_abs[t_name]
-                delegacional_dict[(t_name, "Indicador")] = min_row_ind[t_name]
+                delegacional_dict[(t_name, "SEMANAS NOTIFICADAS\nOPORTUNAMENTE")] = min_row_abs[t_name]
+                delegacional_dict[(t_name, "INDICADOR")] = min_row_ind[t_name]
 
             df_del = pd.DataFrame([delegacional_dict])
             df_del.columns = pd.MultiIndex.from_tuples(fusion_tuples)
@@ -481,40 +509,316 @@ if uploaded_file is not None:
             def style_delegational(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if isinstance(col_name, tuple) and col_name[1] == "Indicador":
+                    if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
                         raw_str = row_data[col_name]
                         if raw_str != "-":
                             try:
-                                clean_val = float(raw_str.replace("%", ""))
+                                clean_val = float(raw_str)
                                 styles[i] = get_bg_color(clean_val, ind_key)
                             except ValueError:
                                 pass
                 return styles
 
-            styled_del = df_del.style.apply(style_delegational, axis=1)
+            styled_del = df_del.style.format(
+                formatter=lambda x: f"{float(x):.2f}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.','',1).isdigit()) else str(x),
+                subset=[col for col in df_del.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+            ).apply(style_delegational, axis=1)
+
             st.dataframe(styled_del, use_container_width=True, hide_index=True)
 
-            # Acotación colocada en la parte inferior
-            st.markdown(f"""
-            <table class="acotacion-table">
-                <tr>
-                    <th>Indicador</th>
-                    <th>Excelente</th>
-                    <th>Bueno</th>
-                    <th>Regular</th>
-                    <th>Malo</th>
-                </tr>
-                <tr>
-                    <td><b>{ind_label}</b></td>
-                    <td class="bg-excelente">100%</td>
-                    <td class="bg-bueno">97.5 - 99.9%</td>
-                    <td class="bg-regular">95.0 - 97.4%</td>
-                    <td class="bg-malo">≤ 94.9%</td>
-                </tr>
-            </table>
+            # Pie de fuente requerido
+            st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</p>", unsafe_allow_html=True)
+
+            # Acotación de evaluación idéntica a la imagen oficial
+            st.markdown("""
+            <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
+                <table style="border-collapse: collapse; font-size: 0.85rem; width: 320px;">
+                    <tr>
+                        <td rowspan="4" style="vertical-align: middle; font-weight: bold; text-align: right; padding-right: 15px;">EVALUACIÓN:</td>
+                        <td style="background-color: #10B981; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">100 %</td>
+                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
+                        <td style="background-color: #10B981; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Excelente</td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #FFFFFF; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">97.5 - 99.9</td>
+                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
+                        <td style="background-color: #FFFFFF; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Bueno</td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">95.0 - 97.4</td>
+                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
+                        <td style="background-color: #FEF08A; color: black; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Regular</td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">94.9 ó menos</td>
+                        <td style="text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">=</td>
+                        <td style="background-color: #EF4444; color: white; text-align: center; font-weight: bold; padding: 6px; border: 1px solid #CBD5E1;">Malo</td>
+                    </tr>
+                </table>
+            </div>
             """, unsafe_allow_html=True)
+
+            # ==========================================
+            # BOTÓN DE GENERACIÓN DE REPORTE OFICIAL EN PDF
+            # ==========================================
+            st.markdown("---")
+            st.subheader("📑 Generación de Reporte Oficial en PDF")
+            st.info("Haz clic en el botón para descargar el reporte institucional en formato PDF idéntico al formato oficial.")
+
+            def generar_pdf_oficial():
+                # HTML estructurado para WeasyPrint respetando el diseño exacto de la imagen
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <style>
+                        @page {{
+                            size: A4 portrait;
+                            margin: 10mm;
+                        }}
+                        body {{
+                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                            font-size: 8.5pt;
+                            color: #111;
+                            margin: 0;
+                            padding: 0;
+                        }}
+                        .header-text {{
+                            text-align: center;
+                            font-weight: bold;
+                            color: #1E3A8A;
+                            line-height: 1.3;
+                            font-size: 9pt;
+                            margin-bottom: 15px;
+                        }}
+                        .main-title {{
+                            text-align: center;
+                            font-weight: bold;
+                            font-size: 9.5pt;
+                            margin-bottom: 20px;
+                        }}
+                        .meta-container {{
+                            margin-bottom: 15px;
+                            font-size: 9pt;
+                        }}
+                        .meta-row {{
+                            margin-bottom: 5px;
+                        }}
+                        .meta-label {{
+                            font-weight: bold;
+                            display: inline-block;
+                            width: 140px;
+                        }}
+                        .meta-val {{
+                            display: inline-block;
+                            border-bottom: 1px solid #999;
+                            width: 250px;
+                            padding-left: 5px;
+                        }}
+                        .weeks-box {{
+                            float: right;
+                            background-color: #1E3A8A;
+                            color: white;
+                            text-align: center;
+                            font-weight: bold;
+                            font-size: 8.5pt;
+                            width: 180px;
+                            border: 1px solid #111;
+                        }}
+                        .weeks-box-title {{
+                            background-color: #1E3A8A;
+                            padding: 4px;
+                            border-bottom: 1px solid white;
+                        }}
+                        .weeks-box-val {{
+                            background-color: #1E3A8A;
+                            padding: 6px;
+                            font-size: 11pt;
+                        }}
+                        table.report-table {{
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-top: 10px;
+                            font-size: 8.5pt;
+                        }}
+                        table.report-table th, table.report-table td {{
+                            border: 1px solid #444;
+                            padding: 5px 4px;
+                            text-align: center;
+                        }}
+                        table.report-table th {{
+                            background-color: #1E3A8A;
+                            color: white;
+                            font-weight: bold;
+                        }}
+                        .unidad-col {{
+                            text-align: left !important;
+                            padding-left: 6px !important;
+                            font-weight: bold;
+                            background-color: #1E3A8A;
+                            color: white;
+                            width: 35%;
+                        }}
+                        .delegacional-row td {{
+                            font-weight: bold;
+                            background-color: #1E3A8A !important;
+                            color: white !important;
+                        }}
+                        .footer-text {{
+                            font-size: 7.5pt;
+                            font-style: italic;
+                            color: #555;
+                            margin-top: 8px;
+                        }}
+                        .eval-table {{
+                            float: right;
+                            border-collapse: collapse;
+                            font-size: 8pt;
+                            margin-top: 25px;
+                            width: 260px;
+                        }}
+                        .eval-table td {{
+                            border: 1px solid #444;
+                            padding: 4px;
+                            text-align: center;
+                            font-weight: bold;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header-text">
+                        REPRESENTACIÓN REGIONAL SUR<br>
+                        SUBDELEGACIÓN MÉDICA<br>
+                        DEPARTAMENTO DE ATENCIÓN MÉDICA<br>
+                        COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA
+                    </div>
+                    
+                    <div class="main-title">
+                        INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)
+                    </div>
+
+                    <div class="weeks-box">
+                        <div class="weeks-box-title">SEMANAS POR TRIMESTRE</div>
+                        <div class="weeks-box-val">13</div>
+                    </div>
+
+                    <div class="meta-container">
+                        <div class="meta-row">
+                            <span class="meta-label">INDICADOR EVALUADO:</span>
+                            <span class="meta-val">{ind_label}</span>
+                        </div>
+                        <div class="meta-row" style="margin-top: 8px;">
+                            <span class="meta-label">AÑO:</span>
+                            <span class="meta-val">{anio}</span>
+                        </div>
+                        <div class="meta-row" style="margin-top: 8px;">
+                            <span class="meta-label">FECHA DE CORTE:</span>
+                            <span class="meta-val">Semana {ultima_semana}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="clear: both;"></div>
+
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="vertical-align: middle; background-color: #1E3A8A; color: white;">UNIDAD MÉDICA / TRIMESTRE</th>
+                """
+
+                # Cabeceras de Trimestres
+                for t_name, _, _ in bloques_semanas:
+                    html_content += f'<th colspan="2" style="background-color: #1E3A8A; color: white;">{t_name}</th>'
+                html_content += "</tr><tr>"
+
+                for _ in bloques_semanas:
+                    html_content += '<th style="background-color: #1B365D; font-size:7.5pt;">SEMANAS NOTIFICADAS OPORTUNAMENTE</th>'
+                    html_content += '<th style="background-color: #1B365D; font-size:7.5pt;">INDICADOR</th>'
+                html_content += "</tr></thead><tbody>"
+
+                # Filas de Unidades
+                for unidad in TARGET_UNITS:
+                    html_content += f'<tr><td class="unidad-col">{unidad}</td>'
+                    for t_name, _, _ in bloques_semanas:
+                        val_abs = trim_results_abs[t_name].get(unidad, np.nan)
+                        val_ind = trim_results_ind[t_name].get(unidad, np.nan)
+                        
+                        abs_str = f"{val_abs:.0f}" if pd.notna(val_abs) else "-"
+                        if pd.notna(val_ind):
+                            ind_str = f"{val_ind:.2f}"
+                            bg_hex = get_hex_color(val_ind, ind_key)
+                            # Color de texto legible según el fondo
+                            text_color = "white" if bg_hex in ["#10B981", "#EF4444"] else "black"
+                            if bg_hex == "#FFFFFF": text_color = "black"
+                            ind_cell = f'<td style="background-color: {bg_hex}; color: {text_color}; font-weight: bold;">{ind_str}</td>'
+                        else:
+                            ind_cell = '<td>-</td>'
+                        
+                        html_content += f'<td>{abs_str}</td>' + ind_cell
+                    html_content += "</tr>"
+
+                # Fila Delegacional Mínimo Registrado
+                html_content += '<tr class="delegacional-row"><td class="unidad-col">DELEGACIONAL</td>'
+                for t_name, _, _ in bloques_semanas:
+                    min_abs = min_row_abs[t_name]
+                    min_ind = min_row_ind[t_name]
+                    
+                    if min_ind != "-":
+                        bg_hex = get_hex_color(float(min_ind), ind_key)
+                        text_color = "white" if bg_hex in ["#10B981", "#EF4444"] else "black"
+                        ind_cell = f'<td style="background-color: {bg_hex}; color: {text_color}; font-weight: bold;">{min_ind}</td>'
+                    else:
+                        ind_cell = '<td>-</td>'
+
+                    html_content += f'<td>{min_abs}</td>' + ind_cell
+                html_content += "</tr></tbody></table>"
+
+                # Pie de fuente
+                html_content += f'<div class="footer-text">Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} semana.</div>'
+
+                # Tabla de Evaluación inferior derecha
+                html_content += """
+                    <table class="eval-table">
+                        <tr>
+                            <td rowspan="4" style="vertical-align: middle; width: 35%; background-color: #f8fafc;">EVALUACIÓN:</td>
+                            <td style="background-color: #10B981; color: white;">100 %</td>
+                            <td>=</td>
+                            <td style="background-color: #10B981; color: white;">Excelente</td>
+                        </tr>
+                        <tr>
+                            <td style="background-color: #FFFFFF; color: black;">97.5 - 99.9</td>
+                            <td>=</td>
+                            <td style="background-color: #FFFFFF; color: black;">Bueno</td>
+                        </tr>
+                        <tr>
+                            <td style="background-color: #FEF08A; color: black;">95.0 - 97.4</td>
+                            <td>=</td>
+                            <td style="background-color: #FEF08A; color: black;">Regular</td>
+                        </tr>
+                        <tr>
+                            <td style="background-color: #EF4444; color: white;">94.9 ó menos</td>
+                            <td>=</td>
+                            <td style="background-color: #EF4444; color: white;">Malo</td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
+                """
+
+                pdf_buffer = io.BytesIO()
+                HTML(string=html_content).write_pdf(pdf_buffer)
+                pdf_buffer.seek(0)
+                return pdf_buffer
+
+            pdf_file = generar_pdf_oficial()
+            st.download_button(
+                label="📥 Descargar Reporte Oficial en PDF",
+                data=pdf_file,
+                file_name=f"Reporte_Institucional_SUAVE_{ind_label.replace(' ', '_')}.pdf",
+                mime="application/pdf"
+            )
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
 else:
-    st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis.")
+    st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis y habilitar los reportes.")
