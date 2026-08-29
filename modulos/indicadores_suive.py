@@ -340,7 +340,8 @@ if uploaded_file is not None:
             subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
         ).apply(style_general_multi, axis=1)
 
-        st.dataframe(styled_gen_multi, use_container_width=True, height=600)
+        # Se elimina el parámetro height para que la tabla se expanda completa y se vea la fila delegacional
+        st.dataframe(styled_gen_multi, use_container_width=True, hide_index=True)
 
         # ==========================================
         # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
@@ -455,7 +456,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con su fila Delegacional de Valor Máximo
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -512,7 +513,8 @@ if uploaded_file is not None:
                 ).apply(style_c_table, axis=1)
 
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
-                st.dataframe(styled_c, use_container_width=True, hide_index=True, height=580)
+                # Sin height fijo para visualizar completo
+                st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
@@ -666,7 +668,8 @@ if uploaded_file is not None:
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
 
-                st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
+                # Sin height fijo para visualizar completo
+                st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
