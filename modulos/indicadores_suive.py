@@ -48,7 +48,7 @@ def get_bg_color(val, ind_type):
         elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 95.0 <= val <= 97.4: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
-    elif ind_type == "b":
+    elif ind_type in ["b", "e"]:
         if 95.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 90.0 <= val <= 94.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -267,6 +267,57 @@ if uploaded_file is not None:
                 "consistencia": round(global_cons, 2),
                 "calidad": round(global_cal, 2)
             }
+
+        # ==========================================
+        # TABLA DE SCORE DELEGACIONAL (RESUMEN EJECUTIVO POR TRIMESTRE)
+        # ==========================================
+        st.markdown("---")
+        st.subheader("🏆 Score Delegacional (Resumen Ejecutivo)")
+
+        score_rows = []
+        # Definimos los indicadores a resumir en el score delegacional
+        indicadores_score = [
+            ("a) Cumplimiento u Oportunidad (%)", "a"),
+            ("c) Consistencia (%)", "c"),
+            ("f) Calidad (Descriptivo) (%)", "f")
+        ]
+
+        for ind_label_sc, ind_code in indicadores_score:
+            fila_sc = {"INDICADOR": ind_label_sc}
+            for t_name, _, _ in bloques_semanas:
+                if ind_code == "a":
+                    vals = [trim_results_ind_a[t_name].get(u, np.nan) for u in TARGET_UNITS]
+                    valid_vals = [v for v in vals if pd.notna(v)]
+                    fila_sc[t_name] = max(valid_vals) if valid_vals else np.nan
+                elif ind_code == "c":
+                    vals = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+                    valid_vals = [v for v in vals if pd.notna(v)]
+                    fila_sc[t_name] = max(valid_vals) if valid_vals else np.nan
+                elif ind_code == "f":
+                    val_f = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
+                    fila_sc[t_name] = val_f
+            score_rows.append(fila_sc)
+
+        df_score = pd.DataFrame(score_rows)
+
+        def style_score_table(row_data):
+            styles = [''] * len(row_data)
+            idx = row_data.name
+            ind_code_map = {0: "a", 1: "c", 2: "f"}
+            itype = ind_code_map.get(idx, "a")
+            for i, col_name in enumerate(row_data.index):
+                if col_name != "INDICADOR":
+                    val = row_data.iloc[i]
+                    if pd.notna(val):
+                        styles[i] = get_bg_color(val, itype)
+            return styles
+
+        styled_score = df_score.style.format(
+            formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
+            subset=[col for col in df_score.columns if col != "INDICADOR"]
+        ).apply(style_score_table, axis=1)
+
+        st.dataframe(styled_score, use_container_width=True, hide_index=True)
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 4 INDICADORES ACTIVOS: a, b, c, f)
@@ -678,7 +729,6 @@ if uploaded_file is not None:
 
                 df_sep = pd.DataFrame(tabla_sep_data)
 
-                # Fila Delegacional calculando el MÁXIMO de cada columna numérica para A
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
@@ -718,7 +768,7 @@ if uploaded_file is not None:
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
 
-                st.dataframe(styled_sep, use_container_width=True, height=580)
+                st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
 
                 st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
 
