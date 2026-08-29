@@ -137,6 +137,7 @@ if uploaded_file is not None:
                 promedio_semanas_unidad = (semanas_casos_bloque / base_hab) if base_hab > 0 else 0.0
                 divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
 
+                # Fórmulas oficiales completas para los 6 indicadores
                 ind_a = (promedio_semanas_unidad / divisor_calc) * 100
                 ind_b = (u_oportunas / base_hab) * 100
                 ind_c = (promedio_semanas_unidad / divisor_calc) * 100
@@ -256,7 +257,9 @@ if uploaded_file is not None:
                         if actual_col in col_mapping:
                             itype = col_mapping[actual_col]
                             val = raw_dict[itype]
-                            styles[i] = get_bg_color(val, itype)
+                            # Permitimos sombreado incluso en 0.0 si es d) RSM para reflejar su valor real
+                            if val > 0.0 or itype == "d":
+                                styles[i] = get_bg_color(val, itype)
                     return styles
 
                 st.subheader(f"📊 Tabla Comparativa General (6 Indicadores) — {rango_gen_etiqueta}")
@@ -273,7 +276,6 @@ if uploaded_file is not None:
                 display_df.columns = multi_columns
                 styled_general = display_df.style.format(formatter="{:.2f}", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
                 
-                # Altura ajustada para mostrar todas las unidades sin scroll excesivo
                 st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
@@ -426,7 +428,6 @@ if uploaded_file is not None:
 
             styled_ind_table = df_ind.style.format(formatter="{:.2f}", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
             
-            # Altura ajustada para visualizar el listado completo sin desplazamiento vertical
             st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
 
             # Mini tabla delegacional inferior (Valor más bajo mayor a 0 por columna)
