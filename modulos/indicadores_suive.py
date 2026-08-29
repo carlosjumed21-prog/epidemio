@@ -10,25 +10,19 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones
+# Estilos CSS personalizados para la interfaz web y la tabla de acotaciones inferior
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #1E3A8A; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #1E3A8A; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
-    .legend-container { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-    .legend-item { padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; text-align: center; }
-    .legend-excelente { background-color: #10B981; color: white; }
-    .legend-bueno { background-color: #FFFFFF; color: black; border: 1px solid #CBD5E1; }
-    .legend-regular { background-color: #FEF08A; color: black; }
-    .legend-malo { background-color: #EF4444; color: white; }
     
-    /* Estilos para la tabla de acotaciones */
-    .acotacion-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.9rem; }
+    /* Estilos para la tabla de acotaciones inferior */
+    .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
     .acotacion-table th { background-color: #1E3A8A; color: white; font-weight: bold; }
     .bg-excelente { background-color: #10B981; color: white; font-weight: bold; }
-    .bg-bueno { background-color: #FFFFFF; color: black; font-weight: bold; }
+    .bg-bueno { background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1; }
     .bg-regular { background-color: #FEF08A; color: black; font-weight: bold; }
     .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
 </style>
@@ -278,7 +272,9 @@ if uploaded_file is not None:
                 ])
                 display_df.columns = multi_columns
                 styled_general = display_df.style.format(formatter="{:.2f}", subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
-                st.dataframe(styled_general, use_container_width=True)
+                
+                # Altura ajustada para mostrar todas las unidades sin scroll excesivo
+                st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
         # 2. APARTADO DE DATOS DEL PERIODO POR UNIDAD
@@ -379,26 +375,6 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad"
 
-            # Tabla de Acotaciones solicitada
-            st.markdown(f"""
-            <table class="acotacion-table">
-                <tr>
-                    <th>Indicador</th>
-                    <th>Excelente</th>
-                    <th>Bueno</th>
-                    <th>Regular</th>
-                    <th>Malo</th>
-                </tr>
-                <tr>
-                    <td><b>{ind_label}</b></td>
-                    <td class="bg-excelente">100%</td>
-                    <td class="bg-bueno">97.5 - 99.9%</td>
-                    <td class="bg-regular">95.0 - 97.4%</td>
-                    <td class="bg-malo">≤ 94.9%</td>
-                </tr>
-            </table>
-            """, unsafe_allow_html=True)
-
             trimestres_config = [
                 ("PRIMER TRIMESTRE", [item[0] for item in semanas_info if 1 <= item[1] <= 13], 13.0),
                 ("SEGUNDO TRIMESTRE", [item[0] for item in semanas_info if 13 < item[1] <= 26], 13.0),
@@ -449,7 +425,9 @@ if uploaded_file is not None:
                 return styles
 
             styled_ind_table = df_ind.style.format(formatter="{:.2f}", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
-            st.dataframe(styled_ind_table, use_container_width=True, hide_index=True)
+            
+            # Altura ajustada para visualizar el listado completo sin desplazamiento vertical
+            st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
 
             # Mini tabla delegacional inferior (Valor más bajo mayor a 0 por columna)
             st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
@@ -483,6 +461,26 @@ if uploaded_file is not None:
 
             styled_del = df_del.style.apply(style_delegational, axis=1)
             st.dataframe(styled_del, use_container_width=True, hide_index=True)
+
+            # Acotación colocada en la parte inferior con sus respectivos colores de semáforo
+            st.markdown(f"""
+            <table class="acotacion-table">
+                <tr>
+                    <th>Indicador</th>
+                    <th>Excelente</th>
+                    <th>Bueno</th>
+                    <th>Regular</th>
+                    <th>Malo</th>
+                </tr>
+                <tr>
+                    <td><b>{ind_label}</b></td>
+                    <td class="bg-excelente">100%</td>
+                    <td class="bg-bueno">97.5 - 99.9%</td>
+                    <td class="bg-regular">95.0 - 97.4%</td>
+                    <td class="bg-malo">≤ 94.9%</td>
+                </tr>
+            </table>
+            """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
