@@ -118,14 +118,13 @@ if uploaded_file is not None:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
                 if row_semanas_casos is not None and len(cols_indices) > 0:
-                    semanas_casos_bloque = sum([float(row_semanas_casos[c]) for c in cols_indices if pd.notna(row_semanas_casos[c])])
+                    semanas_oportunas = sum([float(row_semanas_casos[c]) for c in cols_indices if pd.notna(row_semanas_casos[c])])
                 else:
-                    semanas_casos_bloque = 0.0
+                    semanas_oportunas = 0.0
 
                 def get_ab_val(metric_key):
                     r = m_rows.get(metric_key, None)
                     if r is not None:
-                        # Buscamos en la columna AB (índice 27) o evaluamos si hay un valor numérico válido en las columnas de la fila
                         for col_idx in range(len(r) - 1, 0, -1):
                             val_celda = r[col_idx]
                             try:
@@ -141,19 +140,15 @@ if uploaded_file is not None:
                 u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                 base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
-                promedio_semanas_unidad = (semanas_casos_bloque / base_hab) if base_hab > 0 else 0.0
                 divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
 
-                # Fórmulas oficiales
-                ind_a = (promedio_semanas_unidad / divisor_calc) * 100
+                # Aplicación exacta de la fórmula oficial para el Indicador A:
+                # (Semanas notificadas oportunamente / Total de semanas transcurridas en el periodo) * 100
+                ind_a = (semanas_oportunas / divisor_calc) * 100
+                
                 ind_b = (u_oportunas / base_hab) * 100
-                ind_c = (promedio_semanas_unidad / divisor_calc) * 100
-                
-                # Si 'u_sin_notificar' viene en 0 pero en tu lógica institucional esperas que sea 100 cuando no hay unidades sin notificar, 
-                # aseguramos la proporción correcta: (u_habilitadas - u_sin_notificar) / u_habilitadas o directo sobre unidades notificadas.
-                # Aquí evaluamos el porcentaje de unidades sin notificar:
+                ind_c = (semanas_oportunas / divisor_calc) * 100 # Consistencia comparte la base de semanas notificadas
                 ind_d = (u_sin_notificar / base_hab) * 100
-                
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
                 ind_f = (ind_b + ind_c) / 2.0
@@ -167,7 +162,7 @@ if uploaded_file is not None:
                     "e": round(ind_e, 2),
                     "f": round(ind_f, 2),
                     "_metrics": {
-                        "Semanas con casos en el periodo": semanas_casos_bloque,
+                        "Semanas oportunas en el periodo": semanas_oportunas,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
@@ -320,9 +315,9 @@ if uploaded_file is not None:
                     m_rows = unit_rows_map.get(unit_name, {})
                     row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
                     if row_semanas_casos is not None and len(cols_unit_indices) > 0:
-                        semanas_casos_bloque = sum([float(row_semanas_casos[c]) for c in cols_unit_indices if pd.notna(row_semanas_casos[c])])
+                        semanas_oportunas = sum([float(row_semanas_casos[c]) for c in cols_unit_indices if pd.notna(row_semanas_casos[c])])
                     else:
-                        semanas_casos_bloque = 0.0
+                        semanas_oportunas = 0.0
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -342,7 +337,7 @@ if uploaded_file is not None:
                     u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                     unit_metrics = {
-                        "Semanas con casos en el periodo": semanas_casos_bloque,
+                        "Semanas con notificación oportuna en el periodo": semanas_oportunas,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
