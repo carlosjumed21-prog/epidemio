@@ -124,8 +124,15 @@ if uploaded_file is not None:
 
                 def get_ab_val(metric_key):
                     r = m_rows.get(metric_key, None)
-                    if r is not None and len(r) > 27 and pd.notna(r[27]):
-                        return float(r[27])
+                    if r is not None:
+                        # Buscamos en la columna AB (índice 27) o evaluamos si hay un valor numérico válido en las columnas de la fila
+                        for col_idx in range(len(r) - 1, 0, -1):
+                            val_celda = r[col_idx]
+                            try:
+                                if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                    return float(val_celda)
+                            except ValueError:
+                                continue
                     return 0.0
 
                 u_oportunas = get_ab_val("Unidades con casos oportunos")
@@ -137,11 +144,16 @@ if uploaded_file is not None:
                 promedio_semanas_unidad = (semanas_casos_bloque / base_hab) if base_hab > 0 else 0.0
                 divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
 
-                # Fórmulas oficiales completas para los 6 indicadores
+                # Fórmulas oficiales
                 ind_a = (promedio_semanas_unidad / divisor_calc) * 100
                 ind_b = (u_oportunas / base_hab) * 100
                 ind_c = (promedio_semanas_unidad / divisor_calc) * 100
+                
+                # Si 'u_sin_notificar' viene en 0 pero en tu lógica institucional esperas que sea 100 cuando no hay unidades sin notificar, 
+                # aseguramos la proporción correcta: (u_habilitadas - u_sin_notificar) / u_habilitadas o directo sobre unidades notificadas.
+                # Aquí evaluamos el porcentaje de unidades sin notificar:
                 ind_d = (u_sin_notificar / base_hab) * 100
+                
                 excedente_rsm = max(0.0, ind_d - 5.0)
                 ind_e = max(0.0, ind_b - excedente_rsm)
                 ind_f = (ind_b + ind_c) / 2.0
@@ -164,7 +176,7 @@ if uploaded_file is not None:
             return results
 
         def get_bg_color(val, ind_type):
-            if val is None or val == 0.0:
+            if val is None:
                 return ''
             
             if ind_type == "a":
@@ -257,9 +269,7 @@ if uploaded_file is not None:
                         if actual_col in col_mapping:
                             itype = col_mapping[actual_col]
                             val = raw_dict[itype]
-                            # Permitimos sombreado incluso en 0.0 si es d) RSM para reflejar su valor real
-                            if val > 0.0 or itype == "d":
-                                styles[i] = get_bg_color(val, itype)
+                            styles[i] = get_bg_color(val, itype)
                     return styles
 
                 st.subheader(f"📊 Tabla Comparativa General (6 Indicadores) — {rango_gen_etiqueta}")
@@ -316,8 +326,14 @@ if uploaded_file is not None:
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
-                        if r is not None and len(r) > 27 and pd.notna(r[27]):
-                            return float(r[27])
+                        if r is not None:
+                            for col_idx in range(len(r) - 1, 0, -1):
+                                val_celda = r[col_idx]
+                                try:
+                                    if pd.notna(val_celda) and str(val_celda).strip() != "":
+                                        return float(val_celda)
+                                except ValueError:
+                                    continue
                         return 0.0
 
                     u_oportunas = get_ab_val("Unidades con casos oportunos")
@@ -422,7 +438,7 @@ if uploaded_file is not None:
                 for i, col_name in enumerate(row_data.index):
                     if i > 0:
                         val = row_data.iloc[i]
-                        if pd.notna(val) and val > 0.0:
+                        if pd.notna(val):
                             styles[i] = get_bg_color(val, ind_key)
                 return styles
 
@@ -430,14 +446,14 @@ if uploaded_file is not None:
             
             st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
 
-            # Mini tabla delegacional inferior (Valor más bajo mayor a 0 por columna)
+            # Mini tabla delegacional inferior
             st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
             
             min_row = {}
             for t_name, _, _ in trimestres_config:
-                vals = [trim_results[t_name][u] for u in TARGET_UNITS if trim_results[t_name][u] > 0.0]
+                vals = [trim_results[t_name][u] for u in TARGET_UNITS]
                 min_val = min(vals) if vals else 0.0
-                min_row[t_name] = f"{min_val:.2f}%" if min_val > 0.0 else "Sin datos"
+                min_row[t_name] = f"{min_val:.2f}%"
 
             delegacional_data = [{
                 "DELEGACIONAL": "Mínimo Registrado",
@@ -454,16 +470,14 @@ if uploaded_file is not None:
                 for i, col_name in enumerate(row_data.index):
                     if col_name in t_keys:
                         raw_str = row_data[col_name]
-                        if raw_str != "Sin datos":
-                            clean_val = float(raw_str.replace("%", ""))
-                            if clean_val > 0.0:
-                                styles[i] = get_bg_color(clean_val, ind_key)
+                        clean_val = float(raw_str.replace("%", ""))
+                        styles[i] = get_bg_color(clean_val, ind_key)
                 return styles
 
             styled_del = df_del.style.apply(style_delegational, axis=1)
             st.dataframe(styled_del, use_container_width=True, hide_index=True)
 
-            # Acotación colocada en la parte inferior con sus respectivos colores de semáforo
+            # Acotación colocada en la parte inferior
             st.markdown(f"""
             <table class="acotacion-table">
                 <tr>
