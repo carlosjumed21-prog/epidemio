@@ -43,7 +43,6 @@ def get_bg_color(val, ind_type):
     if val is None or pd.isna(val) or val == "NO APLICA":
         return ''
     
-    # Colorimetría original recuperada del archivo anexado para el indicador a)[cite: 1]
     if ind_type == "a":
         if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -56,7 +55,7 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "d":
@@ -66,7 +65,7 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
@@ -553,7 +552,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Formato con fila Delegacional (Valor Máximo)
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -571,7 +570,6 @@ if uploaded_file is not None:
 
                 df_c = pd.DataFrame(tabla_c_data)
 
-                # Fila Delegacional calculando el MÁXIMO de cada columna numérica
                 fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = [(t_name, "SEMANAS CONSISTENTES")]
@@ -738,10 +736,19 @@ if uploaded_file is not None:
 
                 df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
 
+                def style_sep_table(row_data):
+                    styles = [''] * len(row_data)
+                    for i, col_name in enumerate(row_data.index):
+                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
+                            val = row_data.iloc[i]
+                            if pd.notna(val):
+                                styles[i] = get_bg_color(val, ind_key)
+                    return styles
+
                 styled_sep = df_sep.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
                     subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
-                )
+                ).apply(style_sep_table, axis=1)
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True, height=580)
 
