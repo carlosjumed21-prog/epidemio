@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Análisis segmentado por bloques trimestrales reales (sin simulación de datos faltantes)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo y unidades operativas</div>', unsafe_allow_html=True)
 
 # Lista completa de las 16 unidades operativas oficiales
 TARGET_UNITS = [
@@ -84,14 +84,14 @@ if uploaded_file is not None:
                 metric_name = str(v).strip()
                 unit_rows_map[active_unit][metric_name] = row
 
-        # Selector de Trimestre basado estrictamente en las semanas reales del Excel
+        # Selector de Periodo con la opción "Total"
         st.markdown("---")
-        st.subheader("🗓️ Selección de Periodo / Trimestre (Semanas Reales del Excel)")
+        st.subheader("🗓️ Selección de Periodo / Trimestre")
         
         trimestre_opcion = st.selectbox(
-            "Seleccione el bloque a analizar:",
+            "Seleccione el periodo a analizar:",
             [
-                "TODOS LOS TRIMESTRES (Panorama Anual General)",
+                "Total",
                 "1er Trimestre (Semanas 1 a 13)",
                 "2º Trimestre (Semanas 13 a 26)",
                 "3er Trimestre (Semanas 26 a 39)",
@@ -99,7 +99,7 @@ if uploaded_file is not None:
             ]
         )
         
-        # Filtrado estricto de columnas según las semanas que REALMENTE existan en el Excel
+        # Filtrado estricto de columnas según las semanas del Excel
         if "1er Trimestre" in trimestre_opcion:
             cols_trimestre_indices = [item[0] for item in semanas_info if 1 <= item[1] <= 13]
             rango_etiqueta = "1er Trimestre (Sem. 1-13)"
@@ -114,10 +114,10 @@ if uploaded_file is not None:
             rango_etiqueta = "4º Trimestre (Sem. 40-52)"
         else:
             cols_trimestre_indices = [item[0] for item in semanas_info]
-            rango_etiqueta = "Panorama Anual General"
+            rango_etiqueta = "Total"
 
-        # Validación estricta: Si se selecciona un trimestre pero no hay datos de esas semanas en el Excel, se avisa al usuario
-        if "TODOS" not in trimestre_opcion and len(cols_trimestre_indices) == 0:
+        # Validación estricta sin simulación
+        if trimestre_opcion != "Total" and len(cols_trimestre_indices) == 0:
             st.warning(f"⚠️ El archivo cargado no contiene datos registrados en la fila 5 para el bloque del {rango_etiqueta}. No se simularán datos.")
             stop_processing = True
         else:
@@ -131,7 +131,6 @@ if uploaded_file is not None:
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
                 
-                # Extracción y suma exclusiva de las semanas correspondientes a este bloque
                 row_semanas_casos = m_rows.get("Semanas acumuladas con casos", None)
                 if row_semanas_casos is not None and len(cols_trimestre_indices) > 0:
                     semanas_casos_bloque = sum([float(row_semanas_casos[c]) for c in cols_trimestre_indices if pd.notna(row_semanas_casos[c])])
@@ -250,66 +249,20 @@ if uploaded_file is not None:
             st.dataframe(styled_general, use_container_width=True)
 
             st.markdown("---")
-            st.subheader("🏥 Tablas Detalladas e Independientes por Unidad")
-            
-            st.markdown("##### 🚦 Leyenda de Acotaciones y Semaforización")
-            st.markdown("""
-            <div class="legend-container">
-                <div class="legend-item legend-excelente">🟢 Excelente (Verde)</div>
-                <div class="legend-item legend-bueno">⚪ Bueno (Blanco)</div>
-                <div class="legend-item legend-regular">🟡 Regular (Amarillo)</div>
-                <div class="legend-item legend-malo">🔴 Malo (Rojo)</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.subheader("🏥 Datos del Periodo por Unidad Médica")
             
             unit_options = ["TODAS"] + TARGET_UNITS
-            selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo):", unit_options)
+            selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo de datos):", unit_options)
             
             def render_unit_details(unit_name):
                 unit_row = df_resumen[df_resumen["Unidad"] == unit_name].iloc[0]
-                raw_vals = unit_row["_raw"]
                 unit_metrics = unit_row["_metrics"]
                 
                 st.markdown(f"### 📍 Unidad: **{unit_name}**")
-                col1, col2 = st.columns([1, 1])
+                st.markdown(f"##### Datos del Periodo ({rango_etiqueta})")
                 
-                with col1:
-                    st.markdown(f"##### Datos del Periodo ({rango_etiqueta})")
-                    var_df = pd.DataFrame(list(unit_metrics.items()), columns=["Métrica", "Valor en el Periodo"])
-                    st.dataframe(var_df, use_container_width=True, hide_index=True)
-                
-                with col2:
-                    st.markdown("##### Indicadores y Semáforo del Periodo")
-                    ind_summary = []
-                    indicators_meta = [
-                        ("a) Cumplimiento u Oportunidad", raw_vals["a"], "a"),
-                        ("b) Cobertura Oportuna", raw_vals["b"], "b"),
-                        ("c) Consistencia", raw_vals["c"], "c"),
-                        ("d) Reporta Sin Movimiento (RSM)", raw_vals["d"], "d"),
-                        ("e) Cobertura Ajustada", raw_vals["e"], "e"),
-                        ("f) Calidad (Descriptivo)", raw_vals["f"], "f")
-                    ]
-                    for name, val, itype in indicators_meta:
-                        ind_summary.append({
-                            "Indicador": name,
-                            "Resultado (%)": round(val, 2)
-                        })
-                    
-                    ind_df = pd.DataFrame(ind_summary)
-                    
-                    def style_ind_table(row_ind):
-                        styles = [''] * len(row_ind)
-                        itypes = ["a", "b", "c", "d", "e", "f"]
-                        idx = row_ind.name
-                        itype = itypes[idx] if idx < len(itypes) else "a"
-                        for i, col_name in enumerate(row_ind.index):
-                            if col_name == "Resultado (%)":
-                                val = raw_vals[itype]
-                                styles[i] = get_bg_color(val, itype)
-                        return styles
-
-                    styled_ind = ind_df.style.format(formatter="{:.2f}", subset=["Resultado (%)"]).apply(style_ind_table, axis=1)
-                    st.dataframe(styled_ind, use_container_width=True, hide_index=True)
+                var_df = pd.DataFrame(list(unit_metrics.items()), columns=["Métrica", "Valor en el Periodo"])
+                st.dataframe(var_df, use_container_width=True, hide_index=True)
                 st.markdown("---")
 
             if selected_unit == "TODAS":
