@@ -322,7 +322,8 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Fila Delegacional independiente abajo (General)
+        # Tabla Delegacional independiente (abajo de la principal en el General)
+        # a) más bajo, b) promedio del trimestre, c) más alto, f) calidad según trimestre
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -382,7 +383,7 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad (Descriptivo)"
 
-            # CASO ESPECIAL PARA EL INDICADOR B
+            # CASO ESPECIAL PARA EL INDICADOR B (Promedio de cada trimestre)
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -443,6 +444,7 @@ if uploaded_file is not None:
                     st.dataframe(styled_sem, use_container_width=True, hide_index=True)
                     st.markdown("---")
 
+                # Fila Delegacional abajo para b (promedio del trimestre)
                 st.markdown("##### Resultado Delegacional (Promedio por Trimestre)")
                 fila_del_b = {"MÉTRICA / DÍA": "DELEGACIONAL"}
                 for t_name, start_col, end_col in bloques_semanas:
@@ -477,7 +479,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Delegacional = valor más alto
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -520,13 +522,16 @@ if uploaded_file is not None:
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
+                # Tabla Delegacional independiente abajo (valor más alto para C)
                 fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = [(t_name, "SEMANAS CONSISTENTES")]
                     col_ts = [(t_name, "TOTAL SEMANAS")]
                     col_pc = [(t_name, "%CONSISTENCIA")]
                     
+                    # Para la fila delegacional de C, extraemos los valores de la unidad que tenga el % más alto
                     max_pc = df_c[col_pc].max().values[0]
+                    # Encontramos la fila con ese max_pc para asociar sus semanas consistentes y totales correspondientes
                     sub_df = df_c[col_pc]
                     match_row = sub_df[sub_df.iloc[:, 0] == max_pc].index
                     if len(match_row) > 0:
@@ -628,7 +633,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Con estructura correcta de columnas por trimestre y orden agrupado
+                # ESTRUCTURA PARA A (Cumplimiento) - Delegacional = valor más bajo (respetando unidad completa)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -656,23 +661,29 @@ if uploaded_file is not None:
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
                     for t_name, _, _ in bloques_semanas:
-                        fila[(t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")] = trim_results_abs[t_name].get(unidad, np.nan)
-                        fila[(t_name, "INDICADOR")] = trim_results_ind[t_name].get(unidad, np.nan)
+                        fila[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
+                    for t_name, _, _ in bloques_semanas:
+                        fila[("INDICADOR", t_name)] = trim_results_ind[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
 
                 df_sep = pd.DataFrame(tabla_sep_data)
 
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
+                st.markdown(f"**AÑO:** {anio}")
+                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
-                    sep_tuples.append((t_name, "DIAS NOTIFICADOS OPORTUNAMENTE"))
-                    sep_tuples.append((t_name, "INDICADOR"))
+                    sep_tuples.append(("DIAS NOTIFICADOS OPORTUNAMENTE", t_name))
+                for t_name, _, _ in bloques_semanas:
+                    sep_tuples.append(("INDICADOR", t_name))
 
                 df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
 
                 def style_sep_table(row_data):
                     styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
-                        if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
+                        if isinstance(col_name, tuple) and col_name[0] == "INDICADOR":
                             val = row_data.iloc[i]
                             if pd.notna(val):
                                 styles[i] = get_bg_color(val, ind_key)
@@ -680,38 +691,34 @@ if uploaded_file is not None:
 
                 styled_sep = df_sep.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
-                    subset=[col for col in df_sep.columns if col[1] == "INDICADOR"]
+                    subset=[col for col in df_sep.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
-
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
-                st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
                 # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
-                    col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
-                    col_ind = (t_name, "INDICADOR")
+                    col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
+                    col_ind = [("INDICADOR", t_name)]
                     
-                    min_ind = df_sep[col_ind].min()
+                    min_ind = df_sep[col_ind].min().values[0]
                     sub_df = df_sep[col_ind]
-                    match_row = sub_df[sub_df == min_ind].index
+                    match_row = sub_df[sub_df.iloc[:, 0] == min_ind].index
                     if len(match_row) > 0:
                         r_idx = match_row[0]
-                        min_abs = df_sep.loc[r_idx, col_abs]
+                        min_abs = df_sep.loc[r_idx, col_abs].values[0]
                     else:
-                        min_abs = df_sep[col_abs].min()
+                        min_abs = df_sep[col_abs].min().values[0]
                     
-                    fila_delegacional_a[(t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")] = min_abs
-                    fila_delegacional_a[(t_name, "INDICADOR")] = min_ind
+                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_abs
+                    fila_delegacional_a[("INDICADOR", t_name)] = min_ind
 
                 df_del_a = pd.DataFrame([fila_delegacional_a])
                 df_del_a.columns = pd.MultiIndex.from_tuples(sep_tuples)
                 styled_del_a = df_del_a.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
-                    subset=[col for col in df_del_a.columns if col[1] == "INDICADOR"]
+                    subset=[col for col in df_del_a.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
                 ).apply(style_sep_table, axis=1)
 
                 st.dataframe(styled_del_a, use_container_width=True, hide_index=True)
