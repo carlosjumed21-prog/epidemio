@@ -54,7 +54,6 @@ def get_bg_color(val, ind_type):
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
-        # Umbrales específicos para Consistencia (c) según acotación estándar
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -144,7 +143,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
+        # Cálculo base unificado: Suma exacta de la fila "Unidades con casos oportunos" por bloque trimestral
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -166,7 +165,7 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A
+        # Pre-cálculo de Indicador A (Suma trimestral / 13 * 100)
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -178,7 +177,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C con la nueva lógica de consistencia
+        # Pre-cálculo de Indicador C con la lógica de consistencia por trimestre
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -475,7 +474,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A, C, F (USANDO TRIM_RESULTS_IND_C PARA C)
+                # ESTRUCTURA PARA A, C, F
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
