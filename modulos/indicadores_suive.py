@@ -9,15 +9,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS avanzados para la interfaz y optimización estricta de Impresión / PDF
+# Estilos CSS para la interfaz y la vista de impresión oficial (PDF)
 st.markdown("""
 <style>
     .main-header { font-size: 2.2rem; color: #111827; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #374151; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
-    /* Contenedor tipo hoja de PDF */
-    .pdf-page {
+    .report-page {
         background-color: white;
         padding: 40px;
         color: #1E293B;
@@ -26,9 +25,8 @@ st.markdown("""
         border-radius: 6px;
         margin-top: 30px;
         margin-bottom: 30px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        page-break-after: always;
     }
-    
     .institutional-header {
         text-align: center;
         border-bottom: 2px solid #374151;
@@ -39,7 +37,7 @@ st.markdown("""
     .institutional-header h5 { font-size: 0.8rem; font-weight: normal; margin: 2px 0; color: #475569; }
     .institutional-header h3 { font-size: 1rem; font-weight: bold; margin: 8px 0; color: #0F172A; }
 
-    .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
+    .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; font-family: Arial, sans-serif; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
     .acotacion-table th { background-color: #374151; color: white; font-weight: bold; }
     .bg-excelente { background-color: #10B981; color: white; font-weight: bold; }
@@ -47,13 +45,12 @@ st.markdown("""
     .bg-regular { background-color: #FEF08A; color: black; font-weight: bold; }
     .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
 
-    /* Reglas CSS para impresión limpia (Oculta controles de Streamlit al imprimir/guardar PDF) */
     @media print {
         body { background-color: white; }
-        header, .stSidebar, .stFileUploader, .stButton, .main-header, .sub-header, .info-box, hr {
+        header, .stSidebar, .stFileUploader, .stButton, .main-header, .sub-header, .info-box, hr, stSelectbox {
             display: none !important;
         }
-        .pdf-page {
+        .report-page {
             border: none;
             box-shadow: none;
             padding: 0;
@@ -95,6 +92,11 @@ def get_bg_color(val, ind_type):
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
+        else: return 'background-color: #EF4444; color: white; font-weight: bold;'
+    elif ind_type == "d":
+        if 0.0 <= val <= 1.9: return 'background-color: #10B981; color: white; font-weight: bold;'
+        elif 2.0 <= val <= 4.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
@@ -300,18 +302,18 @@ if uploaded_file is not None:
         st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
         # ==========================================
-        # VISTA PREVIA DEL PDF CONSOLIDADO AL FINAL (A, B, C, F EN ORDEN)
+        # VISTA PREVIA Y DESCARGA DEL PDF CONSOLIDADO AL FINAL
         # ==========================================
         st.markdown("---")
         st.markdown("### 📄 Vista Previa y Generación del Documento PDF Consolidado")
         st.markdown("""
         <div style="background-color: #FEF08A; padding: 12px; border-radius: 5px; margin-bottom: 20px; text-align: center; font-weight: bold; color: #1E293B;">
-            🖨️ Haz clic en tu navegador en <b>Ctrl + P</b> (o <b>Cmd + P</b> en Mac) y selecciona <b>"Guardar como PDF"</b> para descargar el reporte oficial completo con todas las páginas en orden.
+            🖨️ Haz clic en tu navegador en <b>Ctrl + P</b> (o <b>Cmd + P</b> en Mac) y selecciona <b>"Guardar como PDF"</b> para descargar el reporte oficial completo con todas las páginas ordenadas y sus respectivas acotaciones.
         </div>
         """, unsafe_allow_html=True)
 
         # --- PÁGINA 1: GENERAL ---
-        st.markdown('<div class="pdf-page">', unsafe_allow_html=True)
+        st.markdown('<div class="report-page">', unsafe_allow_html=True)
         render_institutional_header("PANORAMA GENERAL DE INDICADORES SUAVE")
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
         st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
@@ -319,7 +321,7 @@ if uploaded_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
         # --- PÁGINA 2: INDICADOR A ---
-        st.markdown('<div class="pdf-page">', unsafe_allow_html=True)
+        st.markdown('<div class="report-page">', unsafe_allow_html=True)
         render_institutional_header("INDICADOR EVALUADO: Cumplimiento u Oportunidad (a)")
         
         tabla_sep_data = []
@@ -360,10 +362,30 @@ if uploaded_file is not None:
         styled_del_a = df_del_a.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), subset=[col for col in df_del_a.columns if col[1] == "INDICADOR"]).apply(style_sep_table, axis=1)
         st.dataframe(styled_del_a, use_container_width=True, hide_index=True)
         st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
+        
+        # Acotación A
+        st.markdown("""
+        <table class="acotacion-table">
+            <tr>
+                <th>Indicador</th>
+                <th>Excelente</th>
+                <th>Bueno</th>
+                <th>Regular</th>
+                <th>Malo</th>
+            </tr>
+            <tr>
+                <td><b>Cumplimiento u Oportunidad (a)</b></td>
+                <td class="bg-excelente">100.0%[cite: 2]</td>
+                <td class="bg-bueno">97.5 - 99.9%[cite: 2]</td>
+                <td class="bg-regular">95.0 - 97.4%[cite: 2]</td>
+                <td class="bg-malo">≤ 94.9%[cite: 2]</td>
+            </tr>
+        </table>
+        """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # --- PÁGINA 3: INDICADOR B ---
-        st.markdown('<div class="pdf-page">', unsafe_allow_html=True)
+        st.markdown('<div class="report-page">', unsafe_allow_html=True)
         render_institutional_header("INDICADOR EVALUADO: Cobertura Oportuna (b)")
         st.markdown("UNIDADES HABILITADAS POR SEMANA: 15[cite: 2]")
         
@@ -391,11 +413,31 @@ if uploaded_file is not None:
         df_del_b = pd.DataFrame([fila_del_b])
         styled_del_b = df_del_b.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else str(x), subset=df_del_b.columns[1:])
         st.dataframe(styled_del_b, use_container_width=True, hide_index=True)
-        st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
+        
+        # Acotación B
+        st.markdown("""
+        <table class="acotacion-table">
+            <tr>
+                <th>Indicador</th>
+                <th>Excelente</th>
+                <th>Bueno</th>
+                <th>Regular</th>
+                <th>Malo</th>
+            </tr>
+            <tr>
+                <td><b>Cobertura Oportuna (b)</b></td>
+                <td class="bg-excelente">95.0 - 100%[cite: 2]</td>
+                <td class="bg-bueno">90.0 - 94.9%[cite: 2]</td>
+                <td class="bg-regular">80.0 - 89.9%[cite: 2]</td>
+                <td class="bg-malo">≤ 79.9%[cite: 2]</td>
+            </tr>
+        </table>
+        """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # --- PÁGINA 4: INDICADOR C ---
-        st.markdown('<div class="pdf-page">', unsafe_allow_html=True)
+        st.markdown('<div class="report-page">', unsafe_allow_html=True)
         render_institutional_header("INDICADOR EVALUADO: Consistencia (c)")
         
         tabla_c_data = []
@@ -439,10 +481,30 @@ if uploaded_file is not None:
         styled_del_c = df_del_c.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), subset=[col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]).apply(style_c_table, axis=1)
         st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
         st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
+        
+        # Acotación C
+        st.markdown("""
+        <table class="acotacion-table">
+            <tr>
+                <th>Indicador</th>
+                <th>Excelente</th>
+                <th>Bueno</th>
+                <th>Regular</th>
+                <th>Malo</th>
+            </tr>
+            <tr>
+                <td><b>Consistencia (c)</b></td>
+                <td class="bg-excelente">90.0 - 100%[cite: 2]</td>
+                <td class="bg-bueno">80.0 - 89.9%[cite: 2]</td>
+                <td class="bg-regular">70.0 - 79.9%[cite: 2]</td>
+                <td class="bg-malo">≤ 69.9%[cite: 2]</td>
+            </tr>
+        </table>
+        """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # --- PÁGINA 5: INDICADOR F ---
-        st.markdown('<div class="pdf-page">', unsafe_allow_html=True)
+        st.markdown('<div class="report-page">', unsafe_allow_html=True)
         render_institutional_header("INDICADOR EVALUADO: Calidad (Descriptivo) (f)")
         
         tabla_f_data = [{"TRIMESTRE": t, "PORCENTAJE DE COBERTURA": global_trim_results_f[t]["cobertura"], "PORCENTAJE DE CONSISTENCIA": global_trim_results_f[t]["consistencia"], "INDICADOR DE CALIDAD": global_trim_results_f[t]["calidad"]} for t, _, _ in bloques_semanas]
@@ -458,6 +520,26 @@ if uploaded_file is not None:
         styled_f = df_f.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x), subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]).apply(style_calidad_table, axis=1)
         st.dataframe(styled_f, use_container_width=True, hide_index=True)
         st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
+        
+        # Acotación F
+        st.markdown("""
+        <table class="acotacion-table">
+            <tr>
+                <th>Indicador</th>
+                <th>Excelente</th>
+                <th>Bueno</th>
+                <th>Regular</th>
+                <th>Malo</th>
+            </tr>
+            <tr>
+                <td><b>Calidad (Descriptivo) (f)</b></td>
+                <td class="bg-excelente">90.0 - 100%[cite: 2]</td>
+                <td class="bg-bueno">80.0 - 89.9%[cite: 2]</td>
+                <td class="bg-regular">60.0 - 79.9%[cite: 2]</td>
+                <td class="bg-malo">≤ 59.9%[cite: 2]</td>
+            </tr>
+        </table>
+        """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
