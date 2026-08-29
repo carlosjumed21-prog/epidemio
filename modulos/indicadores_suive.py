@@ -116,9 +116,8 @@ if uploaded_file is not None:
             results = []
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                
-                # Fila "Unidades con casos oportunos" para sumar el bloque del trimestre
                 row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                
                 suma_casos_oportunos = 0.0
                 if row_casos_oportunos is not None and len(cols_indices) > 0:
                     suma_casos_oportunos = sum([float(row_casos_oportunos[c]) for c in cols_indices if pd.notna(row_casos_oportunos[c])])
@@ -141,12 +140,9 @@ if uploaded_file is not None:
                 u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                 base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
-                divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 1.0
+                divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
 
-                # Aplicación exacta de la fórmula del Indicador a):
-                # (Sumatoria de la fila "Unidades con casos oportunos" en el bloque del trimestre / 13) * 100
                 ind_a = (suma_casos_oportunos / divisor_calc) * 100
-                
                 ind_b = (u_oportunas / base_hab) * 100
                 ind_c = (suma_casos_oportunos / divisor_calc) * 100
                 ind_d = (u_sin_notificar / base_hab) * 100
@@ -162,8 +158,9 @@ if uploaded_file is not None:
                     "d": round(ind_d, 2),
                     "e": round(ind_e, 2),
                     "f": round(ind_f, 2),
+                    "suma_oportunas": suma_casos_oportunos,
                     "_metrics": {
-                        "Suma casos oportunos en el bloque": suma_casos_oportunos,
+                        "Sumatoria casos oportunos en el bloque": suma_casos_oportunos,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
@@ -232,7 +229,7 @@ if uploaded_file is not None:
 
             if not stop_gen:
                 total_sem_gen = float(len(cols_gen_indices)) if len(cols_gen_indices) > 0 else 13.0
-                raw_gen_res = calcular_resultados_periodo(cols_gen_indices, total_sem_gen)
+                raw_gen_res = calcular_resultados_periodo(cols_gen_indices, 13.0)
                 
                 processed_gen = []
                 for item in raw_gen_res:
@@ -306,7 +303,6 @@ if uploaded_file is not None:
         
         if trimestre_opcion_unit:
             cols_unit_indices, rango_unit_etiqueta = get_indices_semanas(trimestre_opcion_unit)
-            total_sem_unit = float(len(cols_unit_indices)) if len(cols_unit_indices) > 0 else 13.0
 
             unit_options = ["TODAS"] + TARGET_UNITS
             selected_unit = st.selectbox("Seleccione una Unidad Médica (o elija 'TODAS' para ver el desglose completo de datos):", [""] + unit_options, index=0)
@@ -338,7 +334,7 @@ if uploaded_file is not None:
                     u_sin_notificar = get_ab_val("Unidades sin notificar")
 
                     unit_metrics = {
-                        "Sumatoria casos oportunos en el periodo": suma_casos_oportunos,
+                        "Sumatoria casos oportunos en el bloque": suma_casos_oportunos,
                         "Unidades con casos oportunos": u_oportunas,
                         "Unidades habilitadas": u_habilitadas,
                         "Unidades sin notificar": u_sin_notificar
@@ -391,9 +387,9 @@ if uploaded_file is not None:
 
             trimestres_config = [
                 ("PRIMER TRIMESTRE", [item[0] for item in semanas_info if 1 <= item[1] <= 13], 13.0),
-                ("SEGUNDO TRIMESTRE", [item[0] for item in semanas_info if 13 < item[1] <= 26], 13.0),
-                ("TERCER TRIMESTRE", [item[0] for item in semanas_info if 26 < item[1] <= 39], 13.0),
-                ("CUARTO TRIMESTRE", [item[0] for item in semanas_info if 39 < item[1] <= 52], 13.0)
+                ("SEGUNDO TRIMESTRE", [item[0] for item in semanas_info if 13 <= item[1] <= 26], 13.0),
+                ("TERCER TRIMESTRE", [item[0] for item in semanas_info if 26 <= item[1] <= 39], 13.0),
+                ("CUARTO TRIMESTRE", [item[0] for item in semanas_info if 39 <= item[1] <= 52], 13.0)
             ]
 
             trim_results = {}
@@ -492,6 +488,70 @@ if uploaded_file is not None:
                 </tr>
             </table>
             """, unsafe_allow_html=True)
+
+        # ==========================================
+        # 4. APARTADO DE SEMANAS NOTIFICADAS OPORTUNAMENTE (ABSOLUTAS)
+        # ==========================================
+        st.markdown("---")
+        st.subheader("📊 Semanas Notificadas Oportunamente (Valores Absolutos por Trimestre)")
+        
+        # Mapeo estricto de rangos de columnas por bloques exactos (B-N, O-AA, AB-AN, AO-BA)
+        # Convertimos letras de columnas a índices numéricos basados en base 0 (A=0, B=1, etc.)
+        def col_to_idx(col_str):
+            col_str = col_str.upper()
+            idx = 0
+            for char in col_str:
+                idx = idx * 26 + (ord(char) - ord('A') + 1)
+            return idx - 1
+
+        bloques_semanas = [
+            ("PRIMER TRIMESTRE", col_to_idx("B"), col_to_idx("N")),
+            ("SEGUNDO TRIMESTRE", col_to_idx("O"), col_to_idx("AA")),
+            ("TERCER TRIMESTRE", col_to_idx("AB"), col_to_idx("AN")),
+            ("CUARTO TRIMESTRE", col_to_idx("AO"), col_to_idx("BA"))
+        ]
+
+        abs_results = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals = {}
+            for unidad in TARGET_UNITS:
+                m_rows = unit_rows_map.get(unidad, {})
+                row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                suma_bloque = 0.0
+                if row_casos_oportunos is not None:
+                    # Sumamos dentro del rango de columnas especificado
+                    for c_idx in range(start_col, end_col + 1):
+                        if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
+                            try:
+                                suma_bloque += float(row_casos_oportunos[c_idx])
+                            except ValueError:
+                                pass
+                t_vals[unidad] = suma_bloque
+            abs_results[t_name] = t_vals
+
+        tabla_abs_data = []
+        for unidad in TARGET_UNITS:
+            fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
+            for t_name, _, _ in bloques_semanas:
+                fila[t_name] = abs_results[t_name].get(unidad, 0.0)
+            tabla_abs_data.append(fila)
+
+        df_abs = pd.DataFrame(tabla_abs_data)
+
+        st.markdown(f"**SEMANAS NOTIFICADAS OPORTUNAMENTE:** {anio}")
+        st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
+
+        multi_cols_abs = pd.MultiIndex.from_tuples([
+            ("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"),
+            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "PRIMER TRIMESTRE"),
+            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "SEGUNDO TRIMESTRE"),
+            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "TERCER TRIMESTRE"),
+            ("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", "CUARTO TRIMESTRE")
+        ])
+        df_abs.columns = multi_cols_abs
+
+        # Renderizamos la tabla de valores absolutos sin semáforo (solo formato numérico entero o decimal limpio)
+        st.dataframe(df_abs.style.format(formatter="{:.0f}", subset=df_abs.columns[1:]), use_container_width=True, hide_index=True, height=580)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
