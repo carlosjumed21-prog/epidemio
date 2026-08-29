@@ -269,129 +269,78 @@ if uploaded_file is not None:
             }
 
         # ==========================================
-        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 4 INDICADORES ACTIVOS: a, b, c, f)
+        # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
         # ==========================================
         st.markdown("---")
-        st.subheader("🗓️ Selección de Periodo / Trimestre (Panorama General)")
-        
-        trimestre_opcion_gen = st.selectbox(
-            "Seleccione el periodo general a analizar:",
-            [
-                "",
-                "Total",
-                "1er Trimestre (Días 1 a 13)",
-                "2º Trimestre (Días 13 a 26)",
-                "3er Trimestre (Días 26 a 39)",
-                "4º Trimestre (Días 39 a 52)"
-            ],
-            index=0,
-            key="sel_gen"
-        )
-        
-        if trimestre_opcion_gen:
-            def get_indices_semanas(opcion_periodo):
-                if not opcion_periodo:
-                    return [], ""
-                if "1er Trimestre" in opcion_periodo or "Primer" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 1 <= item[1] <= 13], "1er Trimestre (Días 1-13)", "PRIMER TRIMESTRE"
-                elif "2º Trimestre" in opcion_periodo or "Segundo" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 13 < item[1] <= 26], "2º Trimestre (Días 14-26)", "SEGUNDO TRIMESTRE"
-                elif "3er Trimestre" in opcion_periodo or "Tercer" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 26 < item[1] <= 39], "3er Trimestre (Días 27-39)", "TERCER TRIMESTRE"
-                elif "4º Trimestre" in opcion_periodo or "Cuarto" in opcion_periodo:
-                    return [item[0] for item in semanas_info if 39 < item[1] <= 52], "4º Trimestre (Días 40-52)", "CUARTO TRIMESTRE"
-                else:
-                    return [item[0] for item in semanas_info], "Total", None
+        st.subheader("📊 Tabla Comparativa General (Panorama por Trimestres)")
 
-            indices_gen, etiqueta_gen, nombre_trimestre_match = get_indices_semanas(trimestre_opcion_gen)
+        general_table_data = []
+        for unidad in TARGET_UNITS:
+            fila = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): unidad}
+            for t_name, _, _ in bloques_semanas:
+                val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
+                val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
+                
+                fila[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = val_a
+                fila[(t_name, "COBERTURA OPORTUNA")] = "NO APLICA"
+                fila[(t_name, "CONSISTENCIA")] = val_c
+                fila[(t_name, "CALIDAD")] = "NO APLICA"
+            general_table_data.append(fila)
 
-            def calcular_resultados_periodo_gen(cols_indices, total_sem_bloque, trim_match):
-                results = []
-                for unidad in TARGET_UNITS:
-                    m_rows = unit_rows_map.get(unidad, {})
-                    
-                    val_a_estatico = np.nan
-                    val_c_estatico = np.nan
-                    if trim_match and trim_match in trim_results_ind_a:
-                        val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
-                        val_c_estatico = trim_results_c_data[trim_match].get(unidad, {}).get("porc", np.nan)
-                    elif not trim_match and len(bloques_semanas) > 0:
-                        vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
-                        vals_trim_c = [trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan) for t in bloques_semanas if pd.notna(trim_results_c_data[t[0]].get(unidad, {}).get("porc", np.nan))]
-                        if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
-                        if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
-
-                    row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                    suma_casos_oportunos = 0.0
-                    if row_casos_oportunos is not None and len(cols_indices) > 0:
-                        for c in cols_indices:
-                            if pd.notna(row_casos_oportunos[c]):
-                                try:
-                                    suma_casos_oportunos += float(row_casos_oportunos[c])
-                                except ValueError:
-                                    pass
-
-                    divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
-
-                    ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
-                    ind_b = "NO APLICA"
-                    ind_c = val_c_estatico if pd.notna(val_c_estatico) else ind_a
-                    ind_f = "NO APLICA"
-
-                    results.append({
-                        "Unidad": unidad,
-                        "a": ind_a if pd.notna(ind_a) else None,
-                        "b": ind_b,
-                        "c": ind_c if pd.notna(ind_c) else None,
-                        "f": ind_f
-                    })
-                return results
-
-            raw_gen_res = calcular_resultados_periodo_gen(indices_gen, 13.0, nombre_trimestre_match)
+        # Fila Delegacional con los máximos / globales por columna
+        fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
+        for t_name, _, _ in bloques_semanas:
+            vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
+            max_a = max([v for v in vals_a if pd.notna(v)], default=np.nan)
             
-            processed_gen = []
-            for item in raw_gen_res:
-                processed_gen.append({
-                    "Unidad": item["Unidad"],
-                    "a) Cumplimiento u Oportunidad (%)": item["a"],
-                    "b) Cobertura Oportuna (%)": item["b"],
-                    "c) Consistencia (%)": item["c"],
-                    "f) Calidad (Descriptivo) (%)": item["f"],
-                    "_raw": {"a": item["a"], "b": item["b"], "c": item["c"], "f": item["f"]}
-                })
-            df_gen = pd.DataFrame(processed_gen)
-
-            def style_dataframe(row_data):
-                styles = [''] * len(row_data)
-                col_mapping = {
-                    "a) Cumplimiento u Oportunidad (%)": "a",
-                    "b) Cobertura Oportuna (%)": "b",
-                    "c) Consistencia (%)": "c",
-                    "f) Calidad (Descriptivo) (%)": "f"
-                }
-                idx = row_data.name
-                raw_dict = df_gen.loc[idx, "_raw"]
-                for i, col_name in enumerate(row_data.index):
-                    actual_col = col_name[1] if isinstance(col_name, tuple) else col_name
-                    if actual_col in col_mapping:
-                        itype = col_mapping[actual_col]
-                        val = raw_dict[itype]
-                        styles[i] = get_bg_color(val, itype)
-                return styles
-
-            st.subheader(f"📊 Tabla Comparativa General — {etiqueta_gen}")
-            display_df = df_gen.drop(columns=["_raw"])
-            multi_columns = pd.MultiIndex.from_tuples([
-                ("Unidades Operativas", "Unidad"),
-                (etiqueta_gen, "a) Cumplimiento u Oportunidad (%)"),
-                (etiqueta_gen, "b) Cobertura Oportuna (%)"),
-                (etiqueta_gen, "c) Consistencia (%)"),
-                (etiqueta_gen, "f) Calidad (Descriptivo) (%)")
-            ])
-            display_df.columns = multi_columns
-            styled_general = display_df.style.format(formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x), subset=pd.IndexSlice[:, display_df.columns[1:]]).apply(style_dataframe, axis=1)
+            global_cob = global_trim_results_f.get(t_name, {}).get("cobertura", np.nan)
             
-            st.dataframe(styled_general, use_container_width=True, height=580)
+            vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+            max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
+            
+            global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
+            
+            fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = max_a
+            fila_del[(t_name, "COBERTURA OPORTUNA")] = global_cob
+            fila_del[(t_name, "CONSISTENCIA")] = max_c
+            fila_del[(t_name, "CALIDAD")] = global_cal
+
+        general_table_data.append(fila_del)
+        df_gen_multi = pd.DataFrame(general_table_data)
+
+        gen_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+        for t_name, _, _ in bloques_semanas:
+            gen_tuples.append((t_name, "CUMPLIMIENTO U OPORTUNIDAD"))
+            gen_tuples.append((t_name, "COBERTURA OPORTUNA"))
+            gen_tuples.append((t_name, "CONSISTENCIA"))
+            gen_tuples.append((t_name, "CALIDAD"))
+
+        df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
+
+        def style_general_multi(row_data):
+            styles = [''] * len(row_data)
+            is_delegacional = (row_data.iloc[0] == "DELEGACIONAL")
+            for i, col_name in enumerate(row_data.index):
+                if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
+                    subcol = col_name[1]
+                    val = row_data.iloc[i]
+                    if pd.notna(val) and val != "NO APLICA":
+                        if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
+                            styles[i] = get_bg_color(val, "a")
+                        elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
+                            styles[i] = get_bg_color(val, "b")
+                        elif subcol == "CONSISTENCIA":
+                            styles[i] = get_bg_color(val, "c")
+                        elif subcol == "CALIDAD" and is_delegacional:
+                            styles[i] = get_bg_color(val, "f")
+            return styles
+
+        styled_gen_multi = df_gen_multi.style.format(
+            formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
+            subset=[col for col in df_gen_multi.columns if col[0] != "UNIDAD MÉDICA / TRIMESTRE"]
+        ).apply(style_general_multi, axis=1)
+
+        st.dataframe(styled_gen_multi, use_container_width=True, height=600)
 
         # ==========================================
         # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
@@ -506,7 +455,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con su fila Delegacional de Valor Máximo
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -643,7 +592,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Con su fila Delegacional de Valor Máximo
+                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
