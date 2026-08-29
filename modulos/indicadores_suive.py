@@ -3,6 +3,13 @@ import pandas as pd
 import numpy as np
 import io
 
+# Importaciones para generación de PDF con ReportLab
+from reportlab.lib.pagesizes import letter, portrait
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+
 # Configuración de la página
 st.set_page_config(
     page_title="Sistema de Evaluación Epidemiológica - SUIVE",
@@ -65,6 +72,244 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
 
+def get_hex_color(val, ind_type):
+    if val is None or pd.isna(val) or val == "NO APLICA":
+        return colors.white, colors.black
+    
+    bg_hex, text_color = colors.white, colors.black
+    
+    if ind_type == "a":
+        if val == 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 97.5 <= val <= 99.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 95.0 <= val <= 97.4:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
+    elif ind_type in ["b", "e"]:
+        if 95.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 90.0 <= val <= 94.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
+    elif ind_type == "c":
+        if 90.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 70.0 <= val <= 79.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
+    elif ind_type == "f":
+        if 90.0 <= val <= 100.0:
+            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
+        elif 80.0 <= val <= 89.9:
+            bg_hex, text_color = colors.white, colors.black
+        elif 60.0 <= val <= 79.9:
+            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
+        else:
+            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
+            
+    return bg_hex, text_color
+
+# Clase Canvas para dibujar el encabezado institucional en cada página del PDF
+class NumberedCanvas(canvas.Canvas):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pages = []
+
+    def showPage(self):
+        self.pages.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        for page in self.pages:
+            self.__dict__.update(page)
+            self.draw_header_footer()
+            super().showPage()
+        super().save()
+
+    def draw_header_footer(self):
+        self.saveState()
+        self.setFont("Helvetica-Bold", 7.5)
+        self.setFillColor(colors.HexColor('#1F2937'))
+        
+        y = 755
+        lines = [
+            "REPRESENTACIÓN REGIONAL SUR",
+            "SUBDELEGACIÓN MÉDICA",
+            "DEPARTAMENTO DE ATENCIÓN MÉDICA",
+            "COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA",
+            "INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)"
+        ]
+        for line in lines:
+            self.drawCentredString(612 / 2.0, y, line)
+            y -= 9
+            
+        self.setStrokeColor(colors.HexColor('#CBD5E1'))
+        self.setLineWidth(0.75)
+        self.line(30, 705, 612 - 30, 705)
+        
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor('#6B7280'))
+        self.drawRightString(612 - 30, 20, f"Página {self._pageNumber}")
+        self.restoreState()
+
+# Función generadora del reporte PDF vertical con autoajuste y sombreados
+def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_results_ind_a, trim_results_c_data, global_trim_results_f, delegational_b_trim, unit_rows_map, bloques_semanas, semanas_info):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=portrait(letter), rightMargin=25, leftMargin=25, topMargin=75, bottomMargin=35)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor('#111827'), spaceAfter=3)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor('#4B5563'], spaceAfter=8)
+    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'), spaceBefore=8, spaceAfter=3)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#374151'))
+    
+    # 1. SECCIÓN GENERAL
+    story.append(Paragraph("Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE", title_style))
+    story.append(Paragraph(f"<b>Delegación:</b> {delegacion} | <b>Año:</b> {anio} | <b>Periodo:</b> {periodo_str}", subtitle_style))
+    story.append(Spacer(1, 4))
+    
+    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Panorama General Comparativo (Trimestral)", normal_style))
+    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
+    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
+    story.append(Spacer(1, 4))
+    
+    story.append(Paragraph("Tabla Comparativa General (Panorama por Trimestres)", h2_style))
+    
+    gen_headers = ["Unidad Médica"]
+    for t_name, _, _ in bloques_semanas:
+        gen_headers.extend([f"{t_name[:3]}\nOport.", f"{t_name[:3]}\nCob.Op", f"{t_name[:3]}\nConsist.", f"{t_name[:3]}\nCalid."])
+    
+    table_data = [gen_headers]
+    style_commands = [
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 6.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+    ]
+    
+    row_idx = 1
+    for unidad in TARGET_UNITS:
+        row = [unidad]
+        col_c = 1
+        for t_name, _, _ in bloques_semanas:
+            val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
+            val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
+            
+            row.append(f"{val_a:.1f}%" if pd.notna(val_a) else "-")
+            bg_a, tc_a = get_hex_color(val_a, "a")
+            if pd.notna(val_a):
+                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
+                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
+            col_c += 1
+            
+            row.append("N/A")
+            col_c += 1
+            
+            row.append(f"{val_c:.1f}%" if pd.notna(val_c) else "-")
+            bg_c, tc_c = get_hex_color(val_c, "c")
+            if pd.notna(val_c):
+                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
+                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
+            col_c += 1
+            
+            row.append("N/A")
+            col_c += 1
+            
+        table_data.append(row)
+        row_idx += 1
+        
+    row_del = ["DELEGACIONAL"]
+    col_c = 1
+    for t_name, _, _ in bloques_semanas:
+        vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
+        min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
+        avg_b = delegational_b_trim.get(t_name, np.nan)
+        vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+        max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
+        global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
+        
+        row_del.append(f"{min_a:.1f}%" if pd.notna(min_a) else "-")
+        bg_a, tc_a = get_hex_color(min_a, "a")
+        if pd.notna(min_a):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
+        col_c += 1
+        
+        row_del.append(f"{avg_b:.1f}%" if pd.notna(avg_b) else "-")
+        bg_b, tc_b = get_hex_color(avg_b, "b")
+        if pd.notna(avg_b):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_b))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_b))
+        col_c += 1
+        
+        row_del.append(f"{max_c:.1f}%" if pd.notna(max_c) else "-")
+        bg_c, tc_c = get_hex_color(max_c, "c")
+        if pd.notna(max_c):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
+        col_c += 1
+        
+        row_del.append(f"{global_cal:.1f}%" if pd.notna(global_cal) else "-")
+        bg_f, tc_f = get_hex_color(global_cal, "f")
+        if pd.notna(global_cal):
+            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_f))
+            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_f))
+        col_c += 1
+        
+    table_data.append(row_del)
+    style_commands.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#E2E8F0')))
+    style_commands.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
+    
+    col_w = [110] + [45]*len(bloques_semanas)*4
+    t_gen = Table(table_data, colWidths=col_w)
+    t_gen.setStyle(TableStyle(style_commands))
+    story.append(t_gen)
+    story.append(Spacer(1, 10))
+    
+    def agregar_tabla_acotaciones(story, titulo, rango_exc, rango_buen, rango_reg, rango_mal):
+        story.append(Paragraph(f"<b>Acotaciones para: {titulo}</b>", normal_style))
+        acot_data = [
+            ["Indicador", "Excelente", "Bueno", "Regular", "Malo"],
+            [titulo, rango_exc, rango_buen, rango_reg, rango_mal]
+        ]
+        t_acot = Table(acot_data, colWidths=[140, 105, 105, 105, 105])
+        t_acot.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('BACKGROUND', (1,1), (1,1), colors.HexColor('#10B981')),
+            ('TEXTCOLOR', (1,1), (1,1), colors.whitesmoke),
+            ('BACKGROUND', (2,1), (2,1), colors.white),
+            ('BACKGROUND', (3,1), (3,1), colors.HexColor('#FEF08A')),
+            ('BACKGROUND', (4,1), (4,1), colors.HexColor('#EF4444')),
+            ('TEXTCOLOR', (4,1), (4,1), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+            ('FONTSIZE', (0,0), (-1,-1), 6.5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+            ('TOPPADDING', (0,0), (-1,-1), 2),
+        ]))
+        story.append(t_acot)
+        story.append(Spacer(1, 8))
+
+    doc.build(story, canvasmaker=NumberedCanvas)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 # Subir archivo Excel
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE", type=["xlsx", "xls"])
 
@@ -101,7 +346,6 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -138,7 +382,6 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -160,7 +403,6 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -172,7 +414,6 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -218,7 +459,6 @@ if uploaded_file is not None:
                     t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
             trim_results_c_data[t_name] = t_vals_c
 
-        # Pre-cálculo Global de Calidad (f) por Trimestre
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -249,7 +489,6 @@ if uploaded_file is not None:
                 "calidad": round(global_cal, 2)
             }
 
-        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional
         delegational_b_trim = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -267,6 +506,23 @@ if uploaded_file is not None:
                             pass
                 cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
             delegational_b_trim[t_name] = round(np.mean(cob_semanas), 2) if len(cob_semanas) > 0 else 0.0
+
+        # ==========================================
+        # BOTÓN DE DESCARGAR REPORTE EN PDF
+        # ==========================================
+        st.markdown("---")
+        pdf_bytes = generar_pdf_reporte(
+            delegacion, anio, periodo_str, ultima_semana, 
+            trim_results_ind_a, trim_results_c_data, 
+            global_trim_results_f, delegational_b_trim, unit_rows_map, 
+            bloques_semanas, semanas_info
+        )
+        st.download_button(
+            label="📥 Descargar Reporte Completo en PDF",
+            data=pdf_bytes,
+            file_name=f"Reporte_SUIVE_{anio}.pdf",
+            mime="application/pdf"
+        )
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
@@ -322,17 +578,13 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Fila Delegacional independiente abajo (General)
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
             min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
-            
             avg_b = delegational_b_trim.get(t_name, np.nan)
-            
             vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
-            
             global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
             
             fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
@@ -350,7 +602,7 @@ if uploaded_file is not None:
         st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
 
         # ==========================================
-        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -382,7 +634,6 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad (Descriptivo)"
 
-            # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -477,7 +728,6 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -571,7 +821,6 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD)
             elif ind_key == "f":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -628,7 +877,6 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -689,7 +937,6 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
