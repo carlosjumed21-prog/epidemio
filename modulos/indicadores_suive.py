@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
 
 # Configuración de la página
 st.set_page_config(
@@ -17,6 +16,19 @@ st.markdown("""
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #374151; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
     
+    /* Estilos para el Encabezado Institucional Oficial */
+    .institutional-header {
+        text-align: center;
+        font-family: Arial, sans-serif;
+        color: #1E293B;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #374151;
+        padding-bottom: 15px;
+    }
+    .institutional-header h4 { font-size: 0.95rem; font-weight: bold; margin: 2px 0; color: #334155; }
+    .institutional-header h5 { font-size: 0.85rem; font-weight: normal; margin: 2px 0; color: #475569; }
+    .institutional-header h3 { font-size: 1.05rem; font-weight: bold; margin: 8px 0; color: #0F172A; }
+
     /* Estilos para la tabla de acotaciones */
     .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
@@ -27,6 +39,19 @@ st.markdown("""
     .bg-malo { background-color: #EF4444; color: white; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
+
+def render_institutional_header(titulo_extra=""):
+    st.markdown(f"""
+    <div class="institutional-header">
+        <h4>REPRESENTACIÓN REGIONAL SUR</h4>
+        <h4>SUBDELEGACIÓN MÉDICA</h4>
+        <h4>DEPARTAMENTO DE ATENCIÓN MÉDICA</h4>
+        <h4>COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA</h4>
+        <h3>INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)</h3>
+        {f"<h5>{titulo_extra}</h5>" if titulo_extra else ""}
+        <h5>AÑO: 2024</h5>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
@@ -101,7 +126,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
+        # Extracción de filas por unidad del Excel
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -271,7 +296,7 @@ if uploaded_file is not None:
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
         # ==========================================
-        st.markdown("---")
+        render_institutional_header("PANORAMA GENERAL DE INDICADORES")
         st.subheader("📊 Tabla Comparativa General (Panorama por Trimestres)")
 
         general_table_data = []
@@ -322,7 +347,7 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Fila Delegacional independiente abajo (General)
+        # Fila Delegacional independiente abajo (General)[cite: 2]
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -348,6 +373,7 @@ if uploaded_file is not None:
         ).apply(style_multi_table, axis=1, is_delegacional=True)
 
         st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
+        st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024.</p>", unsafe_allow_html=True)
 
         # ==========================================
         # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
@@ -384,13 +410,10 @@ if uploaded_file is not None:
 
             # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
-                st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
-
-                st.markdown("""
+                render_institutional_header("INDICADOR EVALUADO: Cobertura Oportuna")
+                st.markdown(f"""
                 <div style="background-color: #374151; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; width: 310px; font-weight: bold; text-align: center;">
-                    UNIDADES HABILITADAS POR SEMANA: 15
+                    UNIDADES HABILITADAS POR SEMANA: 15[cite: 2]
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -457,6 +480,7 @@ if uploaded_file is not None:
                     subset=df_del_b.columns[1:]
                 )
                 st.dataframe(styled_del_b, use_container_width=True, hide_index=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <table class="acotacion-table">
@@ -469,19 +493,17 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">95.0 - 100%</td>
-                        <td class="bg-bueno">90.0 - 94.9%</td>
-                        <td class="bg-regular">80.0 - 89.9%</td>
-                        <td class="bg-malo">≤ 79.9%</td>
+                        <td class="bg-excelente">95.0 - 100%[cite: 2]</td>
+                        <td class="bg-bueno">90.0 - 94.9%[cite: 2]</td>
+                        <td class="bg-regular">80.0 - 89.9%[cite: 2]</td>
+                        <td class="bg-malo">≤ 79.9%[cite: 2]</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
 
             # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
-                st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+                render_institutional_header("INDICADOR EVALUADO: Consistencia")
 
                 tabla_c_data = []
                 for unidad in TARGET_UNITS:
@@ -549,8 +571,7 @@ if uploaded_file is not None:
                 ).apply(style_c_table, axis=1)
 
                 st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
-
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <table class="acotacion-table">
@@ -563,19 +584,17 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">90.0 - 100%</td>
-                        <td class="bg-bueno">80.0 - 89.9%</td>
-                        <td class="bg-regular">70.0 - 79.9%</td>
-                        <td class="bg-malo">≤ 69.9%</td>
+                        <td class="bg-excelente">90.0 - 100%[cite: 2]</td>
+                        <td class="bg-bueno">80.0 - 89.9%[cite: 2]</td>
+                        <td class="bg-regular">70.0 - 79.9%[cite: 2]</td>
+                        <td class="bg-malo">≤ 69.9%[cite: 2]</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
 
             # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD)
             elif ind_key == "f":
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
-                st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+                render_institutional_header("INDICADOR EVALUADO: Calidad (Descriptivo)")
 
                 tabla_f_data = []
                 for t_name, _, _ in bloques_semanas:
@@ -605,8 +624,7 @@ if uploaded_file is not None:
 
                 st.markdown("### 📋 Reporte Global de Calidad (Delegacional)")
                 st.dataframe(styled_f, use_container_width=True, hide_index=True)
-
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado el 14 de octubre de 2024[cite: 2].</p>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <table class="acotacion-table">
@@ -619,16 +637,18 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">90.0 - 100%</td>
-                        <td class="bg-bueno">80.0 - 89.9%</td>
-                        <td class="bg-regular">60.0 - 79.9%</td>
-                        <td class="bg-malo">≤ 59.9%</td>
+                        <td class="bg-excelente">90.0 - 100%[cite: 2]</td>
+                        <td class="bg-bueno">80.0 - 89.9%[cite: 2]</td>
+                        <td class="bg-regular">60.0 - 79.9%[cite: 2]</td>
+                        <td class="bg-malo">≤ 59.9%[cite: 2]</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
 
             else:
                 # ESTRUCTURA PARA A (Cumplimiento)
+                render_institutional_header("INDICADOR EVALUADO: Cumplimiento u Oportunidad")
+
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -683,10 +703,6 @@ if uploaded_file is not None:
                     subset=[col for col in df_sep.columns if col[1] == "INDICADOR"]
                 ).apply(style_sep_table, axis=1)
 
-                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
-                st.markdown(f"**AÑO:** {anio}")
-                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
-
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
                 # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
@@ -715,8 +731,7 @@ if uploaded_file is not None:
                 ).apply(style_sep_table, axis=1)
 
                 st.dataframe(styled_del_a, use_container_width=True, hide_index=True)
-
-                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día[cite: 2].</p>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <table class="acotacion-table">
@@ -729,10 +744,10 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">100.0%</td>
-                        <td class="bg-bueno">97.5 - 99.9%</td>
-                        <td class="bg-regular">95.0 - 97.4%</td>
-                        <td class="bg-malo">≤ 94.9%</td>
+                        <td class="bg-excelente">100.0%[cite: 2]</td>
+                        <td class="bg-bueno">97.5 - 99.9%[cite: 2]</td>
+                        <td class="bg-regular">95.0 - 97.4%[cite: 2]</td>
+                        <td class="bg-malo">≤ 94.9%[cite: 2]</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
