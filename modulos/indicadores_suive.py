@@ -81,7 +81,7 @@ if uploaded_file is not None:
         anio = int(df.iloc[1, 1]) if df.shape[0] > 1 and df.shape[1] > 1 and str(df.iloc[1, 1]).isdigit() else 2024
         
         # Mapeo estricto de columnas y números de semanas desde la fila 5 (índice 4)
-        semanas_info = [] # Lista de tuplas: (índice_columna, número_de_semana)
+        semanas_info = [] 
         if df.shape[0] > 4:
             for col_idx in range(1, df.shape[1] - 1):
                 val_sem = df.iloc[4, col_idx]
@@ -138,7 +138,7 @@ if uploaded_file is not None:
             ("CUARTO TRIMESTRE", col_to_idx("AO"), col_to_idx("BA"))
         ]
 
-        # Validar cuáles trimestres tienen datos reales según las semanas detectadas en el archivo
+        # Validar cuáles trimestres tienen datos reales
         bloques_semanas = []
         max_col_excel = df.shape[1] - 1
         for t_name, start_col, end_col in todos_bloques:
@@ -146,7 +146,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base unificado: Semanas Notificadas Oportunamente (Valores Absolutos) solo para trimestres con datos
+        # Cálculo base unificado: Semanas Notificadas Oportunamente (Valores Absolutos)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -167,6 +167,18 @@ if uploaded_file is not None:
                                 pass
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
+
+        # Pre-cálculo de Indicador A para todos los trimestres disponibles (fuente estática unificada)
+        trim_results_ind_a = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_a = {}
+            for unidad in TARGET_UNITS:
+                num_oportunas = abs_results[t_name].get(unidad, None)
+                if num_oportunas is None:
+                    t_vals_a[unidad] = np.nan
+                else:
+                    t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
+            trim_results_ind_a[t_name] = t_vals_a
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -193,47 +205,32 @@ if uploaded_file is not None:
                 if not opcion_periodo:
                     return [], ""
                 if "1er Trimestre" in opcion_periodo or "Primer" in opcion_periodo:
-                    indices = [item[0] for item in semanas_info if 1 <= item[1] <= 13]
-                    etiqueta = "1er Trimestre (Sem. 1-13)"
+                    return [item[0] for item in semanas_info if 1 <= item[1] <= 13], "1er Trimestre (Sem. 1-13)", "PRIMER TRIMESTRE"
                 elif "2º Trimestre" in opcion_periodo or "Segundo" in opcion_periodo:
-                    indices = [item[0] for item in semanas_info if 13 < item[1] <= 26]
-                    etiqueta = "2º Trimestre (Sem. 14-26)"
+                    return [item[0] for item in semanas_info if 13 < item[1] <= 26], "2º Trimestre (Sem. 14-26)", "SEGUNDO TRIMESTRE"
                 elif "3er Trimestre" in opcion_periodo or "Tercer" in opcion_periodo:
-                    indices = [item[0] for item in semanas_info if 26 < item[1] <= 39]
-                    etiqueta = "3er Trimestre (Sem. 27-39)"
+                    return [item[0] for item in semanas_info if 26 < item[1] <= 39], "3er Trimestre (Sem. 27-39)", "TERCER TRIMESTRE"
                 elif "4º Trimestre" in opcion_periodo or "Cuarto" in opcion_periodo:
-                    indices = [item[0] for item in semanas_info if 39 < item[1] <= 52]
-                    etiqueta = "4º Trimestre (Sem. 40-52)"
+                    return [item[0] for item in semanas_info if 39 < item[1] <= 52], "4º Trimestre (Sem. 40-52)", "CUARTO TRIMESTRE"
                 else:
-                    indices = [item[0] for item in semanas_info]
-                    etiqueta = "Total"
-                return indices, etiqueta
+                    return [item[0] for item in semanas_info], "Total", None
 
-            indices_gen, etiqueta_gen = get_indices_semanas(trimestre_opcion_gen)
+            indices_gen, etiqueta_gen, nombre_trimestre_match = get_indices_semanas(trimestre_opcion_gen)
 
-            def calcular_resultados_periodo_gen(cols_indices, total_sem_bloque):
+            def calcular_resultados_periodo_gen(cols_indices, total_sem_bloque, trim_match):
                 results = []
                 for unidad in TARGET_UNITS:
                     m_rows = unit_rows_map.get(unidad, {})
-                    row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                    suma_casos_oportunos = 0.0
-                    tiene_datos = False
-                    if row_casos_oportunos is not None and len(cols_indices) > 0:
-                        for c in cols_indices:
-                            if pd.notna(row_casos_oportunos[c]):
-                                try:
-                                    val_c = float(row_casos_oportunos[c])
-                                    suma_casos_oportunos += val_c
-                                    if val_c > 0:
-                                        tiene_datos = True
-                                except ValueError:
-                                    pass
-
-                    if not tiene_datos and trimestre_opcion_gen != "Total":
-                        results.append({
-                            "Unidad": unidad, "a": None, "b": None, "c": None, "d": None, "e": None, "f": None
-                        })
-                        continue
+                    
+                    # Migración estática y directa del Indicador A desde la tabla de desglose si es un trimestre específico
+                    val_a_estatico = np.nan
+                    if trim_match and trim_match in trim_results_ind_a:
+                        val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
+                    elif not trim_match and len(bloques_semanas) > 0:
+                        # Para "Total", calculamos el promedio ponderado estático de los trimestres disponibles
+                        vals_trim = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
+                        if vals_trim:
+                            val_a_estatico = round(sum(vals_trim) / len(vals_trim), 2)
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -247,6 +244,16 @@ if uploaded_file is not None:
                                     continue
                         return 0.0
 
+                    row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                    suma_casos_oportunos = 0.0
+                    if row_casos_oportunos is not None and len(cols_indices) > 0:
+                        for c in cols_indices:
+                            if pd.notna(row_casos_oportunos[c]):
+                                try:
+                                    suma_casos_oportunos += float(row_casos_oportunos[c])
+                                except ValueError:
+                                    pass
+
                     u_oportunas = get_ab_val("Unidades con casos oportunos")
                     u_habilitadas = get_ab_val("Unidades habilitadas")
                     if u_habilitadas == 0: u_habilitadas = float(len(TARGET_UNITS))
@@ -255,26 +262,26 @@ if uploaded_file is not None:
                     base_hab = u_habilitadas if u_habilitadas > 0 else float(len(TARGET_UNITS))
                     divisor_calc = total_sem_bloque if total_sem_bloque > 0 else 13.0
 
-                    ind_a = (suma_casos_oportunos / divisor_calc) * 100
-                    ind_b = (u_oportunas / base_hab) * 100
-                    ind_c = (suma_casos_oportunos / divisor_calc) * 100
-                    ind_d = (u_sin_notificar / base_hab) * 100
+                    ind_a = val_a_estatico if pd.notna(val_a_estatico) else round((suma_casos_oportunos / divisor_calc) * 100, 2)
+                    ind_b = round((u_oportunas / base_hab) * 100, 2)
+                    ind_c = ind_a  # Consistencia comparte base
+                    ind_d = round((u_sin_notificar / base_hab) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
-                    ind_e = max(0.0, ind_b - excedente_rsm)
-                    ind_f = (ind_b + ind_c) / 2.0
+                    ind_e = round(max(0.0, ind_b - excedente_rsm), 2)
+                    ind_f = round((ind_b + ind_c) / 2.0, 2)
 
                     results.append({
                         "Unidad": unidad,
-                        "a": round(ind_a, 2),
-                        "b": round(ind_b, 2),
-                        "c": round(ind_c, 2),
-                        "d": round(ind_d, 2),
-                        "e": round(ind_e, 2),
-                        "f": round(ind_f, 2)
+                        "a": ind_a if pd.notna(ind_a) else None,
+                        "b": ind_b,
+                        "c": ind_c,
+                        "d": ind_d,
+                        "e": ind_e,
+                        "f": ind_f
                     })
                 return results
 
-            raw_gen_res = calcular_resultados_periodo_gen(indices_gen, 13.0)
+            raw_gen_res = calcular_resultados_periodo_gen(indices_gen, 13.0, nombre_trimestre_match)
             
             processed_gen = []
             for item in raw_gen_res:
