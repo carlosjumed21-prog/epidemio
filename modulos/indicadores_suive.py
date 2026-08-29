@@ -54,6 +54,7 @@ def get_bg_color(val, ind_type):
         elif 80.0 <= val <= 89.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "c":
+        # Umbrales específicos para Consistencia (c)
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 70.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
@@ -143,7 +144,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base unificado: Suma exacta de la fila "Unidades con casos oportunos" por bloque trimestral
+        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -165,7 +166,7 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
-        # Pre-cálculo de Indicador A (Suma trimestral / 13 * 100)
+        # Pre-cálculo de Indicador A
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -177,7 +178,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C con la lógica de consistencia por trimestre
+        # Pre-cálculo de Indicador C (Consistencia con mediana/promedio y ±25%)
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -482,20 +483,25 @@ if uploaded_file is not None:
                     t_vals_ind = {}
                     t_vals_abs = {}
                     for unidad in TARGET_UNITS:
-                        num_oportunas = abs_results[t_name].get(unidad, None)
-                        if num_oportunas is None:
-                            t_vals_abs[unidad] = np.nan
-                            t_vals_ind[unidad] = np.nan
-                            continue
+                        m_rows = unit_rows_map.get(unidad, {})
+                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
+                        
+                        suma_bloque = 0.0
+                        if row_casos_oportunos is not None:
+                            for c_idx in range(start_col, end_col + 1):
+                                if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
+                                    try:
+                                        suma_bloque += float(row_casos_oportunos[c_idx])
+                                    except ValueError:
+                                        pass
 
-                        t_vals_abs[unidad] = num_oportunas
+                        t_vals_abs[unidad] = suma_bloque
 
                         if ind_key == "a":
-                            val_ind = (num_oportunas / 13.0) * 100
+                            val_ind = (suma_bloque / 13.0) * 100
                         elif ind_key == "c":
                             val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
                         else: # Calidad (f)
-                            m_rows = unit_rows_map.get(unidad, {})
                             def get_ab_val(metric_key):
                                 r = m_rows.get(metric_key, None)
                                 if r is not None:
@@ -509,7 +515,7 @@ if uploaded_file is not None:
                                 return 0.0
                             u_oportunas = get_ab_val("Unidades con casos oportunos")
                             base_hab = 15.0
-                            ind_a_temp = (num_oportunas / 13.0) * 100
+                            ind_a_temp = (suma_bloque / 13.0) * 100
                             ind_b_temp = (u_oportunas / base_hab) * 100
                             val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
