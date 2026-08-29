@@ -111,7 +111,6 @@ if uploaded_file is not None:
         bloques_semanas = []
         max_col_excel = df.shape[1] - 1
         for t_name, start_col, end_col in todos_bloques:
-            # Verificamos si al menos una columna de este bloque existe en el Excel y tiene número de semana válido
             columnas_validas_en_bloque = [c for c in range(start_col, end_col + 1) if c <= max_col_excel and any(c == s[0] for s in semanas_info)]
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
@@ -231,7 +230,6 @@ if uploaded_file is not None:
                                     pass
 
                     if not tiene_datos and trimestre_opcion_gen != "Total":
-                        # Si no hay datos en este periodo, retornamos None para no falsear ceros
                         results.append({
                             "Unidad": unidad, "a": None, "b": None, "c": None, "d": None, "e": None, "f": None
                         })
@@ -329,36 +327,7 @@ if uploaded_file is not None:
             st.dataframe(styled_general, use_container_width=True, height=580)
 
         # ==========================================
-        # 2. APARTADO DE SEMANAS NOTIFICADAS OPORTUNAMENTE (ABSOLUTAS) - SOLO TRIMESTRES ACTIVOS
-        # ==========================================
-        st.markdown("---")
-        st.subheader("📊 Semanas Notificadas Oportunamente (Valores Absolutos por Trimestre)")
-        
-        tabla_abs_data = []
-        for unidad in TARGET_UNITS:
-            fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
-            for t_name, start_col, end_col in bloques_semanas:
-                val = abs_results[t_name].get(unidad, None)
-                fila[t_name] = val if val is not None and val > 0 else np.nan
-            tabla_abs_data.append(fila)
-
-        df_abs = pd.DataFrame(tabla_abs_data)
-
-        st.markdown(f"**SEMANAS NOTIFICADAS OPORTUNAMENTE 2024:** {anio}")
-        st.markdown(f"**FECHA DE CORTE:** Semana {ultima_semana}")
-
-        # Dinámica de MultiIndex solo con los trimestres que tienen datos reales
-        abs_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
-        for t_name, _, _ in bloques_semanas:
-            abs_tuples.append(("SEMANAS NOTIFICADAS OPORTUNAMENTE 2024", t_name))
-
-        multi_cols_abs = pd.MultiIndex.from_tuples(abs_tuples)
-        df_abs.columns = multi_cols_abs
-
-        st.dataframe(df_abs.style.format(formatter=lambda x: f"{x:.0f}" if pd.notna(x) else "-", subset=df_abs.columns[1:]), use_container_width=True, hide_index=True, height=580)
-
-        # ==========================================
-        # 3. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR - SOLO TRIMESTRES ACTIVOS
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (FUSIÓN: SEMANAS + INDICADOR POR TRIMESTRE)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -390,9 +359,12 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad"
 
-            trim_results = {}
+            trim_results_ind = {}
+            trim_results_abs = {}
+            
             for t_name, start_col, end_col in bloques_semanas:
                 t_vals_ind = {}
+                t_vals_abs = {}
                 for unidad in TARGET_UNITS:
                     m_rows = unit_rows_map.get(unidad, {})
                     
@@ -415,8 +387,11 @@ if uploaded_file is not None:
 
                     num_oportunas = abs_results[t_name].get(unidad, None)
                     if num_oportunas is None:
+                        t_vals_abs[unidad] = np.nan
                         t_vals_ind[unidad] = np.nan
                         continue
+
+                    t_vals_abs[unidad] = num_oportunas
 
                     if ind_key == "a":
                         val_ind = (num_oportunas / 13.0) * 100
@@ -430,16 +405,20 @@ if uploaded_file is not None:
                         val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
                     t_vals_ind[unidad] = round(val_ind, 2)
-                trim_results[t_name] = t_vals_ind
+                    
+                trim_results_abs[t_name] = t_vals_abs
+                trim_results_ind[t_name] = t_vals_ind
 
-            tabla_data = []
+            # Construcción de la tabla fusionada por trimestres
+            tabla_fusión_data = []
             for unidad in TARGET_UNITS:
-                fila = {"UNIDAD MÉDICA / TRIMESTRE": unidad}
+                fila = {"UNIDAD MÉDICA": unidad}
                 for t_name, _, _ in bloques_semanas:
-                    fila[t_name] = trim_results[t_name].get(unidad, np.nan)
-                tabla_data.append(fila)
+                    fila[(t_name, "Semanas Notificadas Oportunamente")] = trim_results_abs[t_name].get(unidad, np.nan)
+                    fila[(t_name, "Indicador (%)")] = trim_results_ind[t_name].get(unidad, np.nan)
+                tabla_fusión_data.append(fila)
 
-            df_ind = pd.DataFrame(tabla_data)
+            df_fusion = pd.DataFrame(tabla_fusión_data)
 
             st.markdown(f"**INDICADOR EVALUADO:** {ind_label.upper()}")
             st.markdown(f"**AÑO:** {anio}")
@@ -451,53 +430,66 @@ if uploaded_file is not None:
             </div>
             """, unsafe_allow_html=True)
 
-            ind_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
+            # Construcción del MultiIndex agrupado por Trimestre (Semanas Notificadas + Indicador)
+            fusion_tuples = [("UNIDAD MÉDICA", "UNIDAD MÉDICA")]
             for t_name, _, _ in bloques_semanas:
-                ind_tuples.append(("INDICADOR", t_name))
+                fusion_tuples.append((t_name, "Semanas Notificadas Oportunamente"))
+                fusion_tuples.append((t_name, "Indicador (%)"))
 
-            multi_cols_ind = pd.MultiIndex.from_tuples(ind_tuples)
-            df_ind.columns = multi_cols_ind
+            df_fusion.columns = pd.MultiIndex.from_tuples(fusion_tuples)
 
-            def style_indicator_table(row_data):
+            def style_fusion_table(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    if i > 0:
+                    # Si la columna pertenece al indicador (nivel 1 es "Indicador (%)"), aplicamos sombreado
+                    if isinstance(col_name, tuple) and col_name[1] == "Indicador (%)":
                         val = row_data.iloc[i]
                         if pd.notna(val):
                             styles[i] = get_bg_color(val, ind_key)
                 return styles
 
-            styled_ind_table = df_ind.style.format(formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", subset=df_ind.columns[1:]).apply(style_indicator_table, axis=1)
-            st.dataframe(styled_ind_table, use_container_width=True, hide_index=True, height=580)
+            styled_fusion = df_fusion.style.format(
+                formatter=lambda x: f"{x:.2f}" if pd.notna(x) else "-", 
+                subset=[col for col in df_fusion.columns if col[0] != "UNIDAD MÉDICA"]
+            ).apply(style_fusion_table, axis=1)
 
-            # Mini tabla delegacional inferior (solo para trimestres activos)
-            st.markdown("##### 📉 Resumen Delegacional (Valor más bajo por trimestre)")
+            st.dataframe(styled_fusion, use_container_width=True, hide_index=True, height=580)
+
+            # Mini tabla delegacional inferior (Mínimos registrados por trimestre)
+            st.markdown(f"##### 📉 Resumen Delegacional ({ind_label} - Mínimo por Trimestre)")
             
-            min_row = {}
+            min_row_ind = {}
+            min_row_abs = {}
             for t_name, _, _ in bloques_semanas:
-                vals = [trim_results[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results[t_name][u])]
-                if vals:
-                    min_val = min(vals)
-                    min_row[t_name] = f"{min_val:.2f}%"
+                vals_ind = [trim_results_ind[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_ind[t_name][u])]
+                vals_abs = [trim_results_abs[t_name][u] for u in TARGET_UNITS if pd.notna(trim_results_abs[t_name][u])]
+                
+                if vals_ind:
+                    min_row_ind[t_name] = f"{min(vals_ind):.2f}%"
+                    min_row_abs[t_name] = f"{min(vals_abs):.0f}"
                 else:
-                    min_row[t_name] = "-"
+                    min_row_ind[t_name] = "-"
+                    min_row_abs[t_name] = "-"
 
-            delegacional_dict = {"DELEGACIONAL": "Mínimo Registrado"}
+            delegacional_dict = {("UNIDAD MÉDICA", "UNIDAD MÉDICA"): "Mínimo Registrado"}
             for t_name, _, _ in bloques_semanas:
-                delegacional_dict[t_name] = min_row[t_name]
+                delegacional_dict[(t_name, "Semanas Notificadas Oportunamente")] = min_row_abs[t_name]
+                delegacional_dict[(t_name, "Indicador (%)")] = min_row_ind[t_name]
 
             df_del = pd.DataFrame([delegacional_dict])
+            df_del.columns = pd.MultiIndex.from_tuples(fusion_tuples)
             
             def style_delegational(row_data):
                 styles = [''] * len(row_data)
                 for i, col_name in enumerate(row_data.index):
-                    raw_str = row_data[col_name]
-                    if raw_str != "-" and raw_str != "Mínimo Registrado":
-                        try:
-                            clean_val = float(raw_str.replace("%", ""))
-                            styles[i] = get_bg_color(clean_val, ind_key)
-                        except ValueError:
-                            pass
+                    if isinstance(col_name, tuple) and col_name[1] == "Indicador (%)":
+                        raw_str = row_data[col_name]
+                        if raw_str != "-":
+                            try:
+                                clean_val = float(raw_str.replace("%", ""))
+                                styles[i] = get_bg_color(clean_val, ind_key)
+                            except ValueError:
+                                pass
                 return styles
 
             styled_del = df_del.style.apply(style_delegational, axis=1)
