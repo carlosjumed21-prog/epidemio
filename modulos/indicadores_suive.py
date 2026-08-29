@@ -3,13 +3,6 @@ import pandas as pd
 import numpy as np
 import io
 
-# Importaciones para generación de PDF con ReportLab
-from reportlab.lib.pagesizes import letter, portrait
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-
 # Configuración de la página
 st.set_page_config(
     page_title="Sistema de Evaluación Epidemiológica - SUIVE",
@@ -72,463 +65,6 @@ def get_bg_color(val, ind_type):
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
 
-def get_hex_color(val, ind_type):
-    if val is None or pd.isna(val) or val == "NO APLICA":
-        return colors.white, colors.black
-    
-    bg_hex, text_color = colors.white, colors.black
-    
-    if ind_type == "a":
-        if val == 100.0:
-            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
-        elif 97.5 <= val <= 99.9:
-            bg_hex, text_color = colors.white, colors.black
-        elif 95.0 <= val <= 97.4:
-            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
-        else:
-            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
-    elif ind_type in ["b", "e"]:
-        if 95.0 <= val <= 100.0:
-            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
-        elif 90.0 <= val <= 94.9:
-            bg_hex, text_color = colors.white, colors.black
-        elif 80.0 <= val <= 89.9:
-            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
-        else:
-            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
-    elif ind_type == "c":
-        if 90.0 <= val <= 100.0:
-            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
-        elif 80.0 <= val <= 89.9:
-            bg_hex, text_color = colors.white, colors.black
-        elif 70.0 <= val <= 79.9:
-            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
-        else:
-            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
-    elif ind_type == "f":
-        if 90.0 <= val <= 100.0:
-            bg_hex, text_color = colors.HexColor('#10B981'), colors.white
-        elif 80.0 <= val <= 89.9:
-            bg_hex, text_color = colors.white, colors.black
-        elif 60.0 <= val <= 79.9:
-            bg_hex, text_color = colors.HexColor('#FEF08A'), colors.black
-        else:
-            bg_hex, text_color = colors.HexColor('#EF4444'), colors.white
-            
-    return bg_hex, text_color
-
-# Clase Canvas para dibujar el encabezado institucional en cada página
-class NumberedCanvas(canvas.Canvas):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pages = []
-
-    def showPage(self):
-        self.pages.append(dict(self.__dict__))
-        self._startPage()
-
-    def save(self):
-        for page in self.pages:
-            self.__dict__.update(page)
-            self.draw_header_footer()
-            super().showPage()
-        super().save()
-
-    def draw_header_footer(self):
-        self.saveState()
-        self.setFont("Helvetica-Bold", 7.5)
-        self.setFillColor(colors.HexColor('#1F2937'))
-        
-        y = 755
-        lines = [
-            "REPRESENTACIÓN REGIONAL SUR",
-            "SUBDELEGACIÓN MÉDICA",
-            "DEPARTAMENTO DE ATENCIÓN MÉDICA",
-            "COORDINACIÓN DE EPIDEMIOLOGÍA Y MEDICINA PREVENTIVA",
-            "INDICADORES PARA EL SISTEMA ÚNICO AUTOMATIZADO DE VIGILANCIA EPIDEMIOLÓGICA (SUAVE)"
-        ]
-        for line in lines:
-            self.drawCentredString(612 / 2.0, y, line)
-            y -= 9
-            
-        self.setStrokeColor(colors.HexColor('#CBD5E1'))
-        self.setLineWidth(0.75)
-        self.line(30, 705, 612 - 30, 705)
-        
-        self.setFont("Helvetica", 8)
-        self.setFillColor(colors.HexColor('#6B7280'))
-        self.drawRightString(612 - 30, 20, f"Página {self._pageNumber}")
-        self.restoreState()
-
-# Función para generar el reporte completo en PDF (Formato Vertical)
-def generar_pdf_reporte(delegacion, anio, periodo_str, ultima_semana, trim_results_ind_a, trim_results_c_data, global_trim_results_f, delegational_b_trim, unit_rows_map, bloques_semanas, semanas_info):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=portrait(letter), rightMargin=25, leftMargin=25, topMargin=75, bottomMargin=35)
-    story = []
-    
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor('#111827'), spaceAfter=3)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor('#4B5563'], spaceAfter=8)
-    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor('#1F2937'], spaceBefore=8, spaceAfter=3)
-    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#374151'))
-    
-    # 1. SECCIÓN GENERAL
-    story.append(Paragraph("Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE", title_style))
-    story.append(Paragraph(f"<b>Delegación:</b> {delegacion} | <b>Año:</b> {anio} | <b>Periodo:</b> {periodo_str}", subtitle_style))
-    story.append(Spacer(1, 4))
-    
-    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Panorama General Comparativo (Trimestral)", normal_style))
-    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
-    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
-    story.append(Spacer(1, 4))
-    
-    story.append(Paragraph("Tabla Comparativa General (Panorama por Trimestres)", h2_style))
-    
-    gen_headers = ["Unidad Médica"]
-    for t_name, _, _ in bloques_semanas:
-        gen_headers.extend([f"{t_name[:3]}\nOport.", f"{t_name[:3]}\nCob.Op", f"{t_name[:3]}\nConsist.", f"{t_name[:3]}\nCalid."])
-    
-    table_data = [gen_headers]
-    style_commands = [
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 6.5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-    ]
-    
-    row_idx = 1
-    for unidad in TARGET_UNITS:
-        row = [unidad]
-        col_c = 1
-        for t_name, _, _ in bloques_semanas:
-            val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
-            val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
-            
-            row.append(f"{val_a:.1f}%" if pd.notna(val_a) else "-")
-            bg_a, tc_a = get_hex_color(val_a, "a")
-            if pd.notna(val_a):
-                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
-                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
-            col_c += 1
-            
-            row.append("N/A")
-            col_c += 1
-            
-            row.append(f"{val_c:.1f}%" if pd.notna(val_c) else "-")
-            bg_c, tc_c = get_hex_color(val_c, "c")
-            if pd.notna(val_c):
-                style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
-                style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
-            col_c += 1
-            
-            row.append("N/A")
-            col_c += 1
-            
-        table_data.append(row)
-        row_idx += 1
-        
-    row_del = ["DELEGACIONAL"]
-    col_c = 1
-    for t_name, _, _ in bloques_semanas:
-        vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
-        min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
-        avg_b = delegational_b_trim.get(t_name, np.nan)
-        vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
-        max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
-        global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
-        
-        row_del.append(f"{min_a:.1f}%" if pd.notna(min_a) else "-")
-        bg_a, tc_a = get_hex_color(min_a, "a")
-        if pd.notna(min_a):
-            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_a))
-            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_a))
-        col_c += 1
-        
-        row_del.append(f"{avg_b:.1f}%" if pd.notna(avg_b) else "-")
-        bg_b, tc_b = get_hex_color(avg_b, "b")
-        if pd.notna(avg_b):
-            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_b))
-            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_b))
-        col_c += 1
-        
-        row_del.append(f"{max_c:.1f}%" if pd.notna(max_c) else "-")
-        bg_c, tc_c = get_hex_color(max_c, "c")
-        if pd.notna(max_c):
-            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_c))
-            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_c))
-        col_c += 1
-        
-        row_del.append(f"{global_cal:.1f}%" if pd.notna(global_cal) else "-")
-        bg_f, tc_f = get_hex_color(global_cal, "f")
-        if pd.notna(global_cal):
-            style_commands.append(('BACKGROUND', (col_c, row_idx), (col_c, row_idx), bg_f))
-            style_commands.append(('TEXTCOLOR', (col_c, row_idx), (col_c, row_idx), tc_f))
-        col_c += 1
-        
-    table_data.append(row_del)
-    style_commands.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#E2E8F0')))
-    style_commands.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
-    
-    col_w = [110] + [45]*len(bloques_semanas)*4
-    t_gen = Table(table_data, colWidths=col_w)
-    t_gen.setStyle(TableStyle(style_commands))
-    story.append(t_gen)
-    story.append(Spacer(1, 10))
-    
-    def agregar_tabla_acotaciones(story, titulo, rango_exc, rango_buen, rango_reg, rango_mal):
-        story.append(Paragraph(f"<b>Acotaciones para: {titulo}</b>", normal_style))
-        acot_data = [
-            ["Indicador", "Excelente", "Bueno", "Regular", "Malo"],
-            [titulo, rango_exc, rango_buen, rango_reg, rango_mal]
-        ]
-        t_acot = Table(acot_data, colWidths=[140, 105, 105, 105, 105])
-        t_acot.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('BACKGROUND', (1,1), (1,1), colors.HexColor('#10B981')),
-            ('TEXTCOLOR', (1,1), (1,1), colors.whitesmoke),
-            ('BACKGROUND', (2,1), (2,1), colors.white),
-            ('BACKGROUND', (3,1), (3,1), colors.HexColor('#FEF08A')),
-            ('BACKGROUND', (4,1), (4,1), colors.HexColor('#EF4444')),
-            ('TEXTCOLOR', (4,1), (4,1), colors.whitesmoke),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTSIZE', (0,0), (-1,-1), 6.5),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-            ('TOPPADDING', (0,0), (-1,-1), 2),
-        ]))
-        story.append(t_acot)
-        story.append(Spacer(1, 8))
-
-    # --- INDICADOR A ---
-    story.append(Paragraph("Análisis Desglosado por Indicador", h2_style))
-    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Cumplimiento u Oportunidad (a)", normal_style))
-    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
-    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
-    story.append(Spacer(1, 4))
-    
-    for t_name, start_col, end_col in bloques_semanas:
-        story.append(Paragraph(f"<b>{t_name}</b>", normal_style))
-        t_a_data = [["Unidad Médica", "Días Oport.", "Indicador (%)"]]
-        style_a = [
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTSIZE', (0,0), (-1,-1), 7),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
-            ('TOPPADDING', (0,0), (-1,-1), 2.5),
-        ]
-        
-        row_i = 1
-        vals_trim_a = []
-        abs_trim_a = []
-        for unidad in TARGET_UNITS:
-            m_rows = unit_rows_map.get(unidad, {})
-            row_casos = m_rows.get("Unidades con casos oportunos", None)
-            suma_bloque = 0.0
-            if row_casos is not None:
-                for c_idx in range(start_col, end_col + 1):
-                    if c_idx < len(row_casos) and pd.notna(row_casos[c_idx]):
-                        try: suma_bloque += float(row_casos[c_idx])
-                        except ValueError: pass
-            ind_val = round((suma_bloque / 13.0) * 100, 2)
-            vals_trim_a.append(ind_val)
-            abs_trim_a.append(suma_bloque)
-            
-            t_a_data.append([unidad, f"{suma_bloque:.0f}", f"{ind_val:.2f}%"])
-            bg_a, tc_a = get_hex_color(ind_val, "a")
-            style_a.append(('BACKGROUND', (2, row_i), (2, row_i), bg_a))
-            style_a.append(('TEXTCOLOR', (2, row_i), (2, row_i), tc_a))
-            row_i += 1
-            
-        min_ind_a = min([v for v in vals_trim_a if pd.notna(v)], default=0.0)
-        min_abs_a = abs_trim_a[vals_trim_a.index(min_ind_a)] if vals_trim_a else 0.0
-        t_a_data.append(["DELEGACIONAL", f"{min_abs_a:.0f}", f"{min_ind_a:.2f}%"])
-        bg_da, tc_da = get_hex_color(min_ind_a, "a")
-        style_a.append(('BACKGROUND', (0, row_i), (-1, row_i), colors.HexColor('#E2E8F0')))
-        style_a.append(('BACKGROUND', (2, row_i), (2, row_i), bg_da))
-        style_a.append(('TEXTCOLOR', (2, row_i), (2, row_i), tc_da))
-        style_a.append(('FONTNAME', (0, row_i), (-1, row_i), 'Helvetica-Bold'))
-        
-        t_a = Table(t_a_data, colWidths=[280, 140, 140])
-        t_a.setStyle(TableStyle(style_a))
-        story.append(t_a)
-        story.append(Spacer(1, 5))
-        
-    agregar_tabla_acotaciones(story, "Cumplimiento u Oportunidad", "100.0%", "97.5 - 99.9%", "95.0 - 97.4%", "≤ 94.9%")
-    story.append(Spacer(1, 10))
-
-    # --- INDICADOR B ---
-    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Cobertura Oportuna (b)", normal_style))
-    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
-    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
-    story.append(Spacer(1, 4))
-    
-    for t_name, start_col, end_col in bloques_semanas:
-        story.append(Paragraph(f"<b>{t_name}</b>", normal_style))
-        semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
-        if not semanas_bloque: continue
-        
-        row_u = ["Unidades Notificadas"]
-        row_ind = ["Indicador Diario (%)"]
-        row_del_b_vals = ["DELEGACIONAL"]
-        avg_b_val = delegational_b_trim.get(t_name, 0.0)
-        
-        style_b = [
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTSIZE', (0,0), (-1,-1), 5.5),
-        ]
-        
-        for col_idx, sem_num in semanas_bloque:
-            suma_v = 0
-            for unidad in TARGET_UNITS:
-                m_rows = unit_rows_map.get(unidad, {})
-                row_casos = m_rows.get("Unidades con casos oportunos", None)
-                if row_casos is not None and col_idx < len(row_casos) and pd.notna(row_casos[col_idx]):
-                    try:
-                        if float(row_casos[col_idx]) > 0: suma_v += 1
-                    except ValueError: pass
-            row_u.append(str(suma_v))
-            ind_d = (suma_v/15.0)*100
-            row_ind.append(f"{ind_d:.1f}%")
-            row_del_b_vals.append(f"{avg_b_val:.1f}%")
-            
-        col_widths = [110] + [max(25, 450 / len(semanas_bloque))] * len(semanas_bloque)
-        t_b = Table([["Métrica"] + [f"D.{s[1]}" for s in semanas_bloque], row_u, row_ind, row_del_b_vals], colWidths=col_widths)
-        
-        for col_idx in range(1, len(semanas_bloque) + 1):
-            val_ind_col = float(row_ind[col_idx].replace('%',''))
-            bg_bi, tc_bi = get_hex_color(val_ind_col, "b")
-            style_b.append(('BACKGROUND', (col_idx, 2), (col_idx, 2), bg_bi))
-            style_b.append(('TEXTCOLOR', (col_idx, 2), (col_idx, 2), tc_bi))
-            
-            bg_db, tc_db = get_hex_color(avg_b_val, "b")
-            style_b.append(('BACKGROUND', (col_idx, 3), (col_idx, 3), bg_db))
-            style_b.append(('TEXTCOLOR', (col_idx, 3), (col_idx, 3), tc_db))
-            
-        style_b.append(('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#E2E8F0')))
-        style_b.append(('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'))
-        
-        t_b.setStyle(TableStyle(style_b))
-        story.append(t_b)
-        story.append(Spacer(1, 6))
-        
-    agregar_tabla_acotaciones(story, "Cobertura Oportuna", "95.0 - 100%", "90.0 - 94.9%", "80.0 - 89.9%", "≤ 79.9%")
-    story.append(Spacer(1, 10))
-
-    # --- INDICADOR C ---
-    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Consistencia (c)", normal_style))
-    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
-    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
-    story.append(Spacer(1, 4))
-    
-    t_c_data = [["Unidad Médica"] + [f"{t[:3]}\nCons./Tot." for t,_,_ in bloques_semanas] + [f"{t[:3]}\n% Cons." for t,_,_ in bloques_semanas]]
-    style_c = [
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-    ]
-    
-    row_i = 1
-    max_c_por_trim = []
-    for t_name, _, _ in bloques_semanas:
-        col_vals = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
-        mx = max([v for v in col_vals if pd.notna(v)], default=0.0)
-        max_c_por_trim.append(mx)
-
-    for unidad in TARGET_UNITS:
-        row = [unidad]
-        for t_name, _, _ in bloques_semanas:
-            dat = trim_results_c_data[t_name].get(unidad, {"sem_cons": 0, "tot_sem": 13, "porc": np.nan})
-            row.append(f"{dat['sem_cons']}/{dat['tot_sem']}")
-        
-        col_idx_porc = len(bloques_semanas) + 1
-        for t_name, _, _ in bloques_semanas:
-            dat = trim_results_c_data[t_name].get(unidad, {"porc": np.nan})
-            porc_val = dat['porc']
-            row.append(f"{porc_val:.1f}%" if pd.notna(porc_val) else "-")
-            bg_c, tc_c = get_hex_color(porc_val, "c")
-            if pd.notna(porc_val):
-                style_c.append(('BACKGROUND', (col_idx_porc, row_i), (col_idx_porc, row_i), bg_c))
-                style_c.append(('TEXTCOLOR', (col_idx_porc, row_i), (col_idx_porc, row_i), tc_c))
-            col_idx_porc += 1
-            
-        t_c_data.append(row)
-        row_i += 1
-        
-    row_del_c = ["DELEGACIONAL"]
-    for idx_t, (t_name, _, _) in enumerate(bloques_semanas):
-        mx = max_c_por_trim[idx_t]
-        match_unit = next((u for u in TARGET_UNITS if trim_results_c_data[t_name].get(u, {}).get("porc") == mx), None)
-        dat_ref = trim_results_c_data[t_name].get(match_unit, {"sem_cons": 0, "tot_sem": 13}) if match_unit else {"sem_cons": 0, "tot_sem": 13}
-        row_del_c.append(f"{dat_ref.get('sem_cons', 0)}/{dat_ref.get('tot_sem', 13)}")
-        
-    for idx_t, (t_name, _, _) in enumerate(bloques_semanas):
-        mx = max_c_por_trim[idx_t]
-        row_del_c.append(f"{mx:.1f}%" if pd.notna(mx) else "-")
-        
-    t_c_data.append(row_del_c)
-    style_c.append(('BACKGROUND', (0, row_i), (-1, row_i), colors.HexColor('#E2E8F0')))
-    style_c.append(('FONTNAME', (0, row_i), (-1, row_i), 'Helvetica-Bold'))
-    
-    col_w_c = [110] + [36]*len(bloques_semanas)*2
-    t_c = Table(t_c_data, colWidths=col_w_c)
-    t_c.setStyle(TableStyle(style_c))
-    story.append(t_c)
-    story.append(Spacer(1, 6))
-    
-    agregar_tabla_acotaciones(story, "Consistencia", "90.0 - 100%", "80.0 - 89.9%", "70.0 - 79.9%", "≤ 69.9%")
-    story.append(Spacer(1, 10))
-
-    # --- INDICADOR F ---
-    story.append(Paragraph("<b>INDICADOR EVALUADO:</b> Calidad - Global / Delegacional (f)", normal_style))
-    story.append(Paragraph(f"<b>AÑO:</b> {anio}", normal_style))
-    story.append(Paragraph(f"<b>FECHA DE CORTE:</b> Día {ultima_semana}", normal_style))
-    story.append(Spacer(1, 4))
-    
-    t_f_data = [["Trimestre", "% Cobertura", "% Consistencia", "Indicador de Calidad"]]
-    style_f = [
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#374151')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-        ('FONTSIZE', (0,0), (-1,-1), 7),
-    ]
-    
-    row_i = 1
-    for t_name, _, _ in bloques_semanas:
-        res = global_trim_results_f[t_name]
-        cal_val = res['calidad']
-        t_f_data.append([t_name, f"{res['cobertura']:.2f}%", f"{res['consistencia']:.2f}%", f"{cal_val:.2f}%"])
-        bg_f, tc_f = get_hex_color(cal_val, "f")
-        style_f.append(('BACKGROUND', (3, row_i), (3, row_i), bg_f))
-        style_f.append(('TEXTCOLOR', (3, row_i), (3, row_i), tc_f))
-        row_i += 1
-        
-    t_f = Table(t_f_data, colWidths=[170, 130, 130, 130])
-    t_f.setStyle(TableStyle(style_f))
-    story.append(t_f)
-    story.append(Spacer(1, 6))
-    
-    agregar_tabla_acotaciones(story, "Calidad", "90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%")
-
-    doc.build(story, canvasmaker=NumberedCanvas)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
 # Subir archivo Excel
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE", type=["xlsx", "xls"])
 
@@ -565,6 +101,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
+        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -601,6 +138,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
+        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
@@ -622,6 +160,7 @@ if uploaded_file is not None:
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
             abs_results[t_name] = t_vals
 
+        # Pre-cálculo de Indicador A
         trim_results_ind_a = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_a = {}
@@ -633,6 +172,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
+        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -678,6 +218,7 @@ if uploaded_file is not None:
                     t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
             trim_results_c_data[t_name] = t_vals_c
 
+        # Pre-cálculo Global de Calidad (f) por Trimestre
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -708,6 +249,7 @@ if uploaded_file is not None:
                 "calidad": round(global_cal, 2)
             }
 
+        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional
         delegational_b_trim = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -725,23 +267,6 @@ if uploaded_file is not None:
                             pass
                 cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
             delegational_b_trim[t_name] = round(np.mean(cob_semanas), 2) if len(cob_semanas) > 0 else 0.0
-
-        # ==========================================
-        # BOTÓN DE DESCARGAR REPORTE EN PDF
-        # ==========================================
-        st.markdown("---")
-        pdf_bytes = generar_pdf_reporte(
-            delegacion, anio, periodo_str, ultima_semana, 
-            trim_results_ind_a, trim_results_c_data, 
-            global_trim_results_f, delegational_b_trim, unit_rows_map, 
-            bloques_semanas, semanas_info
-        )
-        st.download_button(
-            label="📥 Descargar Reporte Completo en PDF",
-            data=pdf_bytes,
-            file_name=f"Reporte_SUIVE_{anio}.pdf",
-            mime="application/pdf"
-        )
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
@@ -774,21 +299,21 @@ if uploaded_file is not None:
         df_gen_multi.columns = pd.MultiIndex.from_tuples(gen_tuples)
 
         def style_multi_table(row_data, is_delegacional=False):
-            styles_list = [''] * len(row_data)
+            styles = [''] * len(row_data)
             for i, col_name in enumerate(row_data.index):
                 if isinstance(col_name, tuple) and col_name[0] != "UNIDAD MÉDICA / TRIMESTRE":
                     subcol = col_name[1]
                     val = row_data.iloc[i]
                     if pd.notna(val) and val != "NO APLICA":
                         if subcol == "CUMPLIMIENTO U OPORTUNIDAD":
-                            styles_list[i] = get_bg_color(val, "a")
+                            styles[i] = get_bg_color(val, "a")
                         elif subcol == "COBERTURA OPORTUNA" and is_delegacional:
-                            styles_list[i] = get_bg_color(val, "b")
+                            styles[i] = get_bg_color(val, "b")
                         elif subcol == "CONSISTENCIA":
-                            styles_list[i] = get_bg_color(val, "c")
+                            styles[i] = get_bg_color(val, "c")
                         elif subcol == "CALIDAD" and is_delegacional:
-                            styles_list[i] = get_bg_color(val, "f")
-            return styles_list
+                            styles[i] = get_bg_color(val, "f")
+            return styles
 
         styled_gen_main = df_gen_multi.style.format(
             formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and pd.notna(x) else str(x),
@@ -797,13 +322,17 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
+        # Fila Delegacional independiente abajo (General)
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
             min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
+            
             avg_b = delegational_b_trim.get(t_name, np.nan)
+            
             vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
+            
             global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
             
             fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
@@ -821,7 +350,7 @@ if uploaded_file is not None:
         st.dataframe(styled_del_gen, use_container_width=True, hide_index=True)
 
         # ==========================================
-        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR
+        # 2. APARTADO DE ANÁLISIS DESGLOSADO POR INDICADOR (ESTRUCTURA SEPARADA)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
@@ -853,6 +382,7 @@ if uploaded_file is not None:
                 ind_key = "f"
                 ind_label = "Calidad (Descriptivo)"
 
+            # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Sumatoria Vertical Diaria / 15 Unidades)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -896,14 +426,14 @@ if uploaded_file is not None:
                     df_semanal = pd.DataFrame([fila_unidades, fila_indicador])
                     
                     def style_semanal(row_data):
-                        styles_list = [''] * len(row_data)
+                        styles = [''] * len(row_data)
                         if row_data.name == 1:
                             for i, col_name in enumerate(row_data.index):
                                 if i > 0:
                                     val = row_data.iloc[i]
                                     if pd.notna(val):
-                                        styles_list[i] = get_bg_color(val, ind_key)
-                        return styles_list
+                                        styles[i] = get_bg_color(val, ind_key)
+                        return styles
 
                     styled_sem = df_semanal.style.format(
                         formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else str(x)),
@@ -947,6 +477,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA)
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -973,13 +504,13 @@ if uploaded_file is not None:
                 df_c.columns = pd.MultiIndex.from_tuples(c_tuples)
 
                 def style_c_table(row_data):
-                    styles_list = [''] * len(row_data)
+                    styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
                         if isinstance(col_name, tuple) and col_name[1] == "%CONSISTENCIA":
                             val = row_data.iloc[i]
                             if pd.notna(val):
-                                styles_list[i] = get_bg_color(val, "c")
-                    return styles_list
+                                styles[i] = get_bg_color(val, "c")
+                    return styles
 
                 styled_c = df_c.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
@@ -1040,6 +571,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
+            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD)
             elif ind_key == "f":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label} (Global / Delegacional)")
                 st.markdown(f"**AÑO:** {anio}")
@@ -1058,13 +590,13 @@ if uploaded_file is not None:
                 df_f = pd.DataFrame(tabla_f_data)
 
                 def style_calidad_table(row_data):
-                    styles_list = [''] * len(row_data)
+                    styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
                         if col_name == "INDICADOR DE CALIDAD":
                             val = row_data[col_name]
                             if pd.notna(val):
-                                styles_list[i] = get_bg_color(val, "f")
-                    return styles_list
+                                styles[i] = get_bg_color(val, "f")
+                    return styles
 
                 styled_f = df_f.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x),
@@ -1096,6 +628,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
+                # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -1137,13 +670,13 @@ if uploaded_file is not None:
                 df_sep.columns = pd.MultiIndex.from_tuples(sep_tuples)
 
                 def style_sep_table(row_data):
-                    styles_list = [''] * len(row_data)
+                    styles = [''] * len(row_data)
                     for i, col_name in enumerate(row_data.index):
                         if isinstance(col_name, tuple) and col_name[1] == "INDICADOR":
                             val = row_data.iloc[i]
                             if pd.notna(val):
-                                styles_list[i] = get_bg_color(val, ind_key)
-                    return styles_list
+                                styles[i] = get_bg_color(val, ind_key)
+                    return styles
 
                 styled_sep = df_sep.style.format(
                     formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x > 10 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"), 
@@ -1156,6 +689,7 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
+                # Tabla Delegacional independiente abajo (valor más bajo para A por unidad)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
