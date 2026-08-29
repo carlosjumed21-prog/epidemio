@@ -64,8 +64,9 @@ def get_bg_color(val, ind_type):
         elif 5.0 <= val <= 10.0: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     elif ind_type == "f":
+        # Umbrales específicos para Calidad (f)
         if 90.0 <= val <= 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
-        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
+        elif 80.0 <= val <= 89.9: return 'background-color: #FFFFFF; color: black; font-weight: bold; border: 1px solid #CBD5E1;'
         elif 60.0 <= val <= 79.9: return 'background-color: #FEF08A; color: black; font-weight: bold;'
         else: return 'background-color: #EF4444; color: white; font-weight: bold;'
     return ''
@@ -177,7 +178,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia: guarda tanto el conteo de semanas consistentes como el porcentaje)
+        # Pre-cálculo de Indicador C (Consistencia)
         trim_results_abs_c = {}
         trim_results_ind_c = {}
         for t_name, start_col, end_col in bloques_semanas:
@@ -219,6 +220,37 @@ if uploaded_file is not None:
             
             trim_results_abs_c[t_name] = t_vals_abs_c
             trim_results_ind_c[t_name] = t_vals_ind_c
+
+        # Pre-cálculo de Indicador F (Calidad: Promedio entre Cobertura [b] y Consistencia [c])
+        # Nota: La cobertura por trimestre para cada unidad se calcula como el promedio de sus porcentajes semanales o tomando el indicador b equivalente del trimestre.
+        trim_results_ind_f = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_f = {}
+            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
+            for unidad in TARGET_UNITS:
+                # Calcular Cobertura trimestral promedio (b) para la unidad
+                cob_semanas = []
+                for col_idx, _ in semanas_bloque_f:
+                    suma_col_unidades = 0
+                    for u_check in TARGET_UNITS:
+                        m_r = unit_rows_map.get(u_check, {})
+                        row_c = m_r.get("Unidades con casos oportunos", None)
+                        if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
+                            try:
+                                if float(row_c[col_idx]) > 0:
+                                    suma_col_unidades += 1
+                            except ValueError:
+                                pass
+                    # Porcentaje delegacional de cobertura en esa semana específica
+                    cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
+                
+                prom_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+                val_c_unidad = trim_results_ind_c[t_name].get(unidad, 0.0)
+                if pd.isna(val_c_unidad): val_c_unidad = 0.0
+
+                val_f = (prom_cob + val_c_unidad) / 2.0
+                t_vals_f[unidad] = round(val_f, 2)
+            trim_results_ind_f[t_name] = t_vals_f
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - 6 INDICADORES)
@@ -264,14 +296,18 @@ if uploaded_file is not None:
                     
                     val_a_estatico = np.nan
                     val_c_estatico = np.nan
+                    val_f_estatico = np.nan
                     if trim_match and trim_match in trim_results_ind_a:
                         val_a_estatico = trim_results_ind_a[trim_match].get(unidad, np.nan)
                         val_c_estatico = trim_results_ind_c[trim_match].get(unidad, np.nan)
+                        val_f_estatico = trim_results_ind_f[trim_match].get(unidad, np.nan)
                     elif not trim_match and len(bloques_semanas) > 0:
                         vals_trim_a = [trim_results_ind_a[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_a[t[0]].get(unidad, np.nan))]
                         vals_trim_c = [trim_results_ind_c[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_c[t[0]].get(unidad, np.nan))]
+                        vals_trim_f = [trim_results_ind_f[t[0]].get(unidad, np.nan) for t in bloques_semanas if pd.notna(trim_results_ind_f[t[0]].get(unidad, np.nan))]
                         if vals_trim_a: val_a_estatico = round(sum(vals_trim_a) / len(vals_trim_a), 2)
                         if vals_trim_c: val_c_estatico = round(sum(vals_trim_c) / len(vals_trim_c), 2)
+                        if vals_trim_f: val_f_estatico = round(sum(vals_trim_f) / len(vals_trim_f), 2)
 
                     def get_ab_val(metric_key):
                         r = m_rows.get(metric_key, None)
@@ -305,7 +341,7 @@ if uploaded_file is not None:
                     ind_d = round((u_sin_notificar / base_hab) * 100, 2)
                     excedente_rsm = max(0.0, ind_d - 5.0)
                     ind_e = round(max(0.0, 100.0 - excedente_rsm), 2)
-                    ind_f = "NO APLICA"
+                    ind_f = val_f_estatico if pd.notna(val_f_estatico) else "NO APLICA"
 
                     results.append({
                         "Unidad": unidad,
@@ -401,7 +437,7 @@ if uploaded_file is not None:
                 ind_label = "Consistencia"
             else:
                 ind_key = "f"
-                ind_label = "Calidad"
+                ind_label = "Calidad (Descriptivo)"
 
             # CASO ESPECIAL PARA EL INDICADOR B
             if ind_key == "b":
@@ -495,9 +531,12 @@ if uploaded_file is not None:
                         m_rows = unit_rows_map.get(unidad, {})
                         
                         if ind_key == "c":
-                            # Para C, la columna izquierda muestra las semanas consistentes
                             val_abs = trim_results_abs_c[t_name].get(unidad, np.nan)
                             val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
+                        elif ind_key == "f":
+                            # Para Calidad, mostramos en la columna izquierda el promedio de cobertura o dejamos referencia y el indicador es f
+                            val_abs = trim_results_ind_f[t_name].get(unidad, np.nan)
+                            val_ind = val_abs
                         else:
                             row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                             suma_bloque = 0.0
@@ -512,23 +551,6 @@ if uploaded_file is not None:
 
                             if ind_key == "a":
                                 val_ind = (suma_bloque / 13.0) * 100
-                            else: # Calidad (f)
-                                def get_ab_val(metric_key):
-                                    r = m_rows.get(metric_key, None)
-                                    if r is not None:
-                                        for col_idx in range(len(r) - 1, 0, -1):
-                                            val_celda = r[col_idx]
-                                            try:
-                                                if pd.notna(val_celda) and str(val_celda).strip() != "":
-                                                    return float(val_celda)
-                                            except ValueError:
-                                                continue
-                                    return 0.0
-                                u_oportunas = get_ab_val("Unidades con casos oportunos")
-                                base_hab = 15.0
-                                ind_a_temp = (suma_bloque / 13.0) * 100
-                                ind_b_temp = (u_oportunas / base_hab) * 100
-                                val_ind = (ind_b_temp + ind_a_temp) / 2.0
 
                         t_vals_abs[unidad] = val_abs
                         t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
@@ -539,7 +561,13 @@ if uploaded_file is not None:
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
-                    label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
+                    if ind_key == "c":
+                        label_izq = "SEMANAS CONSISTENTES"
+                    elif ind_key == "f":
+                        label_izq = "VALOR PROMEDIO (COB + CONS)"
+                    else:
+                        label_izq = "DIAS NOTIFICADOS OPORTUNAMENTE"
+
                     for t_name, _, _ in bloques_semanas:
                         fila[(label_izq, t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
@@ -558,7 +586,13 @@ if uploaded_file is not None:
                 </div>
                 """, unsafe_allow_html=True)
 
-                label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
+                if ind_key == "c":
+                    label_izq = "SEMANAS CONSISTENTES"
+                elif ind_key == "f":
+                    label_izq = "VALOR PROMEDIO (COB + CONS)"
+                else:
+                    label_izq = "DIAS NOTIFICADOS OPORTUNAMENTE"
+
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append((label_izq, t_name))
@@ -592,7 +626,7 @@ if uploaded_file is not None:
                     
                     if vals_ind:
                         min_row_ind[t_name] = f"{min(vals_ind):.2f}"
-                        min_row_abs[t_name] = f"{min(vals_abs):.0f}"
+                        min_row_abs[t_name] = f"{min(vals_abs):.2f}" if ind_key == "f" else f"{min(vals_abs):.0f}"
                     else:
                         min_row_ind[t_name] = "-"
                         min_row_abs[t_name] = "-"
@@ -635,10 +669,10 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">100%</td>
-                        <td class="bg-bueno">97.5 - 99.9%</td>
-                        <td class="bg-regular">95.0 - 97.4%</td>
-                        <td class="bg-malo">≤ 94.9%</td>
+                        <td class="bg-excelente">90.0 - 100%</td>
+                        <td class="bg-bueno">80.0 - 89.9%</td>
+                        <td class="bg-regular">60.0 - 79.9%</td>
+                        <td class="bg-malo">≤ 59.9%</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
