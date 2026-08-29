@@ -218,29 +218,7 @@ if uploaded_file is not None:
                     t_vals_c[unidad] = {"sem_cons": 0, "tot_sem": int(total_sem_trim), "porc": np.nan}
             trim_results_c_data[t_name] = t_vals_c
 
-        # Pre-cálculo Cobertura (b) para Calidad (f)
-        trim_results_cob_b = {}
-        for t_name, start_col, end_col in bloques_semanas:
-            t_vals_cob = {}
-            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
-            for unidad in TARGET_UNITS:
-                cob_semanas = []
-                for col_idx, _ in semanas_bloque_f:
-                    suma_col_unidades = 0
-                    for u_check in TARGET_UNITS:
-                        m_r = unit_rows_map.get(u_check, {})
-                        row_c = m_r.get("Unidades con casos oportunos", None)
-                        if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
-                            try:
-                                if float(row_c[col_idx]) > 0:
-                                    suma_col_unidades += 1
-                            except ValueError:
-                                pass
-                    cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
-                t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-            trim_results_cob_b[t_name] = t_vals_cob
-
-        # Pre-cálculo Global de Calidad (f) por Trimestre
+        # Pre-cálculo Global de Calidad (f) por Trimestre (Promedio Cobertura y Consistencia Delegacional)
         global_trim_results_f = {}
         for t_name, start_col, end_col in bloques_semanas:
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
@@ -258,15 +236,38 @@ if uploaded_file is not None:
                             pass
                 cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
             global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-            vals_cons_unidades = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
-            valid_cons = [v for v in vals_cons_unidades if pd.notna(v)]
-            global_cons = np.mean(valid_cons) if len(valid_cons) > 0 else 0.0
-            global_cal = (global_cob + global_cons) / 2.0
+            
+            # Consistencia delegacional (máximo de consistencia)
+            vals_c_trim = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+            valid_c_trim = [v for v in vals_c_trim if pd.notna(v)]
+            delegational_c = max(valid_c_trim) if valid_c_trim else 0.0
+            
+            global_cal = (global_cob + delegational_c) / 2.0
+            
             global_trim_results_f[t_name] = {
                 "cobertura": round(global_cob, 2),
-                "consistencia": round(global_cons, 2),
+                "consistencia": round(delegational_c, 2),
                 "calidad": round(global_cal, 2)
             }
+
+        # Pre-cálculo de Cobertura Oportuna (b) promedio trimestral delegacional para la tabla general
+        delegational_b_trim = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
+            cob_semanas = []
+            for col_idx, _ in semanas_bloque_f:
+                suma_col_unidades = 0
+                for u_check in TARGET_UNITS:
+                    m_r = unit_rows_map.get(u_check, {})
+                    row_c = m_r.get("Unidades con casos oportunos", None)
+                    if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
+                        try:
+                            if float(row_c[col_idx]) > 0:
+                                suma_col_unidades += 1
+                        except ValueError:
+                            pass
+                cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
+            delegational_b_trim[t_name] = round(np.mean(cob_semanas), 2) if len(cob_semanas) > 0 else 0.0
 
         # ==========================================
         # 1. APARTADO GENERAL (PANORAMA COMPARATIVO - MULTITRIMESTRE LADO A LADO)
@@ -322,21 +323,22 @@ if uploaded_file is not None:
 
         st.dataframe(styled_gen_main, use_container_width=True, hide_index=True)
 
-        # Tabla Delegacional independiente (abajo de la principal)
+        # Fila Delegacional independiente abajo (General): 
+        # a) más bajo, b) promedio del trimestre, c) más alto, f) indicador de calidad
         fila_del = {("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE"): "DELEGACIONAL"}
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
-            max_a = max([v for v in vals_a if pd.notna(v)], default=np.nan)
+            min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
             
-            global_cob = global_trim_results_f.get(t_name, {}).get("cobertura", np.nan)
+            avg_b = delegational_b_trim.get(t_name, np.nan)
             
             vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
             
             global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
             
-            fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = max_a
-            fila_del[(t_name, "COBERTURA OPORTUNA")] = global_cob
+            fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
+            fila_del[(t_name, "COBERTURA OPORTUNA")] = avg_b
             fila_del[(t_name, "CONSISTENCIA")] = max_c
             fila_del[(t_name, "CALIDAD")] = global_cal
 
@@ -443,6 +445,21 @@ if uploaded_file is not None:
                     st.dataframe(styled_sem, use_container_width=True, hide_index=True)
                     st.markdown("---")
 
+                # Fila Delegacional independiente abajo para b (promedio de cada trimestre)
+                fila_del_b = {"MÉTRICA / DÍA": "DELEGACIONAL"}
+                for t_name, start_col, end_col in bloques_semanas:
+                    avg_b = delegational_b_trim.get(t_name, np.nan)
+                    semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+                    for _, sem_num in semanas_bloque:
+                        fila_del_b[f"Día {sem_num}"] = avg_b
+
+                df_del_b = pd.DataFrame([fila_del_b])
+                styled_del_b = df_del_b.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else str(x),
+                    subset=df_del_b.columns[1:]
+                )
+                st.dataframe(styled_del_b, use_container_width=True, hide_index=True)
+
                 st.markdown(f"""
                 <table class="acotacion-table">
                     <tr>
@@ -462,7 +479,7 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
-            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Con tabla Delegacional independiente abajo
+            # CASO ESPECIAL PARA EL INDICADOR C (CONSISTENCIA) - Delegacional = valor más alto
             elif ind_key == "c":
                 st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
                 st.markdown(f"**AÑO:** {anio}")
@@ -505,7 +522,7 @@ if uploaded_file is not None:
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo
+                # Tabla Delegacional independiente abajo (valor más alto para C)
                 fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = [(t_name, "SEMANAS CONSISTENTES")]
@@ -607,7 +624,7 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
             else:
-                # ESTRUCTURA PARA A (Cumplimiento) - Con tabla Delegacional independiente abajo
+                # ESTRUCTURA PARA A (Cumplimiento) - Delegacional = valor más bajo
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -670,17 +687,17 @@ if uploaded_file is not None:
 
                 st.dataframe(styled_sep, use_container_width=True, hide_index=True)
 
-                # Tabla Delegacional independiente abajo
+                # Tabla Delegacional independiente abajo (valor más bajo para A)
                 fila_delegacional_a = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_abs = [("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)]
                     col_ind = [("INDICADOR", t_name)]
                     
-                    max_abs = df_sep[col_abs].max().values[0]
-                    max_ind = df_sep[col_ind].max().values[0]
+                    min_abs = df_sep[col_abs].min().values[0]
+                    min_ind = df_sep[col_ind].min().values[0]
                     
-                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = max_abs
-                    fila_delegacional_a[("INDICADOR", t_name)] = max_ind
+                    fila_delegacional_a[("DIAS NOTIFICADOS OPORTUNAMENTE", t_name)] = min_abs
+                    fila_delegacional_a[("INDICADOR", t_name)] = min_ind
 
                 df_del_a = pd.DataFrame([fila_delegacional_a])
                 df_del_a.columns = pd.MultiIndex.from_tuples(sep_tuples)
