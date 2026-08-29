@@ -221,14 +221,12 @@ if uploaded_file is not None:
             trim_results_abs_c[t_name] = t_vals_abs_c
             trim_results_ind_c[t_name] = t_vals_ind_c
 
-        # Pre-cálculo de Indicador F (Calidad: Promedio entre Cobertura [b] y Consistencia [c])
-        # Nota: La cobertura por trimestre para cada unidad se calcula como el promedio de sus porcentajes semanales o tomando el indicador b equivalente del trimestre.
-        trim_results_ind_f = {}
+        # Pre-cálculo de Cobertura (b) para Calidad (f) por trimestre y unidad
+        trim_results_cob_b = {}
         for t_name, start_col, end_col in bloques_semanas:
-            t_vals_f = {}
+            t_vals_cob = {}
             semanas_bloque_f = [s for s in semanas_info if start_col <= s[0] <= end_col]
             for unidad in TARGET_UNITS:
-                # Calcular Cobertura trimestral promedio (b) para la unidad
                 cob_semanas = []
                 for col_idx, _ in semanas_bloque_f:
                     suma_col_unidades = 0
@@ -241,13 +239,18 @@ if uploaded_file is not None:
                                     suma_col_unidades += 1
                             except ValueError:
                                 pass
-                    # Porcentaje delegacional de cobertura en esa semana específica
                     cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
-                
-                prom_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+                t_vals_cob[unidad] = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
+            trim_results_cob_b[t_name] = t_vals_cob
+
+        # Pre-cálculo de Indicador F (Calidad: Promedio de Cobertura [b] y Consistencia [c])
+        trim_results_ind_f = {}
+        for t_name, start_col, end_col in bloques_semanas:
+            t_vals_f = {}
+            for unidad in TARGET_UNITS:
+                prom_cob = trim_results_cob_b[t_name].get(unidad, 0.0)
                 val_c_unidad = trim_results_ind_c[t_name].get(unidad, 0.0)
                 if pd.isna(val_c_unidad): val_c_unidad = 0.0
-
                 val_f = (prom_cob + val_c_unidad) / 2.0
                 t_vals_f[unidad] = round(val_f, 2)
             trim_results_ind_f[t_name] = t_vals_f
@@ -519,8 +522,73 @@ if uploaded_file is not None:
                 </table>
                 """, unsafe_allow_html=True)
 
+            # CASO ESPECIAL PARA EL INDICADOR F (CALIDAD DESCRIPTIVO)
+            elif ind_key == "f":
+                st.markdown(f"**INDICADOR EVALUADO:** {ind_label}")
+                st.markdown(f"**AÑO:** {anio}")
+                st.markdown(f"**FECHA DE CORTE:** Día {ultima_semana}")
+
+                # Selector de unidad para ver su desglose trimestral de calidad al estilo de la imagen
+                unidad_calidad = st.selectbox("Seleccione la unidad médica para el reporte de Calidad:", TARGET_UNITS, index=0, key="sel_unidad_calidad")
+
+                tabla_f_data = []
+                for t_name, start_col, end_col in bloques_semanas:
+                    cob_val = trim_results_cob_b[t_name].get(unidad_calidad, 0.0)
+                    cons_val = trim_results_ind_c[t_name].get(unidad_calidad, 0.0)
+                    cal_val = trim_results_ind_f[t_name].get(unidad_calidad, 0.0)
+
+                    tabla_f_data.append({
+                        "TRIMESTRE": t_name,
+                        "PORCENTAJE DE COBERTURA": round(cob_val, 2),
+                        "PORCENTAJE DE CONSISTENCIA": round(cons_val, 2),
+                        "INDICADOR DE CALIDAD": round(cal_val, 2),
+                        "_cal_val": cal_val
+                    })
+
+                df_f = pd.DataFrame(tabla_f_data)
+
+                # Estilo para resaltar la columna de indicador de calidad con color según semáforo
+                def style_calidad_table(row_data):
+                    styles = [''] * len(row_data)
+                    for i, col_name in enumerate(row_data.index):
+                        if col_name == "INDICADOR DE CALIDAD":
+                            val = row_data["_cal_val"]
+                            if pd.notna(val):
+                                styles[i] = get_bg_color(val, "f")
+                    return styles
+
+                display_f = df_f.drop(columns=["_cal_val"])
+                styled_f = display_f.style.format(
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else str(x),
+                    subset=["PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]
+                ).apply(style_calidad_table, axis=1)
+
+                st.markdown(f"### 📋 Reporte de Calidad para: **{unidad_calidad}**")
+                st.dataframe(styled_f, use_container_width=True, hide_index=True)
+
+                st.markdown(f"<p style='font-size:0.8rem; color:#64748B; font-style:italic;'>Fuente: SINAVE-SUAVE. Cubo de indicadores, descargado al {ultima_semana} día.</p>", unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <table class="acotacion-table">
+                    <tr>
+                        <th>Indicador</th>
+                        <th>Excelente</th>
+                        <th>Bueno</th>
+                        <th>Regular</th>
+                        <th>Malo</th>
+                    </tr>
+                    <tr>
+                        <td><b>{ind_label}</b></td>
+                        <td class="bg-excelente">90.0 - 100%</td>
+                        <td class="bg-bueno">80.0 - 89.9%</td>
+                        <td class="bg-regular">60.0 - 79.9%</td>
+                        <td class="bg-malo">≤ 59.9%</td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
+
             else:
-                # ESTRUCTURA PARA A, C, F
+                # ESTRUCTURA PARA A y C
                 trim_results_ind = {}
                 trim_results_abs = {}
                 
@@ -533,10 +601,6 @@ if uploaded_file is not None:
                         if ind_key == "c":
                             val_abs = trim_results_abs_c[t_name].get(unidad, np.nan)
                             val_ind = trim_results_ind_c[t_name].get(unidad, np.nan)
-                        elif ind_key == "f":
-                            # Para Calidad, mostramos en la columna izquierda el promedio de cobertura o dejamos referencia y el indicador es f
-                            val_abs = trim_results_ind_f[t_name].get(unidad, np.nan)
-                            val_ind = val_abs
                         else:
                             row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
                             suma_bloque = 0.0
@@ -548,9 +612,7 @@ if uploaded_file is not None:
                                         except ValueError:
                                             pass
                             val_abs = suma_bloque
-
-                            if ind_key == "a":
-                                val_ind = (suma_bloque / 13.0) * 100
+                            val_ind = (suma_bloque / 13.0) * 100
 
                         t_vals_abs[unidad] = val_abs
                         t_vals_ind[unidad] = round(val_ind, 2) if pd.notna(val_ind) else np.nan
@@ -561,13 +623,7 @@ if uploaded_file is not None:
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
-                    if ind_key == "c":
-                        label_izq = "SEMANAS CONSISTENTES"
-                    elif ind_key == "f":
-                        label_izq = "VALOR PROMEDIO (COB + CONS)"
-                    else:
-                        label_izq = "DIAS NOTIFICADOS OPORTUNAMENTE"
-
+                    label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                     for t_name, _, _ in bloques_semanas:
                         fila[(label_izq, t_name)] = trim_results_abs[t_name].get(unidad, np.nan)
                     for t_name, _, _ in bloques_semanas:
@@ -586,13 +642,7 @@ if uploaded_file is not None:
                 </div>
                 """, unsafe_allow_html=True)
 
-                if ind_key == "c":
-                    label_izq = "SEMANAS CONSISTENTES"
-                elif ind_key == "f":
-                    label_izq = "VALOR PROMEDIO (COB + CONS)"
-                else:
-                    label_izq = "DIAS NOTIFICADOS OPORTUNAMENTE"
-
+                label_izq = "SEMANAS CONSISTENTES" if ind_key == "c" else "DIAS NOTIFICADOS OPORTUNAMENTE"
                 sep_tuples = [("UNIDAD MÉDICA / TRIMESTRE", "UNIDAD MÉDICA / TRIMESTRE")]
                 for t_name, _, _ in bloques_semanas:
                     sep_tuples.append((label_izq, t_name))
@@ -626,7 +676,7 @@ if uploaded_file is not None:
                     
                     if vals_ind:
                         min_row_ind[t_name] = f"{min(vals_ind):.2f}"
-                        min_row_abs[t_name] = f"{min(vals_abs):.2f}" if ind_key == "f" else f"{min(vals_abs):.0f}"
+                        min_row_abs[t_name] = f"{min(vals_abs):.0f}"
                     else:
                         min_row_ind[t_name] = "-"
                         min_row_abs[t_name] = "-"
@@ -669,10 +719,10 @@ if uploaded_file is not None:
                     </tr>
                     <tr>
                         <td><b>{ind_label}</b></td>
-                        <td class="bg-excelente">90.0 - 100%</td>
-                        <td class="bg-bueno">80.0 - 89.9%</td>
-                        <td class="bg-regular">60.0 - 79.9%</td>
-                        <td class="bg-malo">≤ 59.9%</td>
+                        <td class="bg-excelente">100%</td>
+                        <td class="bg-bueno">97.5 - 99.9%</td>
+                        <td class="bg-regular">95.0 - 97.4%</td>
+                        <td class="bg-malo">≤ 94.9%</td>
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
