@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import gspread
+from google.oauth2.service_account import Credentials
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -141,10 +143,14 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
+        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas) y Pre-cálculo Indicador A (GLOBAL)
         abs_results = {}
+        trim_results_ind_a = {}
+        trim_results_abs = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
+            t_vals_abs = {}
+            t_vals_a = {}
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
@@ -161,18 +167,10 @@ if uploaded_file is not None:
                             except ValueError:
                                 pass
                 t_vals[unidad] = suma_bloque if tiene_datos_bloque else None
+                t_vals_abs[unidad] = suma_bloque
+                t_vals_a[unidad] = round((suma_bloque / 13.0) * 100, 2)
             abs_results[t_name] = t_vals
-
-        # Pre-cálculo de Indicador A
-        trim_results_ind_a = {}
-        for t_name, start_col, end_col in bloques_semanas:
-            t_vals_a = {}
-            for unidad in TARGET_UNITS:
-                num_oportunas = abs_results[t_name].get(unidad, None)
-                if num_oportunas is None:
-                    t_vals_a[unidad] = np.nan
-                else:
-                    t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
+            trim_results_abs[t_name] = t_vals_abs
             trim_results_ind_a[t_name] = t_vals_a
 
         # Pre-cálculo de Indicador C (Consistencia) actualizado con la nueva metodología
@@ -633,35 +631,12 @@ if uploaded_file is not None:
 
             else:
                 # ESTRUCTURA PARA A (Cumplimiento)
-                trim_results_ind = {}
-                trim_results_abs = {}
-                
-                for t_name, start_col, end_col in bloques_semanas:
-                    t_vals_ind = {}
-                    t_vals_abs = {}
-                    for unidad in TARGET_UNITS:
-                        m_rows = unit_rows_map.get(unidad, {})
-                        row_casos_oportunos = m_rows.get("Unidades con casos oportunos", None)
-                        suma_bloque = 0.0
-                        if row_casos_oportunos is not None:
-                            for c_idx in range(start_col, end_col + 1):
-                                if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
-                                    try:
-                                        suma_bloque += float(row_casos_oportunos[c_idx])
-                                    except ValueError:
-                                        pass
-                        t_vals_abs[unidad] = suma_bloque
-                        t_vals_ind[unidad] = round((suma_bloque / 13.0) * 100, 2)
-                        
-                    trim_results_abs[t_name] = t_vals_abs
-                    trim_results_ind[t_name] = t_vals_ind
-
                 tabla_sep_data = []
                 for unidad in TARGET_UNITS:
                     fila = {"UNIDAD MÉDICA": unidad}
                     for t_name, _, _ in bloques_semanas:
                         fila[(t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")] = trim_results_abs[t_name].get(unidad, np.nan)
-                        fila[(t_name, "INDICADOR")] = trim_results_ind[t_name].get(unidad, np.nan)
+                        fila[(t_name, "INDICADOR")] = trim_results_ind_a[t_name].get(unidad, np.nan)
                     tabla_sep_data.append(fila)
 
                 df_sep = pd.DataFrame(tabla_sep_data)
@@ -742,138 +717,110 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
 
         # ==========================================
-        # FUNCIÓN DE EXPORTACIÓN INTEGRADA EN EL BOTÓN
+        # EXPORTACIÓN A GOOGLE SHEETS (GSPREAD)
         # ==========================================
         st.markdown("---")
-        st.subheader("📥 Exportar Reporte Completo a Excel")
+        st.subheader("🌐 Exportar Reporte Completo a Google Sheets")
 
-        def exportar_excel_completo():
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                wb = writer.book
+        # Configuración opcional de credenciales mediante st.secrets o entrada manual
+        sheet_title = st.text_input("Nombre del Google Sheet a crear en tu Drive:", value=f"Reporte_SUIVE_{anio}")
 
-                # Paleta de colores de sombreados requerida (HEX a ARGB con prefijo FF)
-                fill_verde = PatternFill(start_color="FF10B981", end_color="FF10B981", fill_type="solid")
-                fill_blanco = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
-                fill_amarillo = PatternFill(start_color="FFFEF08A", end_color="FFFEF08A", fill_type="solid")
-                fill_rojo = PatternFill(start_color="FFEF4444", end_color="FFEF4444", fill_type="solid")
-                fill_header = PatternFill(start_color="FF374151", end_color="FF374151", fill_type="solid")
+        if st.button("🚀 Crear y Publicar en Google Sheets"):
+            try:
+                # Inicializar gspread usando las credenciales de servicio en st.secrets["gcp_service_account"]
+                if "gcp_service_account" in st.secrets:
+                    creds_dict = dict(st.secrets["gcp_service_account"])
+                    creds = Credentials.from_service_account_info(
+                        creds_dict,
+                        scopes=[
+                            "https://www.googleapis.com/auth/spreadsheets",
+                            "https://www.googleapis.com/auth/drive"
+                        ]
+                    )
+                    gc = gspread.authorize(creds)
+                else:
+                    # Alternativa si se usa oauth por defecto o archivo json local
+                    gc = gspread.service_account()
+
+                # Crear nuevo spreadsheet en Google Sheets
+                sh = gc.create(sheet_title)
                 
-                font_blanco = Font(name="Calibri", size=11, bold=True, color="FFFFFFFF")
-                font_negro = Font(name="Calibri", size=11, bold=True, color="FF000000")
-                font_normal_negro = Font(name="Calibri", size=11, bold=False, color="FF000000")
-                
-                border_thin = Border(
-                    left=Side(style='thin', color='FFCBD5E1'),
-                    right=Side(style='thin', color='FFCBD5E1'),
-                    top=Side(style='thin', color='FFCBD5E1'),
-                    bottom=Side(style='thin', color='FFCBD5E1')
-                )
+                # Hoja inicial predeterminada se llamará "General Comparativo"
+                ws_gen = sh.get_worksheet(0)
+                ws_gen.update_title("General Comparativo")
 
-                def aplicar_color_celda(cell, val, ind_type):
+                # Paleta de colores de sombreados requerida (HEX sin prefijo FF para gspread / formato dict)
+                color_verde = {"red": 16/255, "green": 185/255, "blue": 129/255}
+                color_blanco = {"red": 1, "green": 1, "blue": 1}
+                color_amarillo = {"red": 254/255, "green": 240/255, "blue": 138/255}
+                color_rojo = {"red": 239/255, "green": 68/255, "blue": 68/255}
+                color_header = {"red": 55/255, "green": 65/255, "blue": 81/255}
+
+                def get_gspread_color(val, ind_type):
                     if val is None or pd.isna(val) or val == "NO APLICA":
-                        cell.fill = fill_blanco
-                        cell.font = font_normal_negro
-                        cell.border = border_thin
-                        return
-
+                        return color_blanco
                     if ind_type == "a":
-                        if val == 100.0:
-                            cell.fill = fill_verde; cell.font = font_blanco
-                        elif 97.5 <= val <= 99.9:
-                            cell.fill = fill_blanco; cell.font = font_negro
-                        elif 95.0 <= val <= 97.4:
-                            cell.fill = fill_amarillo; cell.font = font_negro
-                        else:
-                            cell.fill = fill_rojo; cell.font = font_blanco
+                        if val == 100.0: return color_verde
+                        elif 97.5 <= val <= 99.9: return color_blanco
+                        elif 95.0 <= val <= 97.4: return color_amarillo
+                        else: return color_rojo
                     elif ind_type in ["b", "e"]:
-                        if 95.0 <= val <= 100.0:
-                            cell.fill = fill_verde; cell.font = font_blanco
-                        elif 90.0 <= val <= 94.9:
-                            cell.fill = fill_blanco; cell.font = font_negro
-                        elif 80.0 <= val <= 89.9:
-                            cell.fill = fill_amarillo; cell.font = font_negro
-                        else:
-                            cell.fill = fill_rojo; cell.font = font_blanco
+                        if 95.0 <= val <= 100.0: return color_verde
+                        elif 90.0 <= val <= 94.9: return color_blanco
+                        elif 80.0 <= val <= 89.9: return color_amarillo
+                        else: return color_rojo
                     elif ind_type == "c":
-                        if 90.0 <= val <= 100.0:
-                            cell.fill = fill_verde; cell.font = font_blanco
-                        elif 80.0 <= val <= 89.9:
-                            cell.fill = fill_blanco; cell.font = font_negro
-                        elif 70.0 <= val <= 79.9:
-                            cell.fill = fill_amarillo; cell.font = font_negro
-                        else:
-                            cell.fill = fill_rojo; cell.font = font_blanco
+                        if 90.0 <= val <= 100.0: return color_verde
+                        elif 80.0 <= val <= 89.9: return color_blanco
+                        elif 70.0 <= val <= 79.9: return color_amarillo
+                        else: return color_rojo
                     elif ind_type == "f":
-                        if 90.0 <= val <= 100.0:
-                            cell.fill = fill_verde; cell.font = font_blanco
-                        elif 80.0 <= val <= 89.9:
-                            cell.fill = fill_blanco; cell.font = font_negro
-                        elif 60.0 <= val <= 79.9:
-                            cell.fill = fill_amarillo; cell.font = font_negro
-                        else:
-                            cell.fill = fill_rojo; cell.font = font_blanco
-                    cell.border = border_thin
+                        if 90.0 <= val <= 100.0: return color_verde
+                        elif 80.0 <= val <= 89.9: return color_blanco
+                        elif 60.0 <= val <= 79.9: return color_amarillo
+                        else: return color_rojo
+                    return color_blanco
 
-                def insertar_tabla_leyenda(ws, start_row, ind_nombre, rangos):
-                    """Inserta la tabla de acotaciones/colorimetría al pie de cada hoja."""
-                    ws.cell(row=start_row, column=1, value="Indicador").fill = fill_header
-                    ws.cell(row=start_row, column=1).font = font_blanco
-                    ws.cell(row=start_row, column=1).alignment = Alignment(horizontal="center")
+                def insertar_leyenda_gs(ws, start_row, ind_nombre, rangos):
+                    ws.update_cell(start_row, 1, "Indicador")
+                    ws.format(f"A{start_row}", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
                     
-                    for c_i, cat in enumerate(["Excelente", "Bueno", "Regular", "Malo"], start=2):
-                        cell_h = ws.cell(row=start_row, column=c_i, value=cat)
-                        cell_h.fill = fill_header
-                        cell_h.font = font_blanco
-                        cell_h.alignment = Alignment(horizontal="center")
+                    cats = ["Excelente", "Bueno", "Regular", "Malo"]
+                    cols = ["B", "C", "D", "E"]
+                    for col_l, cat in zip(cols, cats):
+                        ws.update_cell(start_row, cols.index(col_l)+2, cat)
+                        ws.format(f"{col_l}{start_row}", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}, "horizontalAlignment": "CENTER"})
 
-                    ws.cell(row=start_row+1, column=1, value=ind_nombre).font = font_negro
-                    ws.cell(row=start_row+1, column=1).border = border_thin
+                    ws.update_cell(start_row+1, 1, ind_nombre)
+                    ws.format(f"A{start_row+1}", {"textFormat": {"bold": True}})
 
-                    fills = [fill_verde, fill_blanco, fill_amarillo, fill_rojo]
-                    for c_i, (rango_val, fl) in enumerate(zip(rangos, fills), start=2):
-                        cell_v = ws.cell(row=start_row+1, column=c_i, value=rango_val)
-                        cell_v.fill = fl
-                        cell_v.font = font_negro if fl != fill_verde and fl != fill_rojo else font_blanco
-                        cell_v.alignment = Alignment(horizontal="center")
-                        cell_v.border = border_thin
+                    fills_gs = [color_verde, color_blanco, color_amarillo, color_rojo]
+                    for col_l, rango_val, fl in zip(cols, rangos, fills_gs):
+                        cell_coord = f"{col_l}{start_row+1}"
+                        ws.update_cell(start_row+1, cols.index(col_l)+2, rango_val)
+                        ws.format(cell_coord, {"backgroundColor": fl, "textFormat": {"bold": True}, "horizontalAlignment": "CENTER"})
 
-                # --- 1. HOJA: GENERAL COMPARATIVO ---
-                ws_gen = wb.create_sheet(title="General Comparativo")
-                ws_gen.views.sheetView[0].showGridLines = True
-                
-                ws_gen.cell(row=1, column=1, value="UNIDAD MÉDICA")
-                col_idx_gen = 2
+                # --- 1. POPULAR: General Comparativo ---
+                data_gen = [["UNIDAD MÉDICA"]]
+                col_headers_gen = []
                 for t_name, _, _ in bloques_semanas:
                     for subcol in ["CUMPLIMIENTO U OPORTUNIDAD", "COBERTURA OPORTUNA", "CONSISTENCIA", "CALIDAD"]:
-                        ws_gen.cell(row=1, column=col_idx_gen, value=f"{t_name} - {subcol}")
-                        col_idx_gen += 1
+                        col_headers_gen.append(f"{t_name} - {subcol}")
+                data_gen[0].extend(col_headers_gen)
 
-                current_row = 2
                 for unidad in TARGET_UNITS:
-                    ws_gen.cell(row=current_row, column=1, value=unidad)
-                    c_idx = 2
+                    row_vals = [unidad]
                     for t_name, _, _ in bloques_semanas:
                         val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
                         val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
-                        
-                        cell = ws_gen.cell(row=current_row, column=c_idx, value=val_a if pd.notna(val_a) else "-")
-                        aplicar_color_celda(cell, val_a, "a")
-                        
-                        cell2 = ws_gen.cell(row=current_row, column=c_idx+1, value="NO APLICA")
-                        cell2.fill = fill_blanco; cell2.font = font_normal_negro; cell2.border = border_thin
-                        
-                        cell3 = ws_gen.cell(row=current_row, column=c_idx+2, value=val_c if pd.notna(val_c) else "-")
-                        aplicar_color_celda(cell3, val_c, "c")
-                        
-                        cell4 = ws_gen.cell(row=current_row, column=c_idx+3, value="NO APLICA")
-                        cell4.fill = fill_blanco; cell4.font = font_normal_negro; cell4.border = border_thin
-                        
-                        c_idx += 4
-                    current_row += 1
+                        row_vals.append(val_a if pd.notna(val_a) else "-")
+                        row_vals.append("NO APLICA")
+                        row_vals.append(val_c if pd.notna(val_c) else "-")
+                        row_vals.append("NO APLICA")
+                    data_gen.append(row_vals)
 
-                ws_gen.cell(row=current_row, column=1, value="DELEGACIONAL")
-                c_idx = 2
+                # Fila Delegacional General
+                row_del_gen = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
                     min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
@@ -881,81 +828,56 @@ if uploaded_file is not None:
                     vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
                     max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
                     global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
+                    row_del_gen.extend([min_a, avg_b, max_c, global_cal])
+                data_gen.append(row_del_gen)
 
-                    cell = ws_gen.cell(row=current_row, column=c_idx, value=min_a if pd.notna(min_a) else "-")
-                    aplicar_color_celda(cell, min_a, "a")
-                    
-                    cell2 = ws_gen.cell(row=current_row, column=c_idx+1, value=avg_b if pd.notna(avg_b) else "-")
-                    aplicar_color_celda(cell2, avg_b, "b")
-                    
-                    cell3 = ws_gen.cell(row=current_row, column=c_idx+2, value=max_c if pd.notna(max_c) else "-")
-                    aplicar_color_celda(cell3, max_c, "c")
-                    
-                    cell4 = ws_gen.cell(row=current_row, column=c_idx+3, value=global_cal if pd.notna(global_cal) else "-")
-                    aplicar_color_celda(cell4, global_cal, "f")
+                ws_gen.update(data_gen)
+                ws_gen.format("A1:Q1", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
 
-                    c_idx += 4
-
-                # --- 2. HOJA: INDICADOR A (CUMPLIMIENTO) ---
-                ws_a = wb.create_sheet(title="Indicador A (Cumplimiento)")
-                ws_a.views.sheetView[0].showGridLines = True
-                ws_a.cell(row=1, column=1, value="UNIDAD MÉDICA")
-                c_idx = 2
+                # --- 2. POPULAR: Indicador A ---
+                ws_a = sh.add_worksheet(title="Indicador A (Cumplimiento)", rows=30, cols=15)
+                data_a = [["UNIDAD MÉDICA"]]
+                headers_a = []
                 for t_name, _, _ in bloques_semanas:
-                    ws_a.cell(row=1, column=c_idx, value=f"{t_name} - Días Notif.")
-                    ws_a.cell(row=1, column=c_idx+1, value=f"{t_name} - Indicador (%)")
-                    c_idx += 2
-                
-                r_idx = 2
+                    headers_a.extend([f"{t_name} - Días Notif.", f"{t_name} - Indicador (%)"])
+                data_a[0].extend(headers_a)
+
                 for unidad in TARGET_UNITS:
-                    ws_a.cell(row=r_idx, column=1, value=unidad)
-                    c_idx = 2
-                    for t_name, start_col, end_col in bloques_semanas:
+                    row_a = [unidad]
+                    for t_name, _, _ in bloques_semanas:
                         abs_val = trim_results_abs[t_name].get(unidad, np.nan)
                         ind_val = trim_results_ind_a[t_name].get(unidad, np.nan)
-                        
-                        ws_a.cell(row=r_idx, column=c_idx, value=abs_val if pd.notna(abs_val) else "-")
-                        c_cell = ws_a.cell(row=r_idx, column=c_idx+1, value=ind_val if pd.notna(ind_val) else "-")
-                        aplicar_color_celda(c_cell, ind_val, "a")
-                        c_idx += 2
-                    r_idx += 1
+                        row_a.extend([abs_val if pd.notna(abs_val) else "-", ind_val if pd.notna(ind_val) else "-"])
+                    data_a.append(row_a)
 
-                ws_a.cell(row=r_idx, column=1, value="DELEGACIONAL")
-                c_idx = 2
+                row_del_a = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     vals_ind = [trim_results_ind_a[t_name].get(u, np.nan) for u in TARGET_UNITS]
                     min_ind = min([v for v in vals_ind if pd.notna(v)], default=np.nan)
                     match_u = [u for u in TARGET_UNITS if trim_results_ind_a[t_name].get(u) == min_ind]
                     min_abs = trim_results_abs[t_name].get(match_u[0], 0) if match_u else 0
+                    row_del_a.extend([min_abs, min_ind])
+                data_a.append(row_del_a)
 
-                    ws_a.cell(row=r_idx, column=c_idx, value=min_abs)
-                    c_cell = ws_a.cell(row=r_idx, column=c_idx+1, value=min_ind if pd.notna(min_ind) else "-")
-                    aplicar_color_celda(c_cell, min_ind, "a")
-                    c_idx += 2
-                
-                insertar_tabla_leyenda(ws_a, r_idx + 3, "Cumplimiento u Oportunidad", ["100.0%", "97.5 - 99.9%", "95.0 - 97.4%", "≤ 94.9%"])
+                ws_a.update(data_a)
+                ws_a.format("A1:I1", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
+                insertar_leyenda_gs(ws_a, len(data_a) + 3, "Cumplimiento u Oportunidad", ["100.0%", "97.5 - 99.9%", "95.0 - 97.4%", "≤ 94.9%"])
 
-                # --- 3. HOJA: INDICADOR B (COBERTURA OPORTUNA) ---
-                ws_b = wb.create_sheet(title="Indicador B (Cobertura)")
-                ws_b.views.sheetView[0].showGridLines = True
-                ws_b.cell(row=1, column=1, value="MÉTRICA / DÍA")
-                
-                col_global_b = 2
+                # --- 3. POPULAR: Indicador B ---
+                ws_b = sh.add_worksheet(title="Indicador B (Cobertura)", rows=10, cols=60)
+                data_b = [["MÉTRICA / DÍA"]]
+                headers_b = []
                 for t_name, start_col, end_col in bloques_semanas:
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
                     for _, sem_num in semanas_bloque:
-                        ws_b.cell(row=1, column=col_global_b, value=f"{t_name} - Día {sem_num}")
-                        col_global_b += 1
+                        headers_b.append(f"{t_name} - Día {sem_num}")
+                data_b[0].extend(headers_b)
 
-                # Fila Unidades con notificación oportuna
-                ws_b.cell(row=2, column=1, value="UNIDADES CON NOTIFICACIÓN OPORTUNA")
-                # Fila Indicador Diario (%)
-                ws_b.cell(row=3, column=1, value="INDICADOR DIARIO (%)")
-
-                col_global_b = 2
+                row_unidades_b = ["UNIDADES CON NOTIFICACIÓN OPORTUNA"]
+                row_ind_b = ["INDICADOR DIARIO (%)"]
                 for t_name, start_col, end_col in bloques_semanas:
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
-                    for col_idx, sem_num in semanas_bloque:
+                    for col_idx, _ in semanas_bloque:
                         suma_vertical_unidad = 0
                         for unidad in TARGET_UNITS:
                             m_rows = unit_rows_map.get(unidad, {})
@@ -968,99 +890,63 @@ if uploaded_file is not None:
                                 except ValueError:
                                     pass
                         ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
-                        
-                        ws_b.cell(row=2, column=col_global_b, value=suma_vertical_unidad)
-                        c_cell = ws_b.cell(row=3, column=col_global_b, value=ind_val)
-                        aplicar_color_celda(c_cell, ind_val, "b")
-                        col_global_b += 1
+                        row_unidades_b.append(suma_vertical_unidad)
+                        row_ind_b.append(ind_val)
 
-                # Fila Delegacional B
-                ws_b.cell(row=4, column=1, value="DELEGACIONAL")
-                col_global_b = 2
+                row_del_b = ["DELEGACIONAL"]
                 for t_name, start_col, end_col in bloques_semanas:
                     avg_b = delegational_b_trim.get(t_name, np.nan)
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
                     for _ in semanas_bloque:
-                        c_cell = ws_b.cell(row=4, column=col_global_b, value=avg_b if pd.notna(avg_b) else "-")
-                        aplicar_color_celda(c_cell, avg_b, "b")
-                        col_global_b += 1
+                        row_del_b.append(avg_b if pd.notna(avg_b) else "-")
 
-                insertar_tabla_leyenda(ws_b, 7, "Indicador de Cobertura oportuna", ["95.0 - 100%", "90.0 - 94.9%", "80.0 - 89.9%", "≤ 79.9%"])
+                data_b.extend([row_unidades_b, row_ind_b, row_del_b])
+                ws_b.update(data_b)
+                ws_b.format("A1:AZ1", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
+                insertar_leyenda_gs(ws_b, 7, "Indicador de Cobertura oportuna", ["95.0 - 100%", "90.0 - 94.9%", "80.0 - 89.9%", "≤ 79.9%"])
 
-                # --- 4. HOJA: INDICADOR C (CONSISTENCIA) ---
-                ws_c = wb.create_sheet(title="Indicador C (Consistencia)")
-                ws_c.views.sheetView[0].showGridLines = True
-                ws_c.cell(row=1, column=1, value="UNIDAD MÉDICA")
-                c_idx = 2
+                # --- 4. POPULAR: Indicador C ---
+                ws_c = sh.add_worksheet(title="Indicador C (Consistencia)", rows=30, cols=15)
+                data_c = [["UNIDAD MÉDICA"]]
+                headers_c = []
                 for t_name, _, _ in bloques_semanas:
-                    ws_c.cell(row=1, column=c_idx, value=f"{t_name} - Sem. Consistentes")
-                    ws_c.cell(row=1, column=c_idx+1, value=f"{t_name} - Total Sem.")
-                    ws_c.cell(row=1, column=c_idx+2, value=f"{t_name} - % Consistencia")
-                    c_idx += 3
+                    headers_c.extend([f"{t_name} - Sem. Consistentes", f"{t_name} - Total Sem.", f"{t_name} - % Consistencia"])
+                data_c[0].extend(headers_c)
 
-                r_idx = 2
                 for unidad in TARGET_UNITS:
-                    ws_c.cell(row=r_idx, column=1, value=unidad)
-                    c_idx = 2
+                    row_c = [unidad]
                     for t_name, _, _ in bloques_semanas:
                         dat = trim_results_c_data[t_name].get(unidad, {"sem_cons": 0, "tot_sem": 13, "porc": np.nan})
-                        ws_c.cell(row=r_idx, column=c_idx, value=dat["sem_cons"])
-                        ws_c.cell(row=r_idx, column=c_idx+1, value=dat["tot_sem"])
-                        c_cell = ws_c.cell(row=r_idx, column=c_idx+2, value=dat["porc"] if pd.notna(dat["porc"]) else "-")
-                        aplicar_color_celda(c_cell, dat["porc"], "c")
-                        c_idx += 3
-                    r_idx += 1
+                        row_c.extend([dat["sem_cons"], dat["tot_sem"], dat["porc"] if pd.notna(dat["porc"]) else "-"])
+                    data_c.append(row_c)
 
-                ws_c.cell(row=r_idx, column=1, value="DELEGACIONAL")
-                c_idx = 2
+                row_del_c = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     vals_p = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
                     max_p = max([v for v in vals_p if pd.notna(v)], default=np.nan)
-                    ws_c.cell(row=r_idx, column=c_idx, value=13)
-                    ws_c.cell(row=r_idx, column=c_idx+1, value=13)
-                    c_cell = ws_c.cell(row=r_idx, column=c_idx+2, value=max_p if pd.notna(max_p) else "-")
-                    aplicar_color_celda(c_cell, max_p, "c")
-                    c_idx += 3
+                    row_del_c.extend([13, 13, max_p if pd.notna(max_p) else "-"])
+                data_c.append(row_del_c)
 
-                insertar_tabla_leyenda(ws_c, r_idx + 3, "Consistencia", ["90.0 - 100%", "80.0 - 89.9%", "70.0 - 79.9%", "≤ 69.9%"])
+                ws_c.update(data_c)
+                ws_c.format("A1:M1", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
+                insertar_leyenda_gs(ws_c, len(data_c) + 3, "Consistencia", ["90.0 - 100%", "80.0 - 89.9%", "70.0 - 79.9%", "≤ 69.9%"])
 
-                # --- 5. HOJA: INDICADOR F (CALIDAD) ---
-                ws_f = wb.create_sheet(title="Indicador F (Calidad)")
-                ws_f.views.sheetView[0].showGridLines = True
-                ws_f.cell(row=1, column=1, value="TRIMESTRE")
-                ws_f.cell(row=1, column=2, value="PORCENTAJE DE COBERTURA")
-                ws_f.cell(row=1, column=3, value="PORCENTAJE DE CONSISTENCIA")
-                ws_f.cell(row=1, column=4, value="INDICADOR DE CALIDAD")
-
-                r_idx = 2
+                # --- 5. POPULAR: Indicador F ---
+                ws_f = sh.add_worksheet(title="Indicador F (Calidad)", rows=10, cols=10)
+                data_f = [["TRIMESTRE", "PORCENTAJE DE COBERTURA", "PORCENTAJE DE CONSISTENCIA", "INDICADOR DE CALIDAD"]]
                 for t_name, _, _ in bloques_semanas:
                     res_g = global_trim_results_f[t_name]
-                    ws_f.cell(row=r_idx, column=1, value=t_name)
-                    ws_f.cell(row=r_idx, column=2, value=res_g["cobertura"])
-                    ws_f.cell(row=r_idx, column=3, value=res_g["consistencia"])
-                    c_cell = ws_f.cell(row=r_idx, column=4, value=res_g["calidad"])
-                    aplicar_color_celda(c_cell, res_g["calidad"], "f")
-                    r_idx += 1
+                    data_f.append([t_name, res_g["cobertura"], res_g["consistencia"], res_g["calidad"]])
 
-                insertar_tabla_leyenda(ws_f, r_idx + 3, "Calidad (Descriptivo)", ["90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%"])
+                ws_f.update(data_f)
+                ws_f.format("A1:D1", {"backgroundColor": color_header, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}})
+                insertar_leyenda_gs(ws_f, len(data_f) + 3, "Calidad (Descriptivo)", ["90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%"])
 
-                # Ajuste automático de ancho de columnas para todas las hojas generadas
-                for sheet in wb.worksheets:
-                    for col in sheet.columns:
-                        max_len = max(len(str(cell.value or '')) for cell in col)
-                        col_letter = get_column_letter(col[0].column)
-                        sheet.column_dimensions[col_letter].width = max(max_len + 4, 15)
+                st.success(f"¡Google Sheet creado exitosamente en tu Google Drive! Nombre: **{sheet_title}**")
+                st.markdown(f"🔗 Puedes acceder a tu documento desde Google Drive.")
 
-            output.seek(0)
-            return output
-
-        excel_data = exportar_excel_completo()
-        st.download_button(
-            label="📥 Descargar Reporte Completo en Excel (con indicador B, formato y tablas de colorimetría)",
-            data=excel_data,
-            file_name=f"Reporte_SUIVE_Completo_{anio}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            except Exception as e:
+                st.error(f"Error al conectar con Google Sheets API o gspread. Verifica tus credenciales (st.secrets['gcp_service_account']): {e}")
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
