@@ -4,9 +4,6 @@ import numpy as np
 import io
 import gspread
 from google.oauth2.service_account import Credentials
-import openpyxl
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
 # Configuración de la página
 st.set_page_config(
@@ -143,7 +140,7 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas) y Pre-cálculo Indicador A (GLOBAL)
+        # Cálculo base de Semanas Notificadas Oportunamente (Absolutas) y Pre-cálculo Indicador A
         abs_results = {}
         trim_results_ind_a = {}
         trim_results_abs = {}
@@ -722,12 +719,11 @@ if uploaded_file is not None:
         st.markdown("---")
         st.subheader("🌐 Exportar Reporte Completo a Google Sheets")
 
-        # Configuración opcional de credenciales mediante st.secrets o entrada manual
         sheet_title = st.text_input("Nombre del Google Sheet a crear en tu Drive:", value=f"Reporte_SUIVE_{anio}")
 
         if st.button("🚀 Crear y Publicar en Google Sheets"):
             try:
-                # Inicializar gspread usando las credenciales de servicio en st.secrets["gcp_service_account"]
+                # Carga segura usando los secretos de Streamlit (st.secrets)
                 if "gcp_service_account" in st.secrets:
                     creds_dict = dict(st.secrets["gcp_service_account"])
                     creds = Credentials.from_service_account_info(
@@ -739,47 +735,22 @@ if uploaded_file is not None:
                     )
                     gc = gspread.authorize(creds)
                 else:
-                    # Alternativa si se usa oauth por defecto o archivo json local
-                    gc = gspread.service_account()
+                    st.error("No se encontró la sección `[gcp_service_account]` en tus st.secrets. Configúrala en el panel de Streamlit Cloud.")
+                    st.stop()
 
-                # Crear nuevo spreadsheet en Google Sheets
+                # Crear nuevo spreadsheet en Google Drive
                 sh = gc.create(sheet_title)
                 
-                # Hoja inicial predeterminada se llamará "General Comparativo"
+                # Hoja inicial predeterminada
                 ws_gen = sh.get_worksheet(0)
                 ws_gen.update_title("General Comparativo")
 
-                # Paleta de colores de sombreados requerida (HEX sin prefijo FF para gspread / formato dict)
+                # Paleta de colores para Google Sheets
                 color_verde = {"red": 16/255, "green": 185/255, "blue": 129/255}
                 color_blanco = {"red": 1, "green": 1, "blue": 1}
                 color_amarillo = {"red": 254/255, "green": 240/255, "blue": 138/255}
                 color_rojo = {"red": 239/255, "green": 68/255, "blue": 68/255}
                 color_header = {"red": 55/255, "green": 65/255, "blue": 81/255}
-
-                def get_gspread_color(val, ind_type):
-                    if val is None or pd.isna(val) or val == "NO APLICA":
-                        return color_blanco
-                    if ind_type == "a":
-                        if val == 100.0: return color_verde
-                        elif 97.5 <= val <= 99.9: return color_blanco
-                        elif 95.0 <= val <= 97.4: return color_amarillo
-                        else: return color_rojo
-                    elif ind_type in ["b", "e"]:
-                        if 95.0 <= val <= 100.0: return color_verde
-                        elif 90.0 <= val <= 94.9: return color_blanco
-                        elif 80.0 <= val <= 89.9: return color_amarillo
-                        else: return color_rojo
-                    elif ind_type == "c":
-                        if 90.0 <= val <= 100.0: return color_verde
-                        elif 80.0 <= val <= 89.9: return color_blanco
-                        elif 70.0 <= val <= 79.9: return color_amarillo
-                        else: return color_rojo
-                    elif ind_type == "f":
-                        if 90.0 <= val <= 100.0: return color_verde
-                        elif 80.0 <= val <= 89.9: return color_blanco
-                        elif 60.0 <= val <= 79.9: return color_amarillo
-                        else: return color_rojo
-                    return color_blanco
 
                 def insertar_leyenda_gs(ws, start_row, ind_nombre, rangos):
                     ws.update_cell(start_row, 1, "Indicador")
@@ -819,7 +790,6 @@ if uploaded_file is not None:
                         row_vals.append("NO APLICA")
                     data_gen.append(row_vals)
 
-                # Fila Delegacional General
                 row_del_gen = ["DELEGACIONAL"]
                 for t_name, _, _ in bloques_semanas:
                     vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
@@ -943,10 +913,9 @@ if uploaded_file is not None:
                 insertar_leyenda_gs(ws_f, len(data_f) + 3, "Calidad (Descriptivo)", ["90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%"])
 
                 st.success(f"¡Google Sheet creado exitosamente en tu Google Drive! Nombre: **{sheet_title}**")
-                st.markdown(f"🔗 Puedes acceder a tu documento desde Google Drive.")
 
             except Exception as e:
-                st.error(f"Error al conectar con Google Sheets API o gspread. Verifica tus credenciales (st.secrets['gcp_service_account']): {e}")
+                st.error(f"Error al conectar con Google Sheets API o gspread. Verifica que tengas configurados los secretos en Streamlit Cloud (`gcp_service_account`): {e}")
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
