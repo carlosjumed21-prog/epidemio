@@ -723,9 +723,9 @@ if uploaded_file is not None:
 
         if st.button("🚀 Crear y Publicar en Google Sheets"):
             try:
-                # Carga segura usando los secretos de Streamlit (st.secrets)
-                if "gcp_service_account" in st.secrets:
-                    creds_dict = dict(st.secrets["gcp_service_account"])
+                # Lectura directa desde los secretos bajo [connections.gsheets]
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    creds_dict = dict(st.secrets["connections"]["gsheets"])
                     creds = Credentials.from_service_account_info(
                         creds_dict,
                         scopes=[
@@ -735,7 +735,7 @@ if uploaded_file is not None:
                     )
                     gc = gspread.authorize(creds)
                 else:
-                    st.error("No se encontró la sección `[gcp_service_account]` en tus st.secrets. Configúrala en el panel de Streamlit Cloud.")
+                    st.error("No se encontró la sección `[connections.gsheets]` en tus st.secrets.")
                     st.stop()
 
                 # Crear nuevo spreadsheet en Google Drive
@@ -915,7 +915,7 @@ if uploaded_file is not None:
                 st.success(f"¡Google Sheet creado exitosamente en tu Google Drive! Nombre: **{sheet_title}**")
 
             except Exception as e:
-                st.error(f"Error al conectar con Google Sheets API o gspread. Verifica que tengas configurados los secretos en Streamlit Cloud (`gcp_service_account`): {e}")
+                st.error(f"Error al conectar con Google Sheets API o gspread: {e}")
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
