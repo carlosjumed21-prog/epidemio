@@ -31,7 +31,7 @@ st.markdown("""
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
 
-# Lista estricta de 15 unidades operativas oficiales (evita totales generales o filas de resumen)
+# Lista completa de unidades operativas oficiales (excluyendo CMN 20 DE NOVIEMBRE)
 TARGET_UNITS = [
     "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", 
     "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
@@ -101,7 +101,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción estricta filtrando únicamente las unidades de TARGET_UNITS (ignora totales generales)
+        # Extracción exacta basada en la etiqueta textual de la fila por cada unidad
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -111,7 +111,7 @@ if uploaded_file is not None:
                 if v_str in TARGET_UNITS:
                     active_unit = v_str
                     unit_rows_map[active_unit] = {}
-                elif "CMN 20 DE NOVIEMBRE" in v_str or "TOTAL" in v_str:
+                elif "CMN 20 DE NOVIEMBRE" in v_str:
                     active_unit = None
                 elif active_unit and pd.notna(v):
                     metric_name = str(v).strip()
@@ -200,6 +200,7 @@ if uploaded_file is not None:
                         if c_idx < len(row_casos):
                             val_raw = row_casos[c_idx]
                             try:
+                                # Si está en blanco o NaN, se toma como 0.0
                                 val_num = float(val_raw) if pd.notna(val_raw) else 0.0
                                 semanas_valores.append(val_num)
                             except ValueError:
@@ -209,11 +210,15 @@ if uploaded_file is not None:
                     arr_vals = np.array(semanas_valores)
                     prom = np.mean(arr_vals)
                     med = np.median(arr_vals)
+                    
+                    # Máximo entre media y mediana como referencia
                     val_max_ref = max(prom, med)
 
                     if val_max_ref > 0:
                         lim_inf = 0.75 * val_max_ref
                         lim_sup = 1.25 * val_max_ref
+                        
+                        # Conteo de semanas dentro del rango de tolerancia
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
                         val_ind = (semanas_consistentes / total_sem_trim) * 100 if total_sem_trim > 0 else 0.0
 
@@ -526,39 +531,40 @@ if uploaded_file is not None:
                                 styles[i] = get_bg_color(val, "c")
                     return styles
 
-                cols_c_porc = [col for col in df_c.columns if col[1] == "%CONSISTENCIA"]
-                cols_c_sem = [col for col in df_c.columns if col[1] in ["SEMANAS CONSISTENTES", "TOTAL SEMANAS"]]
-
                 styled_c = df_c.style.format(
-                    formatter="{:.2f}", subset=cols_c_porc
-                ).format(
-                    formatter="{:.0f}", subset=cols_c_sem
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
+                    subset=[col for col in df_c.columns if col[1] == "%CONSISTENCIA"]
                 ).apply(style_c_table, axis=1)
 
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
-                # Fila Delegacional con los valores máximos independientes de cada columna
-                fila_delegacional = {("UNIDAD MÉDICA", "UNIDAD MÉDICA"): "DELEGACIONAL"}
+                fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = (t_name, "SEMANAS CONSISTENTES")
                     col_ts = (t_name, "TOTAL SEMANAS")
                     col_pc = (t_name, "%CONSISTENCIA")
 
-                    fila_delegacional[col_sc] = pd.to_numeric(df_c[col_sc], errors='coerce').max()
-                    fila_delegacional[col_ts] = pd.to_numeric(df_c[col_ts], errors='coerce').max()
-                    fila_delegacional[col_pc] = pd.to_numeric(df_c[col_pc], errors='coerce').max()
+                    max_pc = df_c[col_pc].max()
+                    sub_df = df_c[col_pc]
+                    match_row = sub_df[sub_df == max_pc].index
+                    if len(match_row) > 0:
+                        r_idx = match_row[0]
+                        max_sc = df_c.loc[r_idx, col_sc]
+                        max_ts = df_c.loc[r_idx, col_ts]
+                    else:
+                        max_sc = df_c[col_sc].max()
+                        max_ts = df_c[col_ts].max()
+
+                    fila_delegacional[col_sc] = max_sc
+                    fila_delegacional[col_ts] = max_ts
+                    fila_delegacional[col_pc] = max_pc
 
                 df_del_c = pd.DataFrame([fila_delegacional])
                 df_del_c.columns = pd.MultiIndex.from_tuples(c_tuples)
-
-                cols_del_porc = [col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]
-                cols_del_sem = [col for col in df_del_c.columns if col[1] in ["SEMANAS CONSISTENTES", "TOTAL SEMANAS"]]
-
                 styled_del_c = df_del_c.style.format(
-                    formatter="{:.2f}", subset=cols_del_porc
-                ).format(
-                    formatter="{:.0f}", subset=cols_del_sem
+                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
+                    subset=[col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]
                 ).apply(style_c_table, axis=1)
 
                 st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
