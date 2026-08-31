@@ -101,7 +101,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción estricta basada en posición: "Casos oportunos" es la 2ª fila debajo del título de la unidad
+        # Extracción estructurada: "Casos oportunos" está exactamente en la 3ª fila debajo del título de cada unidad
         unit_rows_map = {}
         active_unit = None
         unit_row_counter = 0
@@ -122,11 +122,11 @@ if uploaded_file is not None:
 
             if active_unit is not None:
                 unit_row_counter += 1
-                # La 2ª fila debajo del título de la unidad corresponde a "Casos oportunos"
-                if unit_row_counter == 2:
+                # La 3ª fila debajo del título de la unidad corresponde a "Casos oportunos"
+                if unit_row_counter == 3:
                     unit_rows_map[active_unit]["Casos oportunos"] = row
                 
-                # Respaldo por nombre de métrica por si se requiere en otras vistas
+                # Respaldo de otras filas por nombre de métrica
                 if pd.notna(v):
                     unit_rows_map[active_unit][str(v).strip()] = row
 
@@ -185,7 +185,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia) usando la 2ª fila (Casos oportunos)
+        # Pre-cálculo de Indicador C (Consistencia) usando la 3ª fila exacta ("Casos oportunos")
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
