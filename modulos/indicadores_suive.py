@@ -101,11 +101,9 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción estructurada: "Casos oportunos" está exactamente en la 3ª fila debajo del título de cada unidad
+        # Extracción exacta basada en la etiqueta textual de la fila por cada unidad
         unit_rows_map = {}
         active_unit = None
-        unit_row_counter = 0
-
         for idx, row in df.iterrows():
             v = row[0]
             if pd.notna(v):
@@ -113,22 +111,11 @@ if uploaded_file is not None:
                 if v_str in TARGET_UNITS:
                     active_unit = v_str
                     unit_rows_map[active_unit] = {}
-                    unit_row_counter = 0
-                    continue
                 elif "CMN 20 DE NOVIEMBRE" in v_str:
                     active_unit = None
-                    unit_row_counter = 0
-                    continue
-
-            if active_unit is not None:
-                unit_row_counter += 1
-                # La 3ª fila debajo del título de la unidad corresponde a "Casos oportunos"
-                if unit_row_counter == 3:
-                    unit_rows_map[active_unit]["Casos oportunos"] = row
-                
-                # Respaldo de otras filas por nombre de métrica
-                if pd.notna(v):
-                    unit_rows_map[active_unit][str(v).strip()] = row
+                elif active_unit and pd.notna(v):
+                    metric_name = str(v).strip()
+                    unit_rows_map[active_unit][metric_name] = row
 
         def col_to_idx(col_str):
             col_str = col_str.upper()
@@ -151,13 +138,25 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
+        # Función auxiliar para encontrar la fila de "Casos oportunos" buscando por etiqueta exacta/parcial
+        def get_casos_row(m_rows):
+            for k, r in m_rows.items():
+                k_clean = str(k).strip().upper()
+                if "CASOS OPORTUNOS" in k_clean and "UNIDADES" not in k_clean:
+                    return r
+            # Respaldo si la etiqueta varía ligeramente
+            for k, r in m_rows.items():
+                if "CASOS" in str(k).strip().upper():
+                    return r
+            return None
+
         # Cálculo base de Semanas Notificadas Oportunamente (Absolutas)
         abs_results = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals = {}
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                row_casos_oportunos = m_rows.get("Casos oportunos", None)
+                row_casos_oportunos = get_casos_row(m_rows)
                 suma_bloque = 0.0
                 tiene_datos_bloque = False
                 if row_casos_oportunos is not None:
@@ -185,7 +184,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia) usando la 3ª fila exacta ("Casos oportunos")
+        # Pre-cálculo de Indicador C (Consistencia) usando la etiqueta de "Casos oportunos"
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -194,7 +193,7 @@ if uploaded_file is not None:
 
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
-                row_casos = m_rows.get("Casos oportunos", None)
+                row_casos = get_casos_row(m_rows)
                 semanas_valores = []
                 
                 if row_casos is not None:
@@ -245,7 +244,7 @@ if uploaded_file is not None:
                 suma_col_unidades = 0
                 for u_check in TARGET_UNITS:
                     m_r = unit_rows_map.get(u_check, {})
-                    row_c = m_r.get("Casos oportunos", None)
+                    row_c = get_casos_row(m_r)
                     if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
                         try:
                             if float(row_c[col_idx]) > 0:
@@ -276,7 +275,7 @@ if uploaded_file is not None:
                 suma_col_unidades = 0
                 for u_check in TARGET_UNITS:
                     m_r = unit_rows_map.get(u_check, {})
-                    row_c = m_r.get("Casos oportunos", None)
+                    row_c = get_casos_row(m_r)
                     if row_c is not None and col_idx < len(row_c) and pd.notna(row_c[col_idx]):
                         try:
                             if float(row_c[col_idx]) > 0:
@@ -427,7 +426,7 @@ if uploaded_file is not None:
                         suma_vertical_unidad = 0
                         for unidad in TARGET_UNITS:
                             m_rows = unit_rows_map.get(unidad, {})
-                            row_casos = m_rows.get("Casos oportunos", None)
+                            row_casos = get_casos_row(m_rows)
                             if row_casos is not None and col_idx < len(row_casos) and pd.notna(row_casos[col_idx]):
                                 try:
                                     val_c = float(row_casos[col_idx])
@@ -655,7 +654,7 @@ if uploaded_file is not None:
                     t_vals_abs = {}
                     for unidad in TARGET_UNITS:
                         m_rows = unit_rows_map.get(unidad, {})
-                        row_casos_oportunos = m_rows.get("Casos oportunos", None)
+                        row_casos_oportunos = get_casos_row(m_rows)
                         suma_bloque = 0.0
                         if row_casos_oportunos is not None:
                             for c_idx in range(start_col, end_col + 1):
