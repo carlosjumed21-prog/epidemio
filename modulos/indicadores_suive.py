@@ -101,20 +101,20 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción de filas por unidad del Excel (omitiendo CMN 20 DE NOVIEMBRE)
+        # Extracción estricta de filas por unidad del Excel
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
             v = row[0]
             if pd.notna(v):
-                v_str = str(v).strip()
+                v_str = str(v).strip().upper()
                 if v_str in TARGET_UNITS:
                     active_unit = v_str
                     unit_rows_map[active_unit] = {}
-                elif v_str == "CMN 20 DE NOVIEMBRE":
+                elif "CMN 20 DE NOVIEMBRE" in v_str:
                     active_unit = None
                 elif active_unit and pd.notna(v):
-                    metric_name = v_str
+                    metric_name = str(v).strip()
                     unit_rows_map[active_unit][metric_name] = row
 
         def col_to_idx(col_str):
@@ -172,7 +172,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia) con base en el valor máximo (media vs mediana)
+        # Pre-cálculo de Indicador C (Consistencia) estrictamente sobre "Casos oportunos"
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -181,8 +181,10 @@ if uploaded_file is not None:
 
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
+                # Buscamos exactamente la fila de "Casos oportunos"
                 row_casos = m_rows.get("Casos oportunos", None)
                 semanas_valores = []
+                
                 if row_casos is not None:
                     for c_idx in range(start_col, end_col + 1):
                         if c_idx < len(row_casos) and pd.notna(row_casos[c_idx]):
@@ -195,11 +197,15 @@ if uploaded_file is not None:
                     arr_vals = np.array(semanas_valores)
                     prom = np.mean(arr_vals)
                     med = np.median(arr_vals)
+                    
+                    # Máximo entre media y mediana como referencia
                     val_max_ref = max(prom, med)
 
                     if val_max_ref > 0:
                         lim_inf = 0.75 * val_max_ref
                         lim_sup = 1.25 * val_max_ref
+                        
+                        # Conteo de semanas dentro del rango de tolerancia
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
                         val_ind = (semanas_consistentes / total_sem_trim) * 100 if total_sem_trim > 0 else 0.0
 
@@ -741,4 +747,3 @@ if uploaded_file is not None:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
 else:
     st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis.")
-    
