@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 # Configuración de la página
 st.set_page_config(
@@ -737,6 +740,254 @@ if uploaded_file is not None:
                     </tr>
                 </table>
                 """, unsafe_allow_html=True)
+
+        # ==========================================
+        # FUNCIÓN DE EXPORTACIÓN INTEGRADA EN EL BOTÓN
+        # ==========================================
+        st.markdown("---")
+        st.subheader("📥 Exportar Reporte Completo a Excel")
+
+        def exportar_excel_completo():
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                wb = writer.book
+
+                # Paleta de colores de sombreados requerida (HEX a ARGB con prefijo FF)
+                fill_verde = PatternFill(start_color="FF10B981", end_color="FF10B981", fill_type="solid")
+                fill_blanco = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
+                fill_amarillo = PatternFill(start_color="FFFEF08A", end_color="FFFEF08A", fill_type="solid")
+                fill_rojo = PatternFill(start_color="FFEF4444", end_color="FFEF4444", fill_type="solid")
+                
+                font_blanco = Font(name="Calibri", size=11, bold=True, color="FFFFFFFF")
+                font_negro = Font(name="Calibri", size=11, bold=True, color="FF000000")
+                font_normal_negro = Font(name="Calibri", size=11, bold=False, color="FF000000")
+                font_normal_blanco = Font(name="Calibri", size=11, bold=False, color="FFFFFFFF")
+                
+                border_thin = Border(
+                    left=Side(style='thin', color='FFCBD5E1'),
+                    right=Side(style='thin', color='FFCBD5E1'),
+                    top=Side(style='thin', color='FFCBD5E1'),
+                    bottom=Side(style='thin', color='FFCBD5E1')
+                )
+
+                def aplicar_color_celda(cell, val, ind_type):
+                    if val is None or pd.isna(val) or val == "NO APLICA":
+                        cell.fill = fill_blanco
+                        cell.font = font_normal_negro
+                        cell.border = border_thin
+                        return
+
+                    if ind_type == "a":
+                        if val == 100.0:
+                            cell.fill = fill_verde; cell.font = font_blanco
+                        elif 97.5 <= val <= 99.9:
+                            cell.fill = fill_blanco; cell.font = font_negro
+                        elif 95.0 <= val <= 97.4:
+                            cell.fill = fill_amarillo; cell.font = font_negro
+                        else:
+                            cell.fill = fill_rojo; cell.font = font_blanco
+                    elif ind_type in ["b", "e"]:
+                        if 95.0 <= val <= 100.0:
+                            cell.fill = fill_verde; cell.font = font_blanco
+                        elif 90.0 <= val <= 94.9:
+                            cell.fill = fill_blanco; cell.font = font_negro
+                        elif 80.0 <= val <= 89.9:
+                            cell.fill = fill_amarillo; cell.font = font_negro
+                        else:
+                            cell.fill = fill_rojo; cell.font = font_blanco
+                    elif ind_type == "c":
+                        if 90.0 <= val <= 100.0:
+                            cell.fill = fill_verde; cell.font = font_blanco
+                        elif 80.0 <= val <= 89.9:
+                            cell.fill = fill_blanco; cell.font = font_negro
+                        elif 70.0 <= val <= 79.9:
+                            cell.fill = fill_amarillo; cell.font = font_negro
+                        else:
+                            cell.fill = fill_rojo; cell.font = font_blanco
+                    elif ind_type == "f":
+                        if 90.0 <= val <= 100.0:
+                            cell.fill = fill_verde; cell.font = font_blanco
+                        elif 80.0 <= val <= 89.9:
+                            cell.fill = fill_blanco; cell.font = font_negro
+                        elif 60.0 <= val <= 79.9:
+                            cell.fill = fill_amarillo; cell.font = font_negro
+                        else:
+                            cell.fill = fill_rojo; cell.font = font_blanco
+                    cell.border = border_thin
+
+                # --- 1. HOJA: GENERAL COMPARATIVO ---
+                ws_gen = wb.create_sheet(title="General Comparativo")
+                ws_gen.views.sheetView[0].showGridLines = True
+                
+                # Escribir cabeceras multi-nivel plano
+                ws_gen.cell(row=1, column=1, value="UNIDAD MÉDICA")
+                col_idx_gen = 2
+                for t_name, _, _ in bloques_semanas:
+                    for subcol in ["CUMPLIMIENTO U OPORTUNIDAD", "COBERTURA OPORTUNA", "CONSISTENCIA", "CALIDAD"]:
+                        ws_gen.cell(row=1, column=col_idx_gen, value=f"{t_name} - {subcol}")
+                        col_idx_gen += 1
+
+                # Escribir filas de unidades
+                current_row = 2
+                for unidad in TARGET_UNITS:
+                    ws_gen.cell(row=current_row, column=1, value=unidad)
+                    c_idx = 2
+                    for t_name, _, _ in bloques_semanas:
+                        val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
+                        val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
+                        
+                        # Col 1: Cumplimiento (a)
+                        cell = ws_gen.cell(row=current_row, column=c_idx, value=val_a if pd.notna(val_a) else "-")
+                        aplicar_color_celda(cell, val_a, "a")
+                        # Col 2: Cobertura Oportuna (b) -> NO APLICA en general por unidad
+                        cell2 = ws_gen.cell(row=current_row, column=c_idx+1, value="NO APLICA")
+                        cell2.fill = fill_blanco; cell2.font = font_normal_negro; cell2.border = border_thin
+                        # Col 3: Consistencia (c)
+                        cell3 = ws_gen.cell(row=current_row, column=c_idx+2, value=val_c if pd.notna(val_c) else "-")
+                        aplicar_color_celda(cell3, val_c, "c")
+                        # Col 4: Calidad (f) -> NO APLICA por unidad
+                        cell4 = ws_gen.cell(row=current_row, column=c_idx+3, value="NO APLICA")
+                        cell4.fill = fill_blanco; cell4.font = font_normal_negro; cell4.border = border_thin
+                        
+                        c_idx += 4
+                    current_row += 1
+
+                # Fila Delegacional General
+                ws_gen.cell(row=current_row, column=1, value="DELEGACIONAL")
+                c_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
+                    min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
+                    avg_b = delegational_b_trim.get(t_name, np.nan)
+                    vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+                    max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
+                    global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
+
+                    cell = ws_gen.cell(row=current_row, column=c_idx, value=min_a if pd.notna(min_a) else "-")
+                    aplicar_color_celda(cell, min_a, "a")
+                    
+                    cell2 = ws_gen.cell(row=current_row, column=c_idx+1, value=avg_b if pd.notna(avg_b) else "-")
+                    aplicar_color_celda(cell2, avg_b, "b")
+                    
+                    cell3 = ws_gen.cell(row=current_row, column=c_idx+2, value=max_c if pd.notna(max_c) else "-")
+                    aplicar_color_celda(cell3, max_c, "c")
+                    
+                    cell4 = ws_gen.cell(row=current_row, column=c_idx+3, value=global_cal if pd.notna(global_cal) else "-")
+                    aplicar_color_celda(cell4, global_cal, "f")
+
+                    c_idx += 4
+
+                # --- 2. HOJAS POR CADA INDICADOR DESGLOSADO ---
+                # A: Cumplimiento
+                ws_a = wb.create_sheet(title="Indicador A (Cumplimiento)")
+                ws_a.views.sheetView[0].showGridLines = True
+                ws_a.cell(row=1, column=1, value="UNIDAD MÉDICA")
+                c_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    ws_a.cell(row=1, column=c_idx, value=f"{t_name} - Días Notif.")
+                    ws_a.cell(row=1, column=c_idx+1, value=f"{t_name} - Indicador (%)")
+                    c_idx += 2
+                
+                r_idx = 2
+                for unidad in TARGET_UNITS:
+                    ws_a.cell(row=r_idx, column=1, value=unidad)
+                    c_idx = 2
+                    for t_name, start_col, end_col in bloques_semanas:
+                        abs_val = trim_results_abs[t_name].get(unidad, np.nan)
+                        ind_val = trim_results_ind_a[t_name].get(unidad, np.nan)
+                        
+                        ws_a.cell(row=r_idx, column=c_idx, value=abs_val if pd.notna(abs_val) else "-")
+                        c_cell = ws_a.cell(row=r_idx, column=c_idx+1, value=ind_val if pd.notna(ind_val) else "-")
+                        aplicar_color_celda(c_cell, ind_val, "a")
+                        c_idx += 2
+                    r_idx += 1
+
+                # Fila Delegacional A
+                ws_a.cell(row=r_idx, column=1, value="DELEGACIONAL")
+                c_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    vals_ind = [trim_results_ind_a[t_name].get(u, np.nan) for u in TARGET_UNITS]
+                    min_ind = min([v for v in vals_ind if pd.notna(v)], default=np.nan)
+                    # Buscar días correspondientes al mínimo
+                    match_u = [u for u in TARGET_UNITS if trim_results_ind_a[t_name].get(u) == min_ind]
+                    min_abs = trim_results_abs[t_name].get(match_u[0], 0) if match_u else 0
+
+                    ws_a.cell(row=r_idx, column=c_idx, value=min_abs)
+                    c_cell = ws_a.cell(row=r_idx, column=c_idx+1, value=min_ind if pd.notna(min_ind) else "-")
+                    aplicar_color_celda(c_cell, min_ind, "a")
+                    c_idx += 2
+
+                # C: Consistencia
+                ws_c = wb.create_sheet(title="Indicador C (Consistencia)")
+                ws_c.views.sheetView[0].showGridLines = True
+                ws_c.cell(row=1, column=1, value="UNIDAD MÉDICA")
+                c_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    ws_c.cell(row=1, column=c_idx, value=f"{t_name} - Sem. Consistentes")
+                    ws_c.cell(row=1, column=c_idx+1, value=f"{t_name} - Total Sem.")
+                    ws_c.cell(row=1, column=c_idx+2, value=f"{t_name} - % Consistencia")
+                    c_idx += 3
+
+                r_idx = 2
+                for unidad in TARGET_UNITS:
+                    ws_c.cell(row=r_idx, column=1, value=unidad)
+                    c_idx = 2
+                    for t_name, _, _ in bloques_semanas:
+                        dat = trim_results_c_data[t_name].get(unidad, {"sem_cons": 0, "tot_sem": 13, "porc": np.nan})
+                        ws_c.cell(row=r_idx, column=c_idx, value=dat["sem_cons"])
+                        ws_c.cell(row=r_idx, column=c_idx+1, value=dat["tot_sem"])
+                        c_cell = ws_c.cell(row=r_idx, column=c_idx+2, value=dat["porc"] if pd.notna(dat["porc"]) else "-")
+                        aplicar_color_celda(c_cell, dat["porc"], "c")
+                        c_idx += 3
+                    r_idx += 1
+
+                # Fila Delegacional C
+                ws_c.cell(row=r_idx, column=1, value="DELEGACIONAL")
+                c_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    vals_p = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
+                    max_p = max([v for v in vals_p if pd.notna(v)], default=np.nan)
+                    ws_c.cell(row=r_idx, column=c_idx, value=13)
+                    ws_c.cell(row=r_idx, column=c_idx+1, value=13)
+                    c_cell = ws_c.cell(row=r_idx, column=c_idx+2, value=max_p if pd.notna(max_p) else "-")
+                    aplicar_color_celda(c_cell, max_p, "c")
+                    c_idx += 3
+
+                # F: Calidad Global
+                ws_f = wb.create_sheet(title="Indicador F (Calidad)")
+                ws_f.views.sheetView[0].showGridLines = True
+                ws_f.cell(row=1, column=1, value="TRIMESTRE")
+                ws_f.cell(row=1, column=2, value="PORCENTAJE DE COBERTURA")
+                ws_f.cell(row=1, column=3, value="PORCENTAJE DE CONSISTENCIA")
+                ws_f.cell(row=1, column=4, value="INDICADOR DE CALIDAD")
+
+                r_idx = 2
+                for t_name, _, _ in bloques_semanas:
+                    res_g = global_trim_results_f[t_name]
+                    ws_f.cell(row=r_idx, column=1, value=t_name)
+                    ws_f.cell(row=r_idx, column=2, value=res_g["cobertura"])
+                    ws_f.cell(row=r_idx, column=3, value=res_g["consistencia"])
+                    c_cell = ws_f.cell(row=r_idx, column=4, value=res_g["calidad"])
+                    aplicar_color_celda(c_cell, res_g["calidad"], "f")
+                    r_idx += 1
+
+                # Ajuste automático de ancho de columnas para todas las hojas generadas
+                for sheet in wb.worksheets:
+                    for col in sheet.columns:
+                        max_len = max(len(str(cell.value or '')) for cell in col)
+                        col_letter = get_column_letter(col[0].column)
+                        sheet.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+            output.seek(0)
+            return output
+
+        excel_data = exportar_excel_completo()
+        st.download_button(
+            label="📥 Descargar Reporte Completo en Excel (con formato, sombreados e iconografía)",
+            data=excel_data,
+            file_name=f"Reporte_SUIVE_Completo_{anio}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
