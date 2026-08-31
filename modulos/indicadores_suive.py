@@ -200,7 +200,6 @@ if uploaded_file is not None:
                         if c_idx < len(row_casos):
                             val_raw = row_casos[c_idx]
                             try:
-                                # Si está en blanco o NaN, se toma como 0.0
                                 val_num = float(val_raw) if pd.notna(val_raw) else 0.0
                                 semanas_valores.append(val_num)
                             except ValueError:
@@ -210,15 +209,11 @@ if uploaded_file is not None:
                     arr_vals = np.array(semanas_valores)
                     prom = np.mean(arr_vals)
                     med = np.median(arr_vals)
-                    
-                    # Máximo entre media y mediana como referencia
                     val_max_ref = max(prom, med)
 
                     if val_max_ref > 0:
                         lim_inf = 0.75 * val_max_ref
                         lim_sup = 1.25 * val_max_ref
-                        
-                        # Conteo de semanas dentro del rango de tolerancia
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
                         val_ind = (semanas_consistentes / total_sem_trim) * 100 if total_sem_trim > 0 else 0.0
 
@@ -539,26 +534,16 @@ if uploaded_file is not None:
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
+                # Fila Delegacional con los valores máximos independientes de cada columna
                 fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = (t_name, "SEMANAS CONSISTENTES")
                     col_ts = (t_name, "TOTAL SEMANAS")
                     col_pc = (t_name, "%CONSISTENCIA")
 
-                    max_pc = df_c[col_pc].max()
-                    sub_df = df_c[col_pc]
-                    match_row = sub_df[sub_df == max_pc].index
-                    if len(match_row) > 0:
-                        r_idx = match_row[0]
-                        max_sc = df_c.loc[r_idx, col_sc]
-                        max_ts = df_c.loc[r_idx, col_ts]
-                    else:
-                        max_sc = df_c[col_sc].max()
-                        max_ts = df_c[col_ts].max()
-
-                    fila_delegacional[col_sc] = max_sc
-                    fila_delegacional[col_ts] = max_ts
-                    fila_delegacional[col_pc] = max_pc
+                    fila_delegacional[col_sc] = df_c[col_sc].max()
+                    fila_delegacional[col_ts] = df_c[col_ts].max()
+                    fila_delegacional[col_pc] = df_c[col_pc].max()
 
                 df_del_c = pd.DataFrame([fila_delegacional])
                 df_del_c.columns = pd.MultiIndex.from_tuples(c_tuples)
