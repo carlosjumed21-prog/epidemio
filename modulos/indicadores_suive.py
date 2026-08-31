@@ -31,7 +31,7 @@ st.markdown("""
 st.markdown('<div class="main-header">Evaluación de Indicadores Epidemiológicos SUAVE / SUIVE</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Herramienta de análisis epidemiológico por periodo, unidades y desglose por indicador</div>', unsafe_allow_html=True)
 
-# Lista completa de unidades operativas oficiales (excluyendo CMN 20 DE NOVIEMBRE)
+# Lista estricta de 15 unidades operativas oficiales (evita totales generales o filas de resumen)
 TARGET_UNITS = [
     "CHURUBUSCO", "CLIDDA", "COYOACAN", "DEL VALLE", 
     "DIVISION DEL NORTE", "DR. DARIO FERNANDEZ FIERRO", "DR. IGNACIO CHAVEZ", "ERMITA",
@@ -101,7 +101,7 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extracción exacta basada en la etiqueta textual de la fila por cada unidad
+        # Extracción estricta filtrando únicamente las unidades de TARGET_UNITS (ignora totales generales)
         unit_rows_map = {}
         active_unit = None
         for idx, row in df.iterrows():
@@ -111,7 +111,7 @@ if uploaded_file is not None:
                 if v_str in TARGET_UNITS:
                     active_unit = v_str
                     unit_rows_map[active_unit] = {}
-                elif "CMN 20 DE NOVIEMBRE" in v_str:
+                elif "CMN 20 DE NOVIEMBRE" in v_str or "TOTAL" in v_str:
                     active_unit = None
                 elif active_unit and pd.notna(v):
                     metric_name = str(v).strip()
