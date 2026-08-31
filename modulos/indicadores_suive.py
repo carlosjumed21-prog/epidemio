@@ -16,7 +16,7 @@ st.markdown("""
     .main-header { font-size: 2.2rem; color: #111827; font-weight: 700; margin-bottom: 0.2rem; }
     .sub-header { font-size: 1.1rem; color: #4B5563; margin-bottom: 1.5rem; }
     .info-box { background-color: #F8FAFC; border-left: 4px solid #374151; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
-    
+
     /* Estilos para la tabla de acotaciones */
     .acotacion-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 0.9rem; }
     .acotacion-table th, .acotacion-table td { border: 1px solid #CBD5E1; padding: 8px 12px; text-align: center; }
@@ -42,7 +42,7 @@ TARGET_UNITS = [
 def get_bg_color(val, ind_type):
     if val is None or pd.isna(val) or val == "NO APLICA":
         return ''
-    
+
     if ind_type == "a":
         if val == 100.0: return 'background-color: #10B981; color: white; font-weight: bold;'
         elif 97.5 <= val <= 99.9: return 'background-color: #FFFFFF; color: black; font-weight: bold;'
@@ -71,10 +71,10 @@ uploaded_file = st.file_uploader("📂 Sube tu archivo Excel de reportes SUIVE",
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name=0, header=None)
-        
+
         delegacion = df.iloc[0, 1] if df.shape[0] > 0 and df.shape[1] > 1 else "REPRESENTACIÓN REGIONAL SUR"
         anio = int(df.iloc[1, 1]) if df.shape[0] > 1 and df.shape[1] > 1 and str(df.iloc[1, 1]).isdigit() else 2024
-        
+
         semanas_info = [] 
         if df.shape[0] > 4:
             for col_idx in range(1, df.shape[1] - 1):
@@ -85,7 +85,7 @@ if uploaded_file is not None:
                         semanas_info.append((col_idx, sem_num))
                     except ValueError:
                         continue
-        
+
         total_semanas_reportadas = len(semanas_info)
         ultima_semana = semanas_info[-1][1] if semanas_info else 0
         periodo_str = f"Día {semanas_info[0][1]} a Día {ultima_semana} (Total: {total_semanas_reportadas} días)" if semanas_info else "No determinado"
@@ -172,13 +172,13 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia)
+        # Pre-cálculo de Indicador C (Consistencia) con base en el valor máximo (media vs mediana)
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
             semanas_en_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
             total_sem_trim = len(semanas_en_bloque) if len(semanas_en_bloque) > 0 else 13
-            
+
             for unidad in TARGET_UNITS:
                 m_rows = unit_rows_map.get(unidad, {})
                 row_casos = m_rows.get("Casos oportunos", None)
@@ -190,19 +190,19 @@ if uploaded_file is not None:
                                 semanas_valores.append(float(row_casos[c_idx]))
                             except ValueError:
                                 pass
-                
+
                 if len(semanas_valores) > 0:
                     arr_vals = np.array(semanas_valores)
                     prom = np.mean(arr_vals)
                     med = np.median(arr_vals)
                     val_max_ref = max(prom, med)
-                    
+
                     if val_max_ref > 0:
                         lim_inf = 0.75 * val_max_ref
                         lim_sup = 1.25 * val_max_ref
                         semanas_consistentes = sum(1 for v in semanas_valores if lim_inf <= v <= lim_sup)
                         val_ind = (semanas_consistentes / total_sem_trim) * 100 if total_sem_trim > 0 else 0.0
-                        
+
                         t_vals_c[unidad] = {
                             "sem_cons": int(semanas_consistentes),
                             "tot_sem": int(total_sem_trim),
@@ -236,13 +236,13 @@ if uploaded_file is not None:
                             pass
                 cob_semanas.append((suma_col_unidades / 15.0) * 100.0)
             global_cob = np.mean(cob_semanas) if len(cob_semanas) > 0 else 0.0
-            
+
             vals_c_trim = [trim_results_c_data[t_name].get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             valid_c_trim = [v for v in vals_c_trim if pd.notna(v)]
             delegational_c = max(valid_c_trim) if valid_c_trim else 0.0
-            
+
             global_cal = (global_cob + delegational_c) / 2.0
-            
+
             global_trim_results_f[t_name] = {
                 "cobertura": round(global_cob, 2),
                 "consistencia": round(delegational_c, 2),
@@ -280,7 +280,7 @@ if uploaded_file is not None:
             for t_name, _, _ in bloques_semanas:
                 val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
                 val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
-                
+
                 fila[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = val_a
                 fila[(t_name, "COBERTURA OPORTUNA")] = "NO APLICA"
                 fila[(t_name, "CONSISTENCIA")] = val_c
@@ -327,14 +327,14 @@ if uploaded_file is not None:
         for t_name, _, _ in bloques_semanas:
             vals_a = [trim_results_ind_a.get(t_name, {}).get(u, np.nan) for u in TARGET_UNITS]
             min_a = min([v for v in vals_a if pd.notna(v)], default=np.nan)
-            
+
             avg_b = delegational_b_trim.get(t_name, np.nan)
-            
+
             vals_c = [trim_results_c_data.get(t_name, {}).get(u, {}).get("porc", np.nan) for u in TARGET_UNITS]
             max_c = max([v for v in vals_c if pd.notna(v)], default=np.nan)
-            
+
             global_cal = global_trim_results_f.get(t_name, {}).get("calidad", np.nan)
-            
+
             fila_del[(t_name, "CUMPLIMIENTO U OPORTUNIDAD")] = min_a
             fila_del[(t_name, "COBERTURA OPORTUNA")] = avg_b
             fila_del[(t_name, "CONSISTENCIA")] = max_c
@@ -354,7 +354,7 @@ if uploaded_file is not None:
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Análisis Desglosado por Indicador")
-        
+
         indicador_seleccionado = st.selectbox(
             "Habilite el indicador a analizar:",
             [
@@ -367,7 +367,7 @@ if uploaded_file is not None:
             index=0,
             key="sel_indicador"
         )
-        
+
         if indicador_seleccionado and indicador_seleccionado != "":
             if "CUMPLIMIENTO" in indicador_seleccionado:
                 ind_key = "a"
@@ -396,7 +396,7 @@ if uploaded_file is not None:
 
                 for t_name, start_col, end_col in bloques_semanas:
                     st.markdown(f"#### 📅 {t_name}")
-                    
+
                     semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
                     if not semanas_bloque:
                         st.info(f"No hay registros activos para el {t_name}.")
@@ -417,14 +417,14 @@ if uploaded_file is not None:
                                         suma_vertical_unidad += 1
                                 except ValueError:
                                     pass
-                        
+
                         dia_key = f"Día {sem_num}"
                         fila_unidades[dia_key] = suma_vertical_unidad
                         ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
                         fila_indicador[dia_key] = ind_val
 
                     df_semanal = pd.DataFrame([fila_unidades, fila_indicador])
-                    
+
                     def style_semanal(row_data):
                         styles = [''] * len(row_data)
                         if row_data.name == 1:
@@ -525,7 +525,7 @@ if uploaded_file is not None:
                     col_sc = (t_name, "SEMANAS CONSISTENTES")
                     col_ts = (t_name, "TOTAL SEMANAS")
                     col_pc = (t_name, "%CONSISTENCIA")
-                    
+
                     max_pc = df_c[col_pc].max()
                     sub_df = df_c[col_pc]
                     match_row = sub_df[sub_df == max_pc].index
@@ -536,7 +536,7 @@ if uploaded_file is not None:
                     else:
                         max_sc = df_c[col_sc].max()
                         max_ts = df_c[col_ts].max()
-                    
+
                     fila_delegacional[col_sc] = max_sc
                     fila_delegacional[col_ts] = max_ts
                     fila_delegacional[col_pc] = max_pc
@@ -631,7 +631,7 @@ if uploaded_file is not None:
                 # ESTRUCTURA PARA A (Cumplimiento)
                 trim_results_ind = {}
                 trim_results_abs = {}
-                
+
                 for t_name, start_col, end_col in bloques_semanas:
                     t_vals_ind = {}
                     t_vals_abs = {}
@@ -648,7 +648,7 @@ if uploaded_file is not None:
                                         pass
                         t_vals_abs[unidad] = suma_bloque
                         t_vals_ind[unidad] = round((suma_bloque / 13.0) * 100, 2)
-                        
+
                     trim_results_abs[t_name] = t_vals_abs
                     trim_results_ind[t_name] = t_vals_ind
 
@@ -694,7 +694,7 @@ if uploaded_file is not None:
                 for t_name, _, _ in bloques_semanas:
                     col_abs = (t_name, "DIAS NOTIFICADOS OPORTUNAMENTE")
                     col_ind = (t_name, "INDICADOR")
-                    
+
                     min_ind = df_sep[col_ind].min()
                     sub_df = df_sep[col_ind]
                     match_row = sub_df[sub_df == min_ind].index
@@ -703,7 +703,7 @@ if uploaded_file is not None:
                         min_abs = df_sep.loc[r_idx, col_abs]
                     else:
                         min_abs = df_sep[col_abs].min()
-                    
+
                     fila_delegacional_a[col_abs] = min_abs
                     fila_delegacional_a[col_ind] = min_ind
 
@@ -741,3 +741,4 @@ if uploaded_file is not None:
         st.error(f"Ocurrió un error al procesar el archivo Excel: {e}")
 else:
     st.info("👈 Por favor, carga tu archivo Excel en la parte superior para comenzar el análisis.")
+    
