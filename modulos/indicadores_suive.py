@@ -757,11 +757,11 @@ if uploaded_file is not None:
                 fill_blanco = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
                 fill_amarillo = PatternFill(start_color="FFFEF08A", end_color="FFFEF08A", fill_type="solid")
                 fill_rojo = PatternFill(start_color="FFEF4444", end_color="FFEF4444", fill_type="solid")
+                fill_header = PatternFill(start_color="FF374151", end_color="FF374151", fill_type="solid")
                 
                 font_blanco = Font(name="Calibri", size=11, bold=True, color="FFFFFFFF")
                 font_negro = Font(name="Calibri", size=11, bold=True, color="FF000000")
                 font_normal_negro = Font(name="Calibri", size=11, bold=False, color="FF000000")
-                font_normal_blanco = Font(name="Calibri", size=11, bold=False, color="FFFFFFFF")
                 
                 border_thin = Border(
                     left=Side(style='thin', color='FFCBD5E1'),
@@ -815,11 +815,33 @@ if uploaded_file is not None:
                             cell.fill = fill_rojo; cell.font = font_blanco
                     cell.border = border_thin
 
+                def insertar_tabla_leyenda(ws, start_row, ind_nombre, rangos):
+                    """Inserta la tabla de acotaciones/colorimetría al pie de cada hoja."""
+                    ws.cell(row=start_row, column=1, value="Indicador").fill = fill_header
+                    ws.cell(row=start_row, column=1).font = font_blanco
+                    ws.cell(row=start_row, column=1).alignment = Alignment(horizontal="center")
+                    
+                    for c_i, cat in enumerate(["Excelente", "Bueno", "Regular", "Malo"], start=2):
+                        cell_h = ws.cell(row=start_row, column=c_i, value=cat)
+                        cell_h.fill = fill_header
+                        cell_h.font = font_blanco
+                        cell_h.alignment = Alignment(horizontal="center")
+
+                    ws.cell(row=start_row+1, column=1, value=ind_nombre).font = font_negro
+                    ws.cell(row=start_row+1, column=1).border = border_thin
+
+                    fills = [fill_verde, fill_blanco, fill_amarillo, fill_rojo]
+                    for c_i, (rango_val, fl) in enumerate(zip(rangos, fills), start=2):
+                        cell_v = ws.cell(row=start_row+1, column=c_i, value=rango_val)
+                        cell_v.fill = fl
+                        cell_v.font = font_negro if fl != fill_verde and fl != fill_rojo else font_blanco
+                        cell_v.alignment = Alignment(horizontal="center")
+                        cell_v.border = border_thin
+
                 # --- 1. HOJA: GENERAL COMPARATIVO ---
                 ws_gen = wb.create_sheet(title="General Comparativo")
                 ws_gen.views.sheetView[0].showGridLines = True
                 
-                # Escribir cabeceras multi-nivel plano
                 ws_gen.cell(row=1, column=1, value="UNIDAD MÉDICA")
                 col_idx_gen = 2
                 for t_name, _, _ in bloques_semanas:
@@ -827,7 +849,6 @@ if uploaded_file is not None:
                         ws_gen.cell(row=1, column=col_idx_gen, value=f"{t_name} - {subcol}")
                         col_idx_gen += 1
 
-                # Escribir filas de unidades
                 current_row = 2
                 for unidad in TARGET_UNITS:
                     ws_gen.cell(row=current_row, column=1, value=unidad)
@@ -836,23 +857,21 @@ if uploaded_file is not None:
                         val_a = trim_results_ind_a.get(t_name, {}).get(unidad, np.nan)
                         val_c = trim_results_c_data.get(t_name, {}).get(unidad, {}).get("porc", np.nan)
                         
-                        # Col 1: Cumplimiento (a)
                         cell = ws_gen.cell(row=current_row, column=c_idx, value=val_a if pd.notna(val_a) else "-")
                         aplicar_color_celda(cell, val_a, "a")
-                        # Col 2: Cobertura Oportuna (b) -> NO APLICA en general por unidad
+                        
                         cell2 = ws_gen.cell(row=current_row, column=c_idx+1, value="NO APLICA")
                         cell2.fill = fill_blanco; cell2.font = font_normal_negro; cell2.border = border_thin
-                        # Col 3: Consistencia (c)
+                        
                         cell3 = ws_gen.cell(row=current_row, column=c_idx+2, value=val_c if pd.notna(val_c) else "-")
                         aplicar_color_celda(cell3, val_c, "c")
-                        # Col 4: Calidad (f) -> NO APLICA por unidad
+                        
                         cell4 = ws_gen.cell(row=current_row, column=c_idx+3, value="NO APLICA")
                         cell4.fill = fill_blanco; cell4.font = font_normal_negro; cell4.border = border_thin
                         
                         c_idx += 4
                     current_row += 1
 
-                # Fila Delegacional General
                 ws_gen.cell(row=current_row, column=1, value="DELEGACIONAL")
                 c_idx = 2
                 for t_name, _, _ in bloques_semanas:
@@ -877,8 +896,7 @@ if uploaded_file is not None:
 
                     c_idx += 4
 
-                # --- 2. HOJAS POR CADA INDICADOR DESGLOSADO ---
-                # A: Cumplimiento
+                # --- 2. HOJA: INDICADOR A (CUMPLIMIENTO) ---
                 ws_a = wb.create_sheet(title="Indicador A (Cumplimiento)")
                 ws_a.views.sheetView[0].showGridLines = True
                 ws_a.cell(row=1, column=1, value="UNIDAD MÉDICA")
@@ -902,13 +920,11 @@ if uploaded_file is not None:
                         c_idx += 2
                     r_idx += 1
 
-                # Fila Delegacional A
                 ws_a.cell(row=r_idx, column=1, value="DELEGACIONAL")
                 c_idx = 2
                 for t_name, _, _ in bloques_semanas:
                     vals_ind = [trim_results_ind_a[t_name].get(u, np.nan) for u in TARGET_UNITS]
                     min_ind = min([v for v in vals_ind if pd.notna(v)], default=np.nan)
-                    # Buscar días correspondientes al mínimo
                     match_u = [u for u in TARGET_UNITS if trim_results_ind_a[t_name].get(u) == min_ind]
                     min_abs = trim_results_abs[t_name].get(match_u[0], 0) if match_u else 0
 
@@ -916,8 +932,62 @@ if uploaded_file is not None:
                     c_cell = ws_a.cell(row=r_idx, column=c_idx+1, value=min_ind if pd.notna(min_ind) else "-")
                     aplicar_color_celda(c_cell, min_ind, "a")
                     c_idx += 2
+                
+                insertar_tabla_leyenda(ws_a, r_idx + 3, "Cumplimiento u Oportunidad", ["100.0%", "97.5 - 99.9%", "95.0 - 97.4%", "≤ 94.9%"])
 
-                # C: Consistencia
+                # --- 3. HOJA: INDICADOR B (COBERTURA OPORTUNA) ---
+                ws_b = wb.create_sheet(title="Indicador B (Cobertura)")
+                ws_b.views.sheetView[0].showGridLines = True
+                ws_b.cell(row=1, column=1, value="MÉTRICA / DÍA")
+                
+                col_global_b = 2
+                for t_name, start_col, end_col in bloques_semanas:
+                    semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+                    for _, sem_num in semanas_bloque:
+                        ws_b.cell(row=1, column=col_global_b, value=f"{t_name} - Día {sem_num}")
+                        col_global_b += 1
+
+                # Fila Unidades con notificación oportuna
+                ws_b.cell(row=2, column=1, value="UNIDADES CON NOTIFICACIÓN OPORTUNA")
+                # Fila Indicador Diario (%)
+                ws_b.cell(row=3, column=1, value="INDICADOR DIARIO (%)")
+
+                col_global_b = 2
+                for t_name, start_col, end_col in bloques_semanas:
+                    semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+                    for col_idx, sem_num in semanas_bloque:
+                        suma_vertical_unidad = 0
+                        for unidad in TARGET_UNITS:
+                            m_rows = unit_rows_map.get(unidad, {})
+                            row_casos = m_rows.get("Unidades con casos oportunos", None)
+                            if row_casos is not None and col_idx < len(row_casos) and pd.notna(row_casos[col_idx]):
+                                try:
+                                    val_c = float(row_casos[col_idx])
+                                    if val_c > 0:
+                                        suma_vertical_unidad += 1
+                                except ValueError:
+                                    pass
+                        ind_val = round((suma_vertical_unidad / 15.0) * 100, 2)
+                        
+                        ws_b.cell(row=2, column=col_global_b, value=suma_vertical_unidad)
+                        c_cell = ws_b.cell(row=3, column=col_global_b, value=ind_val)
+                        aplicar_color_celda(c_cell, ind_val, "b")
+                        col_global_b += 1
+
+                # Fila Delegacional B
+                ws_b.cell(row=4, column=1, value="DELEGACIONAL")
+                col_global_b = 2
+                for t_name, start_col, end_col in bloques_semanas:
+                    avg_b = delegational_b_trim.get(t_name, np.nan)
+                    semanas_bloque = [s for s in semanas_info if start_col <= s[0] <= end_col]
+                    for _ in semanas_bloque:
+                        c_cell = ws_b.cell(row=4, column=col_global_b, value=avg_b if pd.notna(avg_b) else "-")
+                        aplicar_color_celda(c_cell, avg_b, "b")
+                        col_global_b += 1
+
+                insertar_tabla_leyenda(ws_b, 7, "Indicador de Cobertura oportuna", ["95.0 - 100%", "90.0 - 94.9%", "80.0 - 89.9%", "≤ 79.9%"])
+
+                # --- 4. HOJA: INDICADOR C (CONSISTENCIA) ---
                 ws_c = wb.create_sheet(title="Indicador C (Consistencia)")
                 ws_c.views.sheetView[0].showGridLines = True
                 ws_c.cell(row=1, column=1, value="UNIDAD MÉDICA")
@@ -941,7 +1011,6 @@ if uploaded_file is not None:
                         c_idx += 3
                     r_idx += 1
 
-                # Fila Delegacional C
                 ws_c.cell(row=r_idx, column=1, value="DELEGACIONAL")
                 c_idx = 2
                 for t_name, _, _ in bloques_semanas:
@@ -953,7 +1022,9 @@ if uploaded_file is not None:
                     aplicar_color_celda(c_cell, max_p, "c")
                     c_idx += 3
 
-                # F: Calidad Global
+                insertar_tabla_leyenda(ws_c, r_idx + 3, "Consistencia", ["90.0 - 100%", "80.0 - 89.9%", "70.0 - 79.9%", "≤ 69.9%"])
+
+                # --- 5. HOJA: INDICADOR F (CALIDAD) ---
                 ws_f = wb.create_sheet(title="Indicador F (Calidad)")
                 ws_f.views.sheetView[0].showGridLines = True
                 ws_f.cell(row=1, column=1, value="TRIMESTRE")
@@ -971,6 +1042,8 @@ if uploaded_file is not None:
                     aplicar_color_celda(c_cell, res_g["calidad"], "f")
                     r_idx += 1
 
+                insertar_tabla_leyenda(ws_f, r_idx + 3, "Calidad (Descriptivo)", ["90.0 - 100%", "80.0 - 89.9%", "60.0 - 79.9%", "≤ 59.9%"])
+
                 # Ajuste automático de ancho de columnas para todas las hojas generadas
                 for sheet in wb.worksheets:
                     for col in sheet.columns:
@@ -983,7 +1056,7 @@ if uploaded_file is not None:
 
         excel_data = exportar_excel_completo()
         st.download_button(
-            label="📥 Descargar Reporte Completo en Excel (con formato, sombreados e iconografía)",
+            label="📥 Descargar Reporte Completo en Excel (con indicador B, formato y tablas de colorimetría)",
             data=excel_data,
             file_name=f"Reporte_SUIVE_Completo_{anio}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
