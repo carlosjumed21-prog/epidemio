@@ -138,13 +138,11 @@ if uploaded_file is not None:
             if len(columnas_validas_en_bloque) > 0:
                 bloques_semanas.append((t_name, start_col, end_col))
 
-        # Función auxiliar para encontrar la fila de "Casos oportunos" buscando por etiqueta exacta/parcial
         def get_casos_row(m_rows):
             for k, r in m_rows.items():
                 k_clean = str(k).strip().upper()
                 if "CASOS OPORTUNOS" in k_clean and "UNIDADES" not in k_clean:
                     return r
-            # Respaldo si la etiqueta varía ligeramente
             for k, r in m_rows.items():
                 if "CASOS" in str(k).strip().upper():
                     return r
@@ -161,11 +159,12 @@ if uploaded_file is not None:
                 tiene_datos_bloque = False
                 if row_casos_oportunos is not None:
                     for c_idx in range(start_col, end_col + 1):
-                        if c_idx < len(row_casos_oportunos) and pd.notna(row_casos_oportunos[c_idx]):
+                        if c_idx < len(row_casos_oportunos):
+                            val_raw = row_casos_oportunos[c_idx]
                             try:
-                                val_c = float(row_casos_oportunos[c_idx])
+                                val_c = float(val_raw) if pd.notna(val_raw) else 0.0
                                 suma_bloque += val_c
-                                if val_c > 0:
+                                if pd.notna(val_raw) and val_c > 0:
                                     tiene_datos_bloque = True
                             except ValueError:
                                 pass
@@ -184,7 +183,7 @@ if uploaded_file is not None:
                     t_vals_a[unidad] = round((num_oportunas / 13.0) * 100, 2)
             trim_results_ind_a[t_name] = t_vals_a
 
-        # Pre-cálculo de Indicador C (Consistencia) usando la etiqueta de "Casos oportunos"
+        # Pre-cálculo de Indicador C (Consistencia) considerando vacíos/blancos como 0
         trim_results_c_data = {}
         for t_name, start_col, end_col in bloques_semanas:
             t_vals_c = {}
@@ -198,11 +197,14 @@ if uploaded_file is not None:
                 
                 if row_casos is not None:
                     for c_idx in range(start_col, end_col + 1):
-                        if c_idx < len(row_casos) and pd.notna(row_casos[c_idx]):
+                        if c_idx < len(row_casos):
+                            val_raw = row_casos[c_idx]
                             try:
-                                semanas_valores.append(float(row_casos[c_idx]))
+                                # Si está en blanco o NaN, se toma como 0.0
+                                val_num = float(val_raw) if pd.notna(val_raw) else 0.0
+                                semanas_valores.append(val_num)
                             except ValueError:
-                                pass
+                                semanas_valores.append(0.0)
 
                 if len(semanas_valores) > 0:
                     arr_vals = np.array(semanas_valores)
