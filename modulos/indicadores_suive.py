@@ -526,30 +526,39 @@ if uploaded_file is not None:
                                 styles[i] = get_bg_color(val, "c")
                     return styles
 
+                cols_c_porc = [col for col in df_c.columns if col[1] == "%CONSISTENCIA"]
+                cols_c_sem = [col for col in df_c.columns if col[1] in ["SEMANAS CONSISTENTES", "TOTAL SEMANAS"]]
+
                 styled_c = df_c.style.format(
-                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
-                    subset=[col for col in df_c.columns if col[1] == "%CONSISTENCIA"]
+                    formatter="{:.2f}", subset=cols_c_porc
+                ).format(
+                    formatter="{:.0f}", subset=cols_c_sem
                 ).apply(style_c_table, axis=1)
 
                 st.markdown("### 📋 Reporte de Consistencia por Unidad y Trimestre")
                 st.dataframe(styled_c, use_container_width=True, hide_index=True)
 
                 # Fila Delegacional con los valores máximos independientes de cada columna
-                fila_delegacional = {"UNIDAD MÉDICA": "DELEGACIONAL"}
+                fila_delegacional = {("UNIDAD MÉDICA", "UNIDAD MÉDICA"): "DELEGACIONAL"}
                 for t_name, _, _ in bloques_semanas:
                     col_sc = (t_name, "SEMANAS CONSISTENTES")
                     col_ts = (t_name, "TOTAL SEMANAS")
                     col_pc = (t_name, "%CONSISTENCIA")
 
-                    fila_delegacional[col_sc] = df_c[col_sc].max()
-                    fila_delegacional[col_ts] = df_c[col_ts].max()
-                    fila_delegacional[col_pc] = df_c[col_pc].max()
+                    fila_delegacional[col_sc] = pd.to_numeric(df_c[col_sc], errors='coerce').max()
+                    fila_delegacional[col_ts] = pd.to_numeric(df_c[col_ts], errors='coerce').max()
+                    fila_delegacional[col_pc] = pd.to_numeric(df_c[col_pc], errors='coerce').max()
 
                 df_del_c = pd.DataFrame([fila_delegacional])
                 df_del_c.columns = pd.MultiIndex.from_tuples(c_tuples)
+
+                cols_del_porc = [col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]
+                cols_del_sem = [col for col in df_del_c.columns if col[1] in ["SEMANAS CONSISTENTES", "TOTAL SEMANAS"]]
+
                 styled_del_c = df_del_c.style.format(
-                    formatter=lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and x <= 100 else (f"{x:.0f}" if isinstance(x, (int, float)) else "-"),
-                    subset=[col for col in df_del_c.columns if col[1] == "%CONSISTENCIA"]
+                    formatter="{:.2f}", subset=cols_del_porc
+                ).format(
+                    formatter="{:.0f}", subset=cols_del_sem
                 ).apply(style_c_table, axis=1)
 
                 st.dataframe(styled_del_c, use_container_width=True, hide_index=True)
